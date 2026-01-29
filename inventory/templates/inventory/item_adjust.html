@@ -1,0 +1,19 @@
+{% extends "inventory/base.html" %}
+
+{% block content %}
+<h2 class="fw-bold">Adjust Quantity</h2>
+
+<p><strong>{{ item.name }}</strong> (Current: {{ item.quantity }})</p>
+
+<form method="POST">
+    {% csrf_token %}
+    <div class="mb-3">
+        <label class="form-label">Adjustment Amount</label>
+        <input type="number" name="adjustment" class="form-control" required>
+        <small class="text-muted">Use positive to add stock, negative to remove stock.</small>
+    </div>
+
+    <button class="btn btn-primary" type="submit">Apply Adjustment</button>
+    <a class="btn btn-secondary" href="{% url 'item_list' %}">Cancel</a>
+</form>
+{% endblock %}

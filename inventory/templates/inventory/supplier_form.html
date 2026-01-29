@@ -1,0 +1,42 @@
+{% extends "inventory/base.html" %}
+{% block content %}
+
+<h1 class="fw-bold mb-3">
+    {% if edit %}Edit Supplier{% else %}Add Supplier{% endif %}
+</h1>
+
+<form method="post" class="card shadow-sm border-0">
+    {% csrf_token %}
+    <div class="card-body row g-3">
+
+        <div class="col-md-6">
+            <label class="form-label">Name</label>
+            {{ form.name }}
+        </div>
+
+        <div class="col-md-6">
+            <label class="form-label">Email</label>
+            {{ form.email }}
+        </div>
+
+        <div class="col-md-6">
+            <label class="form-label">Phone</label>
+            {{ form.phone }}
+        </div>
+
+        <div class="col-md-12">
+            <label class="form-label">Address</label>
+            {{ form.address }}
+        </div>
+
+    </div>
+
+    <div class="card-footer d-flex justify-content-between">
+        <a href="{% url 'contacts_list' %}" class="btn btn-secondary">Cancel</a>
+        <button type="submit" class="btn btn-primary">
+            {% if edit %}Save Changes{% else %}Add Supplier{% endif %}
+        </button>
+    </div>
+</form>
+
+{% endblock %}

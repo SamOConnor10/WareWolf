@@ -1,0 +1,72 @@
+{% extends "inventory/base.html" %}
+
+{% block content %}
+<h1 class="fw-bold mb-4">
+    {% if location %}Edit Location{% else %}New Location{% endif %}
+</h1>
+
+<form method="POST">
+    {% csrf_token %}
+
+    <!-- Parent -->
+    <div class="mb-3">
+        <label class="form-label">Parent Location</label>
+        <select name="parent" class="form-select">
+            <option value="">None</option>
+            {% for loc in all_locations %}
+                <option value="{{ loc.id }}"
+                        {% if location.parent.id == loc.id %}selected{% endif %}>
+                    {{ loc.name }}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <!-- Name -->
+    <div class="mb-3">
+        <label class="form-label">Name *</label>
+        <input type="text" name="name" class="form-control"
+               value="{{ location.name|default:'' }}" required>
+    </div>
+
+    <!-- Description -->
+    <div class="mb-3">
+        <label class="form-label">Description</label>
+        <textarea name="description" class="form-control" rows="3">
+            {{ location.description|default:'' }}
+        </textarea>
+    </div>
+
+    <!-- Structural -->
+    <div class="form-check form-switch mb-3">
+        <input class="form-check-input" type="checkbox" name="structural"
+               {% if location.structural %}checked{% endif %}>
+        <label class="form-check-label">Structural</label>
+    </div>
+
+    <!-- External -->
+    <div class="form-check form-switch mb-3">
+        <input class="form-check-input" type="checkbox" name="external"
+               {% if location.external %}checked{% endif %}>
+        <label class="form-check-label">External</label>
+    </div>
+
+    <!-- Location Type -->
+    <div class="mb-3">
+        <label class="form-label">Location Type</label>
+        <select name="location_type" class="form-select">
+            {% for code, label in location_types %}
+                <option value="{{ code }}"
+                    {% if location.location_type == code %}selected{% endif %}>
+                    {{ label }}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <button type="submit" class="btn btn-success me-2">Submit</button>
+    <a href="{% url 'location_list' %}" class="btn btn-secondary">Cancel</a>
+</form>
+
+
+{% endblock %}

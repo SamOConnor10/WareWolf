@@ -1,0 +1,180 @@
+{% extends "inventory/base.html" %}
+
+{% block content %}
+<h1 class="fw-bold">Orders</h1>
+<p class="text-muted">Track and manage purchase and sale orders</p>
+
+<!-- Summary cards -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Purchase Orders</h6>
+                <div class="fs-3 fw-bold">{{ purchase_count }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Sale Orders</h6>
+                <div class="fs-3 fw-bold">{{ sale_count }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Pending</h6>
+                <div class="fs-3 fw-bold">{{ pending_count }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Delivered</h6>
+                <div class="fs-3 fw-bold">{{ delivered_count }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Search + filters row -->
+<form method="get" class="row g-2 align-items-center mb-3">
+    <div class="col-md-5">
+        <input type="text"
+               name="q"
+               class="form-control"
+               placeholder="Search orders or parties..."
+               value="{{ search_query }}">
+    </div>
+
+    <div class="col-md-3">
+        <select name="status" class="form-select">
+            <option value="all">All Statuses</option>
+            {% for code, label in status_choices %}
+                <option value="{{ code }}"
+                    {% if status_filter == code %}selected{% endif %}>
+                    {{ label }}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="col-md-2 d-grid">
+        <button class="btn btn-secondary">Apply</button>
+    </div>
+
+    <div class="col-md-2 text-md-end mt-2 mt-md-0">
+        {% if context_type == "purchase" %}
+            <a href="{% url 'order_create' %}?type=purchase" class="btn btn-primary">+ Create PO</a>
+        {% elif context_type == "sale" %}
+            <a href="{% url 'order_create' %}?type=sale" class="btn btn-primary">+ Create SO</a>
+        {% else %}
+            <a href="{% url 'order_create' %}" class="btn btn-primary">+ Create Order</a>
+        {% endif %}
+    </div>
+</form>
+
+<!-- Type tabs -->
+<div class="btn-group mb-3" role="group">
+    <a href="{% url 'order_list' %}?type=all"
+       class="btn btn-sm {% if type_filter == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+        All Orders
+    </a>
+
+    <a href="{% url 'order_list' %}?type=purchase"
+       class="btn btn-sm {% if type_filter == 'purchase' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+        Purchase Orders
+    </a>
+
+    <a href="{% url 'order_list' %}?type=sale"
+       class="btn btn-sm {% if type_filter == 'sale' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+        Sale Orders
+    </a>
+</div>
+
+<table class="table table-hover bg-white shadow-sm">
+    <thead class="table-light">
+        <tr>
+            <th>Order #</th>
+            <th>Type</th>
+            <th>Item</th>
+            <th>Party</th>
+            <th>Date</th>
+            <th class="text-end">Qty</th>
+            <th class="text-end">Total</th>
+            <th>Status</th>
+            <th style="width: 220px;">Actions</th>
+        </tr>
+    </thead>
+
+    <tbody>
+        {% for order in orders %}
+        <tr>
+            <td>ORD-{{ order.id }}</td>
+
+            <td>
+                {% if order.order_type == 'PURCHASE' %}
+                    <span class="badge bg-info-subtle text-info">Purchase</span>
+                {% else %}
+                    <span class="badge bg-success-subtle text-success">Sale</span>
+                {% endif %}
+            </td>
+
+            <td>{{ order.item.name }}</td>
+            <td>{{ order.party_name }}</td>
+            <td>{{ order.order_date }}</td>
+
+            <td class="text-end">{{ order.quantity }}</td>
+            <td class="text-end">€{{ order.total }}</td>
+
+            <td>
+                {% if order.status == 'DELIVERED' %}
+                    <span class="badge bg-success-subtle text-success">Delivered</span>
+                {% elif order.status == 'PENDING' %}
+                    <span class="badge bg-warning-subtle text-warning">Pending</span>
+                {% elif order.status == 'PROCESSING' %}
+                    <span class="badge bg-info-subtle text-info">Processing</span>
+                {% elif order.status == 'SHIPPED' %}
+                    <span class="badge bg-primary-subtle text-primary">Shipped</span>
+                {% else %}
+                    <span class="badge bg-secondary-subtle text-secondary">Cancelled</span>
+                {% endif %}
+            </td>
+
+            <td>
+                {% if order.status != 'DELIVERED' or not order.stock_applied %}
+                    <form method="post"
+                          action="{% url 'order_mark_delivered' order.id %}"
+                          class="d-inline">
+                        {% csrf_token %}
+                        <button class="btn btn-sm btn-success">
+                            Mark Delivered
+                        </button>
+                    </form>
+                {% endif %}
+
+                <a href="{% url 'order_edit' order.id %}"
+                   class="btn btn-sm btn-outline-secondary">
+                    Edit
+                </a>
+
+                <a href="{% url 'order_delete' order.id %}"
+                   class="btn btn-sm btn-outline-danger">
+                    Delete
+                </a>
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="9" class="text-center text-muted py-4">
+                No orders found.
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}

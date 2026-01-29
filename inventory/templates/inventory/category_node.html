@@ -1,0 +1,20 @@
+<li class="list-group-item">
+
+    <div class="d-flex justify-content-between">
+        <span>{{ node.name }}</span>
+
+        <div>
+            <a href="{% url 'category_edit' node.id %}" class="btn btn-sm btn-outline-secondary">Edit</a>
+            <a href="{% url 'category_delete' node.id %}" class="btn btn-sm btn-outline-danger">Delete</a>
+        </div>
+    </div>
+
+    {% if node.children.all %}
+        <ul class="list-group ms-4 mt-2">
+            {% for child in node.children.all %}
+                {% include "inventory/category_node.html" with node=child %}
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+</li>

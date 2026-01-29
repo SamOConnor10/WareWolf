@@ -1,0 +1,21 @@
+{% extends "inventory/base.html" %}
+{% block content %}
+
+<h1 class="fw-bold mb-3">Delete Supplier</h1>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body">
+        <p>Are you sure you want to delete the supplier <strong>{{ supplier.name }}</strong>?</p>
+    </div>
+
+    <div class="card-footer d-flex justify-content-between">
+        <a href="{% url 'contacts_list' %}" class="btn btn-secondary">Cancel</a>
+
+        <form method="post">
+            {% csrf_token %}
+            <button class="btn btn-danger">Delete</button>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

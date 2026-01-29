@@ -1,0 +1,155 @@
+{% extends "inventory/base.html" %}
+{% load querystring %}
+
+{% block content %}
+<h1 class="fw-bold">Locations</h1>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <p class="text-muted">Manage warehouse storage locations</p>
+    <a href="{% url 'location_create' %}" class="btn btn-primary">+ Add Location</a>
+</div>
+
+<!-- SEARCH + FILTER BAR -->
+<form method="GET" class="row g-2 mb-4">
+
+    <!-- Search box -->
+    <div class="col-md-4">
+        <input type="text" name="q" class="form-control" placeholder="Search locations..."
+               value="{{ request.GET.q }}">
+    </div>
+
+    <!-- Type filter -->
+    <div class="col-md-3">
+        <select name="type" class="form-select">
+            <option value="">All Types</option>
+            {% for code, label in location_types %}
+            <option value="{{ code }}" {% if request.GET.type == code %}selected{% endif %}>
+                {{ label }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <!-- Structural filter -->
+    <div class="col-md-2">
+        <select name="structural" class="form-select">
+            <option value="">Structural?</option>
+            <option value="yes" {% if request.GET.structural == 'yes' %}selected{% endif %}>Yes</option>
+            <option value="no" {% if request.GET.structural == 'no' %}selected{% endif %}>No</option>
+        </select>
+    </div>
+
+    <!-- External filter -->
+    <div class="col-md-2">
+        <select name="external" class="form-select">
+            <option value="">External?</option>
+            <option value="yes" {% if request.GET.external == 'yes' %}selected{% endif %}>Yes</option>
+            <option value="no" {% if request.GET.external == 'no' %}selected{% endif %}>No</option>
+        </select>
+    </div>
+
+    <!-- Filter Button -->
+    <div class="col-md-1 d-grid">
+        <button class="btn btn-secondary">Go</button>
+    </div>
+
+</form>
+
+
+<table class="table table-hover bg-white shadow-sm">
+    <thead class="table-light">
+        <tr>
+
+            <!-- SORTING LINKS -->
+            <th>
+                <a href="?{% querystring request sort='name' %}">Name</a>
+            </th>
+
+            <th>
+                <a href="?{% querystring request sort='parent__name' %}">Parent</a>
+            </th>
+
+            <th>
+                <a href="?{% querystring request sort='location_type' %}">Type</a>
+            </th>
+
+            <th>
+                <a href="?{% querystring request sort='structural' %}">Structural</a>
+            </th>
+
+            <th>
+                <a href="?{% querystring request sort='external' %}">External</a>
+            </th>
+
+            <th>
+                <a href="?{% querystring request sort='items' %}">Stock</a>
+            </th>
+
+            <th style="width:150px;">Actions</th>
+        </tr>
+    </thead>
+
+    <tbody>
+
+        {% for location in locations %}
+        <tr>
+
+            <!-- Name + Breadcrumb -->
+            <td>
+                <strong>{{ location.name }}</strong><br>
+                <small class="text-muted">{{ location.get_breadcrumb }}</small>
+            </td>
+
+            <!-- Parent -->
+            <td>
+                {% if location.parent %}
+                    {{ location.parent.name }}
+                {% else %}
+                    <span class="text-muted">—</span>
+                {% endif %}
+            </td>
+
+            <!-- Type -->
+            <td>{{ location.get_location_type_display }}</td>
+
+            <!-- Structural -->
+            <td>
+                {% if location.structural %}
+                    <span class="text-success fw-bold">Yes</span>
+                {% else %}
+                    <span class="text-muted">No</span>
+                {% endif %}
+            </td>
+
+            <!-- External -->
+            <td>
+                {% if location.external %}
+                    <span class="text-danger fw-bold">Yes</span>
+                {% else %}
+                    <span class="text-muted">No</span>
+                {% endif %}
+            </td>
+
+            <!-- Description -->
+            <td>{{ location.description|default:"—" }}</td>
+
+            <!-- Stock Count -->
+            <td>{{ location.stock_count }}</td>
+
+            <!-- Actions -->
+            <td>
+                <a href="{% url 'location_edit' location.id %}" class="btn btn-sm btn-outline-secondary">Edit</a>
+                <a href="{% url 'location_delete' location.id %}" class="btn btn-sm btn-outline-danger">Delete</a>
+            </td>
+
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="8" class="text-center text-muted py-4">No locations found.</td>
+        </tr>
+        {% endfor %}
+
+    </tbody>
+</table>
+
+{% endblock %}

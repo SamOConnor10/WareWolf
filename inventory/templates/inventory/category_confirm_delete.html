@@ -1,0 +1,36 @@
+{% extends "inventory/base_stock.html" %}
+
+{% block stock_content %}
+
+<h1 class="fw-bold mb-3">Delete Category</h1>
+
+<div class="card shadow-sm border-0 p-4">
+
+    <p class="mb-4">
+        Are you sure you want to delete the category:
+        <strong>{{ category.name }}</strong>?
+    </p>
+
+    {% if category.children.exists %}
+        <div class="alert alert-warning">
+            <strong>Warning:</strong> This category has sub-categories.
+            They will also be deleted.
+        </div>
+    {% endif %}
+
+    {% if category.items.exists %}
+        <div class="alert alert-danger">
+            <strong>Important:</strong> There are stock items assigned to this
+            category. You should reassign or remove them before deleting.
+        </div>
+    {% endif %}
+
+    <form method="POST" class="mt-3">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger">Delete</button>
+        <a href="{% url 'category_list' %}" class="btn btn-secondary ms-2">Cancel</a>
+    </form>
+
+</div>
+
+{% endblock %}

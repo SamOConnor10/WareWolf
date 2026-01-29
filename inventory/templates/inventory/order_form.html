@@ -1,0 +1,172 @@
+{% extends "inventory/base.html" %}
+
+{% block content %}
+<h1 class="fw-bold mb-3">
+    {% if edit %}Edit Order{% else %}New Order{% endif %}
+</h1>
+
+<form method="post" class="card shadow-sm border-0">
+    {% csrf_token %}
+    <div class="card-body row g-3">
+
+        <!-- ORDER TYPE -->
+        <div class="col-md-3">
+            <label class="form-label">Order Type</label>
+
+            {% if forced_type %}
+                <select class="form-select" disabled>
+                    <option>{{ forced_type|capfirst }}</option>
+                </select>
+                <input type="hidden" name="order_type" value="{{ forced_type|upper }}">
+            {% else %}
+                {{ form.order_type }}
+            {% endif %}
+        </div>
+
+        <div class="col-md-3">
+            <label class="form-label">Status</label>
+            {{ form.status }}
+        </div>
+
+        <div class="col-md-3">
+            <label class="form-label">Priority</label>
+            {{ form.priority }}
+        </div>
+
+        <div class="col-md-3">
+            <label class="form-label">Order Date</label>
+            {{ form.order_date }}
+        </div>
+
+        <!-- ITEM -->
+        <div class="col-md-6">
+            <label class="form-label">Item</label>
+            {{ form.item }}
+        </div>
+
+        <!-- QTY -->
+        <div class="col-md-3">
+            <label class="form-label">Quantity</label>
+            {{ form.quantity }}
+        </div>
+
+        <!-- UNIT PRICE -->
+        <div class="col-md-3">
+            <label class="form-label">Unit Price</label>
+            {{ form.unit_price }}
+        </div>
+
+        <!-- SUPPLIER -->
+        <div class="col-md-6" id="supplier_box">
+            <label class="form-label">Supplier (for Purchase)</label>
+            {{ form.supplier }}
+        </div>
+
+        <!-- CUSTOMER -->
+        <div class="col-md-6" id="customer_box">
+            <label class="form-label">Customer (for Sale)</label>
+            {{ form.client }}
+        </div>
+
+        <div class="col-12">
+            <label class="form-label">Notes</label>
+            {{ form.notes }}
+        </div>
+
+        <!-- LIVE TOTAL DISPLAY -->
+        <div class="col-12 text-end">
+            <span class="badge bg-primary fs-6" id="live_total">Total: €0.00</span>
+        </div>
+
+    </div>
+
+    <div class="card-footer d-flex justify-content-between">
+        <a href="{% url 'order_list' %}" class="btn btn-secondary">Cancel</a>
+        <button type="submit" class="btn btn-primary">
+            {% if edit %}Save Changes{% else %}Create Order{% endif %}
+        </button>
+    </div>
+</form>
+
+<script id="item-price-data" type="application/json">
+    {
+    {% for item in form.fields.item.queryset %}
+        "{{ item.id }}": "{{ item.unit_price|default:'0' }}"{% if not forloop.last %},{% endif %}
+    {% endfor %}
+    }
+</script>
+
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    // Load price data from clean JSON script tag
+    const priceDataTag = document.getElementById("item-price-data");
+    const itemPrices = JSON.parse(priceDataTag.textContent);
+
+    const itemSelect = document.querySelector("#id_item");
+    const priceInput = document.querySelector("#id_unit_price");
+    const qtyInput = document.querySelector("#id_quantity");
+    const totalBadge = document.querySelector("#live_total");
+
+    function updateTotal() {
+        const qty = parseFloat(qtyInput.value) || 0;
+        const price = parseFloat(priceInput.value) || 0;
+        const total = (qty * price).toFixed(2);
+        if (totalBadge) totalBadge.textContent = `Total: €${total}`;
+    }
+
+    if (itemSelect) {
+        itemSelect.addEventListener("change", function () {
+            const id = itemSelect.value;
+            if (itemPrices[id]) {
+                priceInput.value = itemPrices[id];
+                updateTotal();
+            }
+        });
+    }
+
+    qtyInput.addEventListener("input", updateTotal);
+    priceInput.addEventListener("input", updateTotal);
+    updateTotal();
+});
+</script>
+
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    // -------------------------
+    // HANDLE SHOW/HIDE FIELDS
+    // -------------------------
+    const typeSelect = document.querySelector("#id_order_type");
+    const supplierField = document.querySelector("#field_supplier");
+    const customerField = document.querySelector("#field_client");
+
+    function updatePartyFields() {
+        const type = typeSelect.value;
+
+        if (type === "PURCHASE") {
+            supplierField.style.display = "block";
+            customerField.style.display = "none";
+        } else if (type === "SALE") {
+            supplierField.style.display = "none";
+            customerField.style.display = "block";
+        } else {
+            supplierField.style.display = "block";
+            customerField.style.display = "block";
+        }
+    }
+
+    if (typeSelect) {
+        typeSelect.addEventListener("change", updatePartyFields);
+        updatePartyFields();  // run on page load
+    }
+
+});
+</script>
+
+
+
+
+{% endblock %}

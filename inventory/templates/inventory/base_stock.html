@@ -1,0 +1,134 @@
+{% extends "inventory/base.html" %}
+
+{% block content %}
+
+<div class="d-flex mt-4">
+
+    <!-- ========================= -->
+    <!-- SIDEBAR                   -->
+    <!-- ========================= -->
+    <div id="sidebar" class="sidebar expanded shadow-sm">
+
+        <!-- Header with toggle -->
+        <div class="sidebar-header">
+            <button id="sidebarToggle" class="toggle-btn">
+                <span id="sidebarArrow">❮</span>
+            </button>
+        </div>
+
+        <!-- NAV LINKS -->
+        <a href="{% url 'item_list' %}" class="nav-link {% if view == 'items' %}active{% endif %}">
+            <span class="icon">📦</span>
+            <span class="label">Stock Items</span>
+        </a>
+
+        <a href="{% url 'category_list' %}" class="nav-link {% if view == 'categories' %}active{% endif %}">
+            <span class="icon">🗂</span>
+            <span class="label">Categories</span>
+        </a>
+
+    </div>
+
+    <!-- ========================= -->
+    <!-- MAIN CONTENT AREA         -->
+    <!-- ========================= -->
+    <div id="mainContent" class="flex-grow-1 ms-3">
+        {% block stock_content %}{% endblock %}
+    </div>
+
+</div>
+
+<style>
+/* ============================= */
+/* SIDEBAR BASE (scoped to #sidebar only) */
+/* ============================= */
+#sidebar {
+    width: 230px;
+    transition: width 0.25s ease;
+    background: #ffffff;
+    border-right: 1px solid #dcdcdc;
+    padding-top: 15px;
+    height: 100vh;
+    position: sticky;
+    top: 0;
+}
+
+/* Collapsed */
+#sidebar.collapsed {
+    width: 65px !important;
+}
+
+#sidebar.collapsed .label {
+    display: none !important;
+}
+
+#sidebar.collapsed #sidebarArrow {
+    transform: rotate(180deg);
+}
+
+/* Toggle button */
+#sidebar .toggle-btn {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    margin-left: 12px;
+    color: #333;
+}
+
+/* ============================= */
+/* SIDEBAR NAV LINKS (scoped!!)  */
+/* ============================= */
+#sidebar .nav-link {
+    display: flex;
+    align-items: center;
+    padding: 12px 14px;
+    text-decoration: none;
+    color: #333 !important;
+    font-size: 16px;
+    transition: background 0.2s ease, color 0.2s ease;
+    border-radius: 6px;
+    margin: 4px 8px;
+    font-weight: 500;
+}
+
+#sidebar .nav-link:hover {
+    background: #eef3ff;
+    color: #1a73e8 !important;
+}
+
+#sidebar .nav-link.active {
+    background: #1a73e8;
+    color: #ffffff !important;
+}
+
+/* Icons */
+#sidebar .icon {
+    font-size: 22px;
+    margin-right: 12px;
+}
+
+#sidebar.collapsed .icon {
+    margin-right: 0;
+    text-align: center;
+    width: 100%;
+}
+
+/* ============================= */
+/* MAIN CONTENT SPACING          */
+/* ============================= */
+#mainContent {
+    padding-top: 15px;
+}
+
+</style>
+
+
+<script>
+document.getElementById("sidebarToggle").onclick = function () {
+    const sidebar = document.getElementById("sidebar");
+    sidebar.classList.toggle("collapsed");
+};
+</script>
+
+{% endblock %}

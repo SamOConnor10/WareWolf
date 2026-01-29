@@ -1,0 +1,14 @@
+{% extends "inventory/base.html" %}
+
+{% block content %}
+<h2 class="fw-bold">Delete Location</h2>
+
+<p>Are you sure you want to delete <strong>{{ location.name }}</strong>?</p>
+
+<form method="POST">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger">Delete</button>
+    <a href="{% url 'location_list' %}" class="btn btn-secondary">Cancel</a>
+</form>
+
+{% endblock %}

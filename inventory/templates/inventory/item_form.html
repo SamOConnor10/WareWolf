@@ -1,0 +1,170 @@
+{% extends "inventory/base.html" %}
+{% load django_bootstrap5 %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="fw-bold mb-4">
+        {% if form.instance.pk %}Edit Item{% else %}New Item{% endif %}
+    </h1>
+
+    <form method="POST" id="itemForm">
+        {% csrf_token %}
+
+        <!-- NAME -->
+        <div class="mb-3">
+            <label class="form-label">Name</label>
+            {{ form.name }}
+        </div>
+
+        <!-- SKU -->
+        <div class="mb-3">
+            <label class="form-label">SKU</label>
+            {{ form.sku }}
+        </div>
+
+        <!-- DESCRIPTION -->
+        <div class="mb-3">
+            <label class="form-label">Description</label>
+            {{ form.description }}
+        </div>
+
+        <!-- QUANTITY -->
+        <div class="mb-3">
+            <label class="form-label">Quantity</label>
+            {{ form.quantity }}
+        </div>
+
+        <!-- CATEGORY + CREATE BUTTON -->
+        <div class="mb-3">
+            <label class="form-label">Category</label>
+
+            <div class="d-flex gap-2">
+                <div class="flex-grow-1">
+                    {{ form.category }}
+                </div>
+
+                <!-- Button triggers modal -->
+                <button type="button" class="btn btn-outline-primary"
+                        data-bs-toggle="modal" data-bs-target="#addCategoryModal">
+                    + New
+                </button>
+            </div>
+        </div>
+
+        <!-- REORDER LEVEL -->
+        <div class="mb-3">
+            <label class="form-label">Reorder Level</label>
+            {{ form.reorder_level }}
+        </div>
+
+        <!-- COST -->
+        <div class="mb-3">
+            <label class="form-label">Unit Cost</label>
+            {{ form.unit_cost }}
+        </div>
+
+        <!-- SUPPLIER -->
+        <div class="mb-3">
+            <label class="form-label">Supplier</label>
+            {{ form.supplier }}
+        </div>
+
+        <!-- LOCATION -->
+        <div class="mb-4">
+            <label class="form-label">Location</label>
+            {{ form.location }}
+        </div>
+
+        <!-- BUTTONS -->
+        <button type="submit" class="btn btn-success me-2">Save</button>
+        <a href="{% url 'item_list' %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+
+
+
+<!-- =================================================================== -->
+<!-- CATEGORY CREATION MODAL (Inline new-category creation UI) -->
+<!-- =================================================================== -->
+
+<div class="modal fade" id="addCategoryModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold">Create Category</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+        <form id="categoryForm">
+
+          <div class="mb-3">
+            <label class="form-label">Category Name</label>
+            <input type="text" name="name" class="form-control" required>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Parent Category (optional)</label>
+            <select name="parent" class="form-select">
+                <option value="">None</option>
+                {% for c in all_categories %}
+                    <option value="{{ c.id }}">{{ c.full_path }}</option>
+                {% endfor %}
+            </select>
+          </div>
+
+        </form>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button id="saveCategoryBtn" class="btn btn-primary">Create</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+
+<!-- =================================================================== -->
+<!-- AJAX SCRIPT TO SAVE CATEGORY + REFRESH CATEGORY DROPDOWN -->
+<!-- =================================================================== -->
+
+<script>
+document.getElementById("saveCategoryBtn").onclick = function () {
+    const form = document.getElementById("categoryForm");
+    const formData = new FormData(form);
+
+    fetch("{% url 'category_create_ajax' %}", {
+        method: "POST",
+        headers: { "X-CSRFToken": "{{ csrf_token }}" },
+        body: formData,
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+
+            // 1. Add new category to dropdown
+            const select = document.getElementById("id_category");
+            const option = document.createElement("option");
+            option.value = data.id;
+            option.textContent = data.name;
+            option.selected = true;
+            select.appendChild(option);
+
+            // 2. Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById("addCategoryModal"));
+            modal.hide();
+
+            // 3. Reset form
+            form.reset();
+        } else {
+            alert("Error creating category");
+        }
+    });
+};
+</script>
+
+{% endblock %}

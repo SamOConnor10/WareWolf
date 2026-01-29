@@ -1,0 +1,12 @@
+{% extends "inventory/base.html" %}
+
+{% block content %}
+<h1 class="fw-bold">Location Hierarchy</h1>
+
+<ul class="list-group">
+    {% for loc in roots %}
+        {% include "inventory/location_node.html" with node=loc %}
+    {% endfor %}
+</ul>
+
+{% endblock %}

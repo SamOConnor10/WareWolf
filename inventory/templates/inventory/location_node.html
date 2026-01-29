@@ -1,0 +1,16 @@
+<li class="list-group-item">
+    <strong>{{ node.name }}</strong>
+    <small class="text-muted">({{ node.location_type }})</small>
+
+    {% if node.children.all %}
+        <button class="btn btn-sm btn-link" data-bs-toggle="collapse" data-bs-target="#node-{{ node.id }}">
+            Expand
+        </button>
+
+        <ul id="node-{{ node.id }}" class="collapse ms-4 list-group mt-2">
+            {% for child in node.children.all %}
+                {% include "inventory/location_node.html" with node=child %}
+            {% endfor %}
+        </ul>
+    {% endif %}
+</li>

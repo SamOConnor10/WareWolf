@@ -1,0 +1,437 @@
+{% extends "inventory/base.html" %}
+{% load static %}
+
+{% block content %}
+
+<!-- HEADER -->
+<div class="pb-3">
+    <h1 class="fw-bold mb-1">Dashboard</h1>
+    <p class="text-muted">Your real-time warehouse overview and analytics.</p>
+</div>
+
+<!-- SUMMARY CARDS -->
+<div class="row g-3 mb-4">
+
+    <!-- Total Items -->
+    <div class="col-md-3">
+        <a href="{% url 'item_list' %}" class="text-decoration-none text-dark">
+            <div class="card shadow-sm p-4 border-0 h-100 hover-card">
+                <div class="d-flex align-items-center">
+                    <span class="badge bg-primary p-3 rounded-circle me-3">📦</span>
+                    <div>
+                        <h6 class="text-muted mb-1">Total Stock Items</h6>
+                        <h2 class="fw-bold">{{ total_items }}</h2>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <!-- Low Stock Items -->
+    <div class="col-md-3">
+        <a href="{% url 'item_list' %}?filter=low_stock" class="text-decoration-none text-dark">
+            <div class="card shadow-sm p-4 border-0 h-100 hover-card">
+                <div class="d-flex align-items-center">
+                    <span class="badge bg-danger p-3 rounded-circle me-3">⚠️</span>
+                    <div>
+                        <h6 class="text-muted mb-1">Low Stock Items</h6>
+                        <h2 class="fw-bold text-danger">{{ low_stock_items }}</h2>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <!-- Suppliers -->
+    <div class="col-md-3">
+        <a href="{% url 'contacts_list' %}?type=suppliers" class="text-decoration-none text-dark">
+            <div class="card shadow-sm p-4 border-0 h-100 hover-card">
+                <div class="d-flex align-items-center">
+                    <span class="badge bg-info p-3 rounded-circle me-3">🏭</span>
+                    <div>
+                        <h6 class="text-muted mb-1">Total Suppliers</h6>
+                        <h2 class="fw-bold">{{ supplier_count }}</h2>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <!-- Customers -->
+    <div class="col-md-3">
+        <a href="{% url 'contacts_list' %}?type=customers" class="text-decoration-none text-dark">
+            <div class="card shadow-sm p-4 border-0 h-100 hover-card">
+                <div class="d-flex align-items-center">
+                    <span class="badge bg-success p-3 rounded-circle me-3">🧑‍💼</span>
+                    <div>
+                        <h6 class="text-muted mb-1">Total Customers</h6>
+                        <h2 class="fw-bold">{{ client_count }}</h2>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+
+</div>
+
+<hr class="my-4">
+
+<!-- INVENTORY TREND + FORECAST -->
+<div class="row g-4 mb-4">
+
+    <!-- Inventory Trend -->
+    <div class="col-md-6">
+        <div class="card shadow-sm p-4 border-0 h-100">
+            <h5 class="fw-bold mb-3">
+                <i class="bi bi-box-seam me-2"></i>Inventory Trend (Last 30 Days)
+            </h5>
+
+            {% if stock_dates %}
+                <div class="chart-container">
+                    <canvas id="inventoryChart"></canvas>
+                </div>
+            {% else %}
+                <p class="text-muted fst-italic">Not enough data yet to display a trend.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Forecasting -->
+    <div class="col-md-6">
+        <div class="card shadow-sm p-4 border-0 h-100">
+            <h5 class="fw-bold mb-3">
+                <i class="bi bi-graph-up-arrow me-2"></i>Forecast (Simple Moving Average)
+            </h5>
+
+            {% if forecast %}
+                <p class="text-muted mb-1">Predicted Inventory Level (Next 7 Days):</p>
+                <h3 class="fw-bold text-primary">{{ forecast }}</h3>
+            {% else %}
+                <p class="text-muted fst-italic">Not enough data to generate a forecast.</p>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+<hr class="my-4">
+
+<!-- ORDERS ANALYTICS + TOP ITEM -->
+<div class="row g-4 mb-4">
+
+    <!-- Weekly Orders -->
+    <div class="col-md-6">
+        <div class="card shadow-sm p-4 border-0 h-100">
+            <h5 class="fw-bold mb-3">🛒 Weekly Orders Activity</h5>
+
+            {% if weekly_order_labels %}
+                <div class="chart-box">
+                    <canvas id="ordersChart"></canvas>
+                </div>
+                <p class="text-muted small mt-2 mb-0">
+                    Tip: click the chart to view all orders.
+                </p>
+            {% else %}
+                <p class="text-muted fst-italic">No recent order data available.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Highest Demand Item -->
+    <div class="col-md-6">
+        <div class="card shadow-sm p-4 border-0 h-100">
+            <h5 class="fw-bold mb-3">🏷️ Item With Highest Demand</h5>
+
+            {% if top_item %}
+                <p class="mb-1">Most Ordered Item:</p>
+                <h4 class="fw-bold">{{ top_item.name }}</h4>
+                <p class="text-muted">{{ top_item.total_orders }} orders</p>
+            {% else %}
+                <p class="text-muted fst-italic">Not enough data to calculate demand ranking.</p>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+<!-- RECENT ACTIVITY + PIE CHART -->
+<div class="row g-4 mb-4">
+
+    <!-- Recent Activity -->
+    <div class="col-md-6">
+        <div class="card shadow-sm p-4 border-0 h-100">
+            <h5 class="fw-bold mb-3">🕒 Recent Activity</h5>
+
+            {% if recent_activity %}
+                {% for act in recent_activity %}
+                    <div class="d-flex align-items-center mb-3">
+                        <span class="badge bg-primary rounded-circle me-3" style="width:10px;height:10px;"></span>
+                        <div>
+                            <strong>{{ act.message }}</strong><br>
+                            <span class="text-muted small">{{ act.timestamp|timesince }} ago</span>
+                        </div>
+                    </div>
+                    {% if not forloop.last %}
+                        <hr class="my-2">
+                    {% endif %}
+                {% endfor %}
+            {% else %}
+                <p class="text-muted fst-italic">No recent activity yet.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Inventory by Category Pie -->
+    <div class="col-md-6">
+        <div class="card shadow-sm p-4 border-0 h-100">
+            <h5 class="fw-bold mb-3">📊 Inventory by Category</h5>
+
+            {% if pie_labels %}
+                <div class="chart-box">
+                    <canvas id="pieChart"></canvas>
+                </div>
+            {% else %}
+                <p class="text-muted fst-italic">No category data available.</p>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+<!-- CHART.JS -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+/* INVENTORY TREND */
+{% if stock_dates %}
+const inventoryCtx = document.getElementById('inventoryChart').getContext('2d');
+
+new Chart(inventoryCtx, {
+    type: 'line',
+    data: {
+        labels: {{ stock_dates|safe }},
+        datasets: [{
+            label: 'Inventory Level',
+            data: {{ stock_values|safe }},
+            borderColor: 'rgba(75, 192, 192, 0.9)',
+            backgroundColor: 'rgba(75, 192, 192, 0.18)',
+            borderWidth: 3,
+            tension: 0.35,
+            pointRadius: 3,
+            pointHoverRadius: 5
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: {
+            duration: 900,
+            easing: 'easeOutQuart'
+        },
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                callbacks: {
+                    label: (ctx) => " Qty: " + ctx.parsed.y
+                }
+            }
+        },
+        scales: {
+            x: { grid: { display: false } },
+            y: {
+                beginAtZero: true,
+                grid: { color: "rgba(0,0,0,0.05)" }
+            }
+        }
+    }
+});
+
+// Click → go to stock page
+document.getElementById('inventoryChart').onclick = () => {
+    window.location.href = "{% url 'item_list' %}";
+};
+{% endif %}
+
+/* WEEKLY ORDERS */
+{% if weekly_order_labels %}
+const ordersCtx = document.getElementById('ordersChart').getContext('2d');
+
+new Chart(ordersCtx, {
+    type: 'bar',
+    data: {
+        labels: {{ weekly_order_labels|safe }},
+        datasets: [{
+            label: 'Orders',
+            data: {{ weekly_order_counts|safe }},
+            backgroundColor: 'rgba(54, 162, 235, 0.75)',
+            borderRadius: 6,
+            maxBarThickness: 40
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: {
+            duration: 1000,
+            easing: 'easeOutBounce'
+        },
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                callbacks: {
+                    label: (ctx) => " Orders: " + ctx.parsed.y
+                }
+            }
+        },
+        scales: {
+            x: { grid: { display: false } },
+            y: {
+                beginAtZero: true,
+                grid: { color: "rgba(0,0,0,0.05)" },
+                ticks: { precision: 0 }
+            }
+        }
+    }
+});
+
+// Click → orders page
+document.getElementById('ordersChart').onclick = () => {
+    window.location.href = "{% url 'order_list' %}";
+};
+{% endif %}
+
+/* PIE CHART */
+{% if pie_labels %}
+const pieCtx = document.getElementById('pieChart').getContext('2d');
+
+new Chart(pieCtx, {
+    type: 'pie',
+    data: {
+        labels: {{ pie_labels|safe }},
+        datasets: [{
+            data: {{ pie_values|safe }},
+            backgroundColor: [
+                'rgba(59,130,246,0.8)',
+                'rgba(16,185,129,0.8)',
+                'rgba(245,158,11,0.8)',
+                'rgba(239,68,68,0.8)',
+                'rgba(139,92,246,0.8)'
+            ],
+            borderWidth: 1
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false
+    }
+});
+{% endif %}
+</script>
+
+<style>
+.hover-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    cursor: pointer;
+}
+.hover-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+
+.chart-container {
+    height: 280px;
+    position: relative;
+}
+
+.chart-box {
+    position: relative;
+    height: 280px !important;
+    max-height: 280px !important;
+    min-height: 280px !important;
+    width: 100%;
+}
+
+/* POPUP: purchase recommendations */
+.po-popup {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 330px;
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 0;
+    z-index: 9999;
+    border: 1px solid #ddd;
+}
+
+.po-header {
+    background: #2563eb;
+    color: white;
+    padding: 10px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 12px 12px 0 0;
+}
+
+.po-body {
+    padding: 14px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.po-item {
+    padding-bottom: 8px;
+}
+
+/* Dark mode compatibility */
+.dark-mode .po-popup {
+    background-color: #161b22;
+    border-color: #30363d;
+}
+</style>
+
+<!-- PURCHASE RECOMMENDATION POPUP -->
+{% if recommendations %}
+<div id="poPopup" class="po-popup shadow-lg">
+    <div class="po-header">
+        <strong>Purchase Recommendations</strong>
+        <button id="poClose" class="btn-close btn-close-white"></button>
+    </div>
+
+    <div class="po-body">
+        {% for r in recommendations %}
+        <div class="po-item">
+            <strong>{{ r.item.name }}</strong><br>
+            <span class="text-muted small">
+                Recommend ordering {{ r.recommended_qty }} units
+            </span>
+
+            <div class="mt-2">
+                <a href="{% url 'order_create' %}?item={{ r.item.id }}&qty={{ r.recommended_qty }}"
+                   class="btn btn-sm btn-primary">
+                    Create Purchase Order
+                </a>
+            </div>
+
+            {% if not forloop.last %}
+                <hr class="my-2">
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<script>
+const poPopup = document.getElementById("poPopup");
+const poClose = document.getElementById("poClose");
+
+if (poPopup && poClose) {
+    poClose.addEventListener("click", () => {
+        poPopup.style.display = "none";
+    });
+}
+</script>
+
+{% endblock %}
