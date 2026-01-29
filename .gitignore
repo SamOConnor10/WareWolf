@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+
+# Env files / secrets
+.env
+*.env
+
+# Local DB (DON'T COMMIT)
+db.sqlite3
+
+# Virtual env (DON'T COMMIT)
+venv/
+env/
+
+# Django static/media (usually don’t commit generated)
+staticfiles/
+media/
+
+# IDE
+.vscode/
+.idea/
