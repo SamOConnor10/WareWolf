@@ -16,6 +16,23 @@ from django.db.models.functions import TruncWeek
 from django.http import JsonResponse
 from django.urls import reverse
 from inventory.models import Activity
+from django.contrib.auth import login
+from django.shortcuts import render, redirect
+from .forms import SignUpForm
+from django.contrib.auth.decorators import login_required
+
+
+def signup(request):
+    if request.method == "POST":
+        form = SignUpForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            login(request, user)
+            return redirect("inventory/dashboard.html")
+    else:
+        form = SignUpForm()
+    return render(request, "registration/signup.html", {"form": form})
+
 
 def global_search(request):
     q = request.GET.get("q", "").strip()
@@ -96,6 +113,7 @@ def global_search(request):
 # -------------------------------
 # Dashboard
 # -------------------------------
+@login_required
 def dashboard(request):
     from django.db.models import Sum, Count
     from django.db.models.functions import TruncWeek

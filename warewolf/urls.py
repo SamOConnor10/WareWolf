@@ -18,7 +18,8 @@ from django.contrib import admin
 from django.urls import path, include
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('', include('inventory.urls')),
+    path("admin/", admin.site.urls),
+    path("accounts/", include("django.contrib.auth.urls")),  # login/logout built-ins
+    path("", include("inventory.urls")),  # or your app urls
 ]
 
