@@ -5,6 +5,7 @@
 
 <p><strong>{{ item.name }}</strong> (Current: {{ item.quantity }})</p>
 
+{% if perms.inventory.change_item %}
 <form method="POST">
     {% csrf_token %}
     <div class="mb-3">
@@ -16,4 +17,12 @@
     <button class="btn btn-primary" type="submit">Apply Adjustment</button>
     <a class="btn btn-secondary" href="{% url 'item_list' %}">Cancel</a>
 </form>
+{% else %}
+<div class="alert alert-warning">
+    You do not have permission to adjust stock.
+</div>
+<a class="btn btn-secondary" href="{% url 'item_list' %}">Back</a>
+{% endif %}
+
 {% endblock %}
+

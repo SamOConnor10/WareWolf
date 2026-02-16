@@ -272,36 +272,55 @@
 
     <!-- Notifications -->
     <li class="nav-item dropdown">
-    <a class="nav-link position-relative" href="#" role="button" data-bs-toggle="dropdown">
-        <i class="bi bi-bell fs-5"></i>
+        <a class="nav-link position-relative" href="#" role="button" data-bs-toggle="dropdown">
+            <i class="bi bi-bell fs-5"></i>
 
-        {% if global_alerts %}
-            <span class="badge bg-danger rounded-circle position-absolute top-0 start-100 translate-middle p-1">
-                {{ global_alerts|length }}
-            </span>
-        {% endif %}
-    </a>
+            {% if global_alerts %}
+                <span class="badge bg-danger rounded-circle position-absolute top-0 start-100 translate-middle p-1">
+                    {{ global_alerts|length }}
+                </span>
+            {% endif %}
+        </a>
 
-    <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="width: 300px; max-height: 350px; overflow-y: auto;">
-        <li class="dropdown-header fw-bold">Notifications</li>
+        <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="width: 320px; max-height: 400px; overflow-y: auto;">
+            <li class="dropdown-header fw-bold">Notifications</li>
 
-        {% if global_alerts %}
-            {% for alert in global_alerts %}
-                <li class="dropdown-item small">
-                    {{ alert.message }}
-                    {% if alert.time %}
-                        <br><span class="text-muted">{{ alert.time }}</span>
+            {% if global_alerts %}
+                {% for alert in global_alerts %}
+                    <li class="dropdown-item small">
+
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                {{ alert.message }}
+                                {% if alert.time %}
+                                    <br><span class="text-muted">{{ alert.time }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if alert.approve_url and alert.decline_url %}
+                            <div class="mt-2 d-flex gap-2">
+                                <a href="{{ alert.approve_url }}" class="btn btn-sm btn-success">
+                                    Approve
+                                </a>
+                                <a href="{{ alert.decline_url }}" class="btn btn-sm btn-outline-danger">
+                                    Decline
+                                </a>
+                            </div>
+                        {% endif %}
+
+                    </li>
+
+                    {% if not forloop.last %}
+                        <li><hr class="dropdown-divider"></li>
                     {% endif %}
-                </li>
-                {% if not forloop.last %}
-                    <li><hr class="dropdown-divider"></li>
-                {% endif %}
-            {% endfor %}
-        {% else %}
-            <li class="dropdown-item text-muted small">No alerts</li>
-        {% endif %}
-    </ul>
-</li>
+                {% endfor %}
+            {% else %}
+                <li class="dropdown-item text-muted small">No alerts</li>
+            {% endif %}
+        </ul>
+    </li>
+
 
 <!-- Dark Mode Toggle -->
 <button id="themeToggle" class="btn btn-sm border-0 me-2" style="background:none;">
@@ -320,7 +339,11 @@
             <li><a class="dropdown-item" href="#"><i class="bi bi-person"></i> My Profile</a></li>
             <li><a class="dropdown-item" href="#"><i class="bi bi-gear"></i> Settings</a></li>
             <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item text-danger" href="#"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
+            <li>
+                <a class="dropdown-item text-danger" href="{% url 'logout' %}">
+                    <i class="bi bi-box-arrow-right"></i> Logout
+                </a>
+            </li>
         </ul>
     </div>
 

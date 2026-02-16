@@ -17,23 +17,56 @@ from django.http import JsonResponse
 from django.urls import reverse
 from inventory.models import Activity
 from django.contrib.auth import login
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from .forms import SignUpForm
 from django.contrib.auth.decorators import login_required
-
+from django.contrib.auth.models import Group
+from django.contrib.auth.decorators import permission_required
+from django.contrib.auth import logout
+from django.contrib import messages
+from .forms import SignUpForm
+from .models import ManagerRequest
 
 def signup(request):
     if request.method == "POST":
         form = SignUpForm(request.POST)
         if form.is_valid():
+            role = form.cleaned_data["role"]
             user = form.save()
-            login(request, user)
-            return redirect("inventory/dashboard.html")
+
+            staff_group = Group.objects.get(name="Staff")
+            manager_group = Group.objects.get(name="Manager")
+
+            if role == "staff":
+                user.groups.add(staff_group)
+                login(request, user)
+                return redirect("dashboard")
+
+            # manager requested
+            user.groups.add(staff_group)  # optional: keep them as staff while waiting
+            ManagerRequest.objects.create(user=user)
+
+            messages.info(
+                request,
+                "Manager access requested. Your account is created and awaiting approval."
+            )
+            # don’t auto-login; keep it simple + clear
+            return redirect("login")
     else:
         form = SignUpForm()
+
     return render(request, "registration/signup.html", {"form": form})
 
+@login_required
+def logout_view(request):
+    if request.method == "POST":
+        logout(request)
+        return redirect("login")
 
+    return render(request, "registration/logout_confirm.html")
+
+
+@login_required
 def global_search(request):
     q = request.GET.get("q", "").strip()
 
@@ -107,6 +140,46 @@ def global_search(request):
         })
 
     return JsonResponse({"results": results})
+
+
+def _is_manager_or_admin(user):
+    return user.is_authenticated and user.groups.filter(name__in=["Manager", "Admin"]).exists()
+
+@login_required
+def approve_manager_request(request, request_id):
+    if not _is_manager_or_admin(request.user):
+        return redirect("dashboard")
+
+    req = get_object_or_404(ManagerRequest, id=request_id, status="PENDING")
+    manager_group = Group.objects.get(name="Manager")
+
+    req.status = "APPROVED"
+    req.decided_by = request.user
+    req.decided_at = timezone.now()
+    req.save()
+
+    req.user.groups.add(manager_group)
+
+    messages.success(request, f"Approved manager access for {req.user.username}.")
+    return redirect("dashboard")
+
+@login_required
+def decline_manager_request(request, request_id):
+    if not _is_manager_or_admin(request.user):
+        return redirect("dashboard")
+
+    req = get_object_or_404(ManagerRequest, id=request_id, status="PENDING")
+
+    req.status = "DECLINED"
+    req.decided_by = request.user
+    req.decided_at = timezone.now()
+    req.save()
+
+    messages.warning(request, f"Declined manager access for {req.user.username}.")
+    return redirect("dashboard")
+
+
+
 
 
 
@@ -284,6 +357,8 @@ def dashboard(request):
 # ======================================================
 # STOCK ITEMS LIST + FILTER + SORT + CATEGORY FILTERING
 # ======================================================
+@login_required
+@permission_required("inventory.view_item", raise_exception=True)
 def item_list(request):
 
     items = Item.objects.select_related(
@@ -363,6 +438,8 @@ def item_list(request):
 # ======================================================
 # ITEM ADJUST QUANTITY
 # ======================================================
+@login_required
+@permission_required("inventory.change_item", raise_exception=True)
 def item_adjust_quantity(request, pk):
     item = get_object_or_404(Item, pk=pk)
 
@@ -387,6 +464,8 @@ def item_adjust_quantity(request, pk):
 # ======================================================
 # ITEM CRUD
 # ======================================================
+@login_required
+@permission_required("inventory.add_item", raise_exception=True)
 def item_create(request):
     if request.method == "POST":
         form = ItemForm(request.POST)
@@ -410,7 +489,8 @@ def item_create(request):
     })
 
 
-
+@login_required
+@permission_required("inventory.change_item", raise_exception=True)
 def item_edit(request, pk):
     item = get_object_or_404(Item, pk=pk)
 
@@ -437,7 +517,8 @@ def item_edit(request, pk):
 
 
 
-
+@login_required
+@permission_required("inventory.delete_item", raise_exception=True)
 def item_delete(request, pk):
     item = get_object_or_404(Item, pk=pk)
 
@@ -447,7 +528,8 @@ def item_delete(request, pk):
 
     return render(request, "inventory/item_confirm_delete.html", {"item": item})
 
-
+@login_required
+@permission_required("inventory.view_item", raise_exception=True)
 def item_export_csv(request):
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename=\"stock_items.csv\"'
@@ -479,6 +561,8 @@ def item_export_csv(request):
 # ======================================================
 # CATEGORY TREE VIEW + CRUD
 # ======================================================
+@login_required
+@permission_required("inventory.view_category", raise_exception=True)
 def category_list(request):
     roots = Category.objects.filter(parent__isnull=True)
 
@@ -487,6 +571,8 @@ def category_list(request):
         "show_categories": True,
     })
 
+@login_required
+@permission_required("inventory.add_category", raise_exception=True)
 def category_create_from_item(request):
     if request.method == "POST":
         name = request.POST.get("name")
@@ -496,8 +582,10 @@ def category_create_from_item(request):
         Category.objects.create(name=name, parent=parent)
 
         return redirect(request.META.get("HTTP_REFERER", "item_create"))
+    
 
-
+@login_required
+@permission_required("inventory.add_category", raise_exception=True)
 def category_create(request):
     if request.method == "POST":
         form = CategoryForm(request.POST)
@@ -517,6 +605,8 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 
+@login_required
+@permission_required("inventory.add_category", raise_exception=True)
 @csrf_exempt
 def category_create_ajax(request):
     """Create a category from the item form modal (AJAX)."""
@@ -542,7 +632,8 @@ def category_create_ajax(request):
     return JsonResponse({"success": False})
 
 
-
+@login_required
+@permission_required("inventory.change_category", raise_exception=True)
 def category_edit(request, pk):
     category = get_object_or_404(Category, pk=pk)
     if request.method == "POST":
@@ -559,7 +650,8 @@ def category_edit(request, pk):
         "view": "categories",
     })
 
-
+@login_required
+@permission_required("inventory.delete_category", raise_exception=True)
 def category_delete(request, pk):
     category = get_object_or_404(Category, pk=pk)
     if request.method == "POST":
@@ -577,6 +669,8 @@ def category_delete(request, pk):
 # -------------------------------
 # LOCATION CRUD
 # -------------------------------
+@login_required
+@permission_required("inventory.view_location", raise_exception=True)
 def location_list(request):
     """
     Location listing with:
@@ -639,7 +733,8 @@ def location_list(request):
     })
 
 
-
+@login_required
+@permission_required("inventory.add_location", raise_exception=True)
 def location_create(request):
     if request.method == "POST":
         parent_id = request.POST.get("parent") or None
@@ -659,7 +754,8 @@ def location_create(request):
         "location_types": Location.LOCATION_TYPES,
     })
 
-
+@login_required
+@permission_required("inventory.change_location", raise_exception=True)
 def location_edit(request, pk):
     location = get_object_or_404(Location, pk=pk)
 
@@ -683,6 +779,8 @@ def location_edit(request, pk):
     })
 
 
+@login_required
+@permission_required("inventory.delete_location", raise_exception=True)
 def location_delete(request, pk):
     location = get_object_or_404(Location, pk=pk)
 
@@ -696,6 +794,8 @@ def location_delete(request, pk):
 # -------------------------------
 # LOCATION TREE (Hierarchy View)
 # -------------------------------
+@login_required
+@permission_required("inventory.view_location", raise_exception=True)
 def location_tree(request):
     roots = Location.objects.filter(parent__isnull=True)
     return render(request, "inventory/location_tree.html", {"roots": roots})
@@ -704,6 +804,8 @@ def location_tree(request):
 # -------------------------------
 # LOCATION DETAIL VIEW
 # -------------------------------
+@login_required
+@permission_required("inventory.view_location", raise_exception=True)
 def location_view(request, pk):
     location = get_object_or_404(Location, pk=pk)
     items = location.inventory_items.all()
@@ -716,6 +818,8 @@ def location_view(request, pk):
 # -------------------------------
 # ORDER CRUD
 # -------------------------------
+@login_required
+@permission_required("inventory.view_order", raise_exception=True)
 def order_list(request):
     orders = Order.objects.select_related("item", "supplier", "client")
 
@@ -761,7 +865,8 @@ def order_list(request):
     })
 
 
-
+@login_required
+@permission_required("inventory.add_order", raise_exception=True)
 def order_create(request):
     # Query parameters:
     # ?type=purchase or ?type=sale (your existing behaviour)
@@ -830,7 +935,8 @@ def order_create(request):
 
 
 
-
+@login_required
+@permission_required("inventory.change_order", raise_exception=True)
 def order_edit(request, pk):
     order = get_object_or_404(Order, pk=pk)
 
@@ -849,6 +955,8 @@ def order_edit(request, pk):
     )
 
 
+@login_required
+@permission_required("inventory.delete_order", raise_exception=True)
 def order_delete(request, pk):
     order = get_object_or_404(Order, pk=pk)
 
@@ -863,6 +971,8 @@ def order_delete(request, pk):
     )
 
 
+@login_required
+@permission_required("inventory.change_order", raise_exception=True)
 def order_mark_delivered(request, pk):
     """
     Mark an order as delivered and automatically apply stock movement
@@ -880,6 +990,9 @@ def order_mark_delivered(request, pk):
     return redirect("order_list")
 
 
+@login_required
+@permission_required("inventory.view_supplier", raise_exception=True)
+@permission_required("inventory.view_client", raise_exception=True)
 def contacts_list(request):
     # ----------------------------
     # 1. GET FILTERS
@@ -994,6 +1107,8 @@ def contacts_list(request):
         "search_query": q,
     })
 
+@login_required
+@permission_required("inventory.add_supplier", raise_exception=True)
 def supplier_create(request):
     if request.method == "POST":
         form = SupplierForm(request.POST)
@@ -1006,6 +1121,8 @@ def supplier_create(request):
     return render(request, "inventory/supplier_form.html", {"form": form})
 
 
+@login_required
+@permission_required("inventory.change_supplier", raise_exception=True)
 def supplier_edit(request, pk):
     supplier = get_object_or_404(Supplier, pk=pk)
 
@@ -1024,6 +1141,8 @@ def supplier_edit(request, pk):
     })
 
 
+@login_required
+@permission_required("inventory.delete_supplier", raise_exception=True)
 def supplier_delete(request, pk):
     supplier = get_object_or_404(Supplier, pk=pk)
 
@@ -1036,6 +1155,8 @@ def supplier_delete(request, pk):
     })
 
 
+@login_required
+@permission_required("inventory.add_client", raise_exception=True)
 def client_create(request):
     if request.method == "POST":
         form = ClientForm(request.POST)
@@ -1048,6 +1169,8 @@ def client_create(request):
     return render(request, "inventory/client_form.html", {"form": form})
 
 
+@login_required
+@permission_required("inventory.change_client", raise_exception=True)
 def client_edit(request, pk):
     client = get_object_or_404(Client, pk=pk)
 
@@ -1066,6 +1189,8 @@ def client_edit(request, pk):
     })
 
 
+@login_required
+@permission_required("inventory.delete_client", raise_exception=True)
 def client_delete(request, pk):
     client = get_object_or_404(Client, pk=pk)
 

@@ -1,0 +1,14 @@
+{% extends "inventory/base.html" %}
+
+{% block content %}
+<h2 class="fw-bold">Logout</h2>
+
+<p>Are you sure you want to log out?</p>
+
+<form method="POST">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger">Logout</button>
+    <a href="{% url 'dashboard' %}" class="btn btn-secondary">Cancel</a>
+</form>
+
+{% endblock %}

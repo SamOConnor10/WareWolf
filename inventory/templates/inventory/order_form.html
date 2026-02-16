@@ -5,6 +5,8 @@
     {% if edit %}Edit Order{% else %}New Order{% endif %}
 </h1>
 
+{% if edit and perms.inventory.change_order or not edit and perms.inventory.add_order %}
+
 <form method="post" class="card shadow-sm border-0">
     {% csrf_token %}
     <div class="card-body row g-3">
@@ -166,7 +168,13 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 </script>
 
+{% else %}
 
+<div class="alert alert-danger">
+    You don’t have permission to {% if edit %}edit{% else %}create{% endif %} orders.
+</div>
+<a href="{% url 'order_list' %}" class="btn btn-secondary">Back</a>
 
+{% endif %}
 
 {% endblock %}

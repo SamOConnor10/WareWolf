@@ -67,12 +67,14 @@
     </div>
 
     <div class="col-md-2 text-md-end mt-2 mt-md-0">
-        {% if context_type == "purchase" %}
-            <a href="{% url 'order_create' %}?type=purchase" class="btn btn-primary">+ Create PO</a>
-        {% elif context_type == "sale" %}
-            <a href="{% url 'order_create' %}?type=sale" class="btn btn-primary">+ Create SO</a>
-        {% else %}
-            <a href="{% url 'order_create' %}" class="btn btn-primary">+ Create Order</a>
+        {% if perms.inventory.add_order %}
+            {% if context_type == "purchase" %}
+                <a href="{% url 'order_create' %}?type=purchase" class="btn btn-primary">+ Create PO</a>
+            {% elif context_type == "sale" %}
+                <a href="{% url 'order_create' %}?type=sale" class="btn btn-primary">+ Create SO</a>
+            {% else %}
+                <a href="{% url 'order_create' %}" class="btn btn-primary">+ Create Order</a>
+            {% endif %}
         {% endif %}
     </div>
 </form>
@@ -145,26 +147,30 @@
             </td>
 
             <td>
-                {% if order.status != 'DELIVERED' or not order.stock_applied %}
-                    <form method="post"
-                          action="{% url 'order_mark_delivered' order.id %}"
-                          class="d-inline">
-                        {% csrf_token %}
-                        <button class="btn btn-sm btn-success">
-                            Mark Delivered
-                        </button>
-                    </form>
+                {% if perms.inventory.change_order %}
+                    {% if order.status != 'DELIVERED' or not order.stock_applied %}
+                        <form method="post"
+                              action="{% url 'order_mark_delivered' order.id %}"
+                              class="d-inline">
+                            {% csrf_token %}
+                            <button class="btn btn-sm btn-success">
+                                Mark Delivered
+                            </button>
+                        </form>
+                    {% endif %}
+
+                    <a href="{% url 'order_edit' order.id %}"
+                       class="btn btn-sm btn-outline-secondary">
+                        Edit
+                    </a>
                 {% endif %}
 
-                <a href="{% url 'order_edit' order.id %}"
-                   class="btn btn-sm btn-outline-secondary">
-                    Edit
-                </a>
-
-                <a href="{% url 'order_delete' order.id %}"
-                   class="btn btn-sm btn-outline-danger">
-                    Delete
-                </a>
+                {% if perms.inventory.delete_order %}
+                    <a href="{% url 'order_delete' order.id %}"
+                       class="btn btn-sm btn-outline-danger">
+                        Delete
+                    </a>
+                {% endif %}
             </td>
         </tr>
         {% empty %}

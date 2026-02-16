@@ -21,9 +21,11 @@
             <p class="text-muted fst-italic">No categories created yet.</p>
         {% endif %}
 
-        <a href="{% url 'category_create' %}" class="btn btn-primary btn-sm mt-3 w-100">
-            + Add Category
-        </a>
+        {% if perms.inventory.add_category %}
+            <a href="{% url 'category_create' %}" class="btn btn-primary btn-sm mt-3 w-100">
+                + Add Category
+            </a>
+        {% endif %}
     </div>
 </div>
 

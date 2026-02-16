@@ -3,8 +3,11 @@ from . import views
 
 urlpatterns = [
     path("signup/", views.signup, name="signup"),
+    path("logout/", views.logout_view, name="logout"),
     path("", views.dashboard, name="dashboard"),
     path("search/", views.global_search, name="global_search"),
+    path("manager-requests/<int:request_id>/approve/", views.approve_manager_request, name="approve_manager_request"),
+    path("manager-requests/<int:request_id>/decline/", views.decline_manager_request, name="decline_manager_request"),
 
     # Stock CRUD
     path("items/", views.item_list, name="item_list"),

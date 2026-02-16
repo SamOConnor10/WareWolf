@@ -11,6 +11,11 @@ class Command(BaseCommand):
         manager_group, _ = Group.objects.get_or_create(name="Manager")
         staff_group, _ = Group.objects.get_or_create(name="Staff")
 
+        # IMPORTANT: reset permissions so removed perms don't linger in DB
+        admin_group.permissions.clear()
+        manager_group.permissions.clear()
+        staff_group.permissions.clear()
+
         models = [Item, Order, Supplier, Client, Category, Location]
 
         def perms_for_model(model):
@@ -21,15 +26,11 @@ class Command(BaseCommand):
         for m in models:
             admin_group.permissions.add(*perms_for_model(m))
 
-        # Manager: add/change/view everything, no delete (example)
+        # Manager: everything
         for m in models:
-            ct = ContentType.objects.get_for_model(m)
-            manager_group.permissions.add(*Permission.objects.filter(
-                content_type=ct,
-                codename__startswith=("add_", "change_", "view_")
-            ))
+            manager_group.permissions.add(*perms_for_model(m))
 
-        # Staff: view only (example)
+        # Staff: view-only
         for m in models:
             ct = ContentType.objects.get_for_model(m)
             staff_group.permissions.add(*Permission.objects.filter(

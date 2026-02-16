@@ -86,17 +86,29 @@
     </div>
 
     {% if type_filter == "suppliers" %}
-        <a href="{% url 'supplier_create' %}" class="btn btn-primary">
-            <i class="bi bi-person-plus"></i> Add Supplier
-        </a>
+        {% if perms.inventory.add_supplier %}
+            <a href="{% url 'supplier_create' %}" class="btn btn-primary">
+                <i class="bi bi-person-plus"></i> Add Supplier
+            </a>
+        {% endif %}
     {% elif type_filter == "customers" %}
-        <a href="{% url 'client_create' %}" class="btn btn-primary">
-            <i class="bi bi-person-plus"></i> Add Customer
-        </a>
+        {% if perms.inventory.add_client %}
+            <a href="{% url 'client_create' %}" class="btn btn-primary">
+                <i class="bi bi-person-plus"></i> Add Customer
+            </a>
+        {% endif %}
     {% else %}
-        <a href="{% url 'supplier_create' %}" class="btn btn-primary">
-            <i class="bi bi-person-plus"></i> Add Contact
-        </a>
+        {% if perms.inventory.add_supplier or perms.inventory.add_client %}
+            {% if perms.inventory.add_supplier %}
+                <a href="{% url 'supplier_create' %}" class="btn btn-primary">
+                    <i class="bi bi-person-plus"></i> Add Contact
+                </a>
+            {% elif perms.inventory.add_client %}
+                <a href="{% url 'client_create' %}" class="btn btn-primary">
+                    <i class="bi bi-person-plus"></i> Add Contact
+                </a>
+            {% endif %}
+        {% endif %}
     {% endif %}
 </div>
 
@@ -138,21 +150,29 @@
             <td class="text-end">
 
                 {% if c.type == "supplier" %}
-                    <a href="{% url 'supplier_edit' c.id %}" class="btn btn-sm btn-outline-secondary">
-                        <i class="bi bi-pencil"></i>
-                    </a>
-                    <a href="{% url 'supplier_delete' c.id %}" class="btn btn-sm btn-outline-danger">
-                        <i class="bi bi-trash"></i>
-                    </a>
+                    {% if perms.inventory.change_supplier %}
+                        <a href="{% url 'supplier_edit' c.id %}" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                    {% endif %}
+                    {% if perms.inventory.delete_supplier %}
+                        <a href="{% url 'supplier_delete' c.id %}" class="btn btn-sm btn-outline-danger">
+                            <i class="bi bi-trash"></i>
+                        </a>
+                    {% endif %}
 
                 {% else %}
 
-                    <a href="{% url 'client_edit' c.id %}" class="btn btn-sm btn-outline-secondary">
-                        <i class="bi bi-pencil"></i>
-                    </a>
-                    <a href="{% url 'client_delete' c.id %}" class="btn btn-sm btn-outline-danger">
-                        <i class="bi bi-trash"></i>
-                    </a>
+                    {% if perms.inventory.change_client %}
+                        <a href="{% url 'client_edit' c.id %}" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                    {% endif %}
+                    {% if perms.inventory.delete_client %}
+                        <a href="{% url 'client_delete' c.id %}" class="btn btn-sm btn-outline-danger">
+                            <i class="bi bi-trash"></i>
+                        </a>
+                    {% endif %}
 
                 {% endif %}
 

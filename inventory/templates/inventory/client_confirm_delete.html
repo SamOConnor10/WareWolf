@@ -11,11 +11,16 @@
     <div class="card-footer d-flex justify-content-between">
         <a href="{% url 'contacts_list' %}" class="btn btn-secondary">Cancel</a>
 
+        {% if perms.inventory.delete_client %}
         <form method="post">
             {% csrf_token %}
             <button class="btn btn-danger">Delete</button>
         </form>
+        {% else %}
+        <span class="text-muted">You do not have permission to delete customers.</span>
+        {% endif %}
     </div>
 </div>
 
 {% endblock %}
+

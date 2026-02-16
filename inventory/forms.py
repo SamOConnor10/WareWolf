@@ -7,9 +7,22 @@ from django.contrib.auth.models import User
 class SignUpForm(UserCreationForm):
     email = forms.EmailField(required=True)
 
+    ROLE_CHOICES = [
+        ("staff", "Staff"),
+        ("manager", "Manager (requires approval)"),
+    ]
+    role = forms.ChoiceField(choices=ROLE_CHOICES, widget=forms.Select(attrs={"class": "form-select"}))
+
     class Meta:
         model = User
-        fields = ("username", "email", "password1", "password2")
+        fields = ("username", "email", "role", "password1", "password2")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Make built-in fields look like Bootstrap
+        for f in ["username", "email", "password1", "password2"]:
+            self.fields[f].widget.attrs.update({"class": "form-control"})
 
 # -------------------------------------------------
 # ITEM FORM

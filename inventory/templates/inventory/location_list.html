@@ -6,7 +6,9 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <p class="text-muted">Manage warehouse storage locations</p>
-    <a href="{% url 'location_create' %}" class="btn btn-primary">+ Add Location</a>
+    {% if perms.inventory.add_location %}
+        <a href="{% url 'location_create' %}" class="btn btn-primary">+ Add Location</a>
+    {% endif %}
 </div>
 
 <!-- SEARCH + FILTER BAR -->
@@ -138,8 +140,12 @@
 
             <!-- Actions -->
             <td>
-                <a href="{% url 'location_edit' location.id %}" class="btn btn-sm btn-outline-secondary">Edit</a>
-                <a href="{% url 'location_delete' location.id %}" class="btn btn-sm btn-outline-danger">Delete</a>
+                {% if perms.inventory.change_location %}
+                    <a href="{% url 'location_edit' location.id %}" class="btn btn-sm btn-outline-secondary">Edit</a>
+                {% endif %}
+                {% if perms.inventory.delete_location %}
+                    <a href="{% url 'location_delete' location.id %}" class="btn btn-sm btn-outline-danger">Delete</a>
+                {% endif %}
             </td>
 
         </tr>

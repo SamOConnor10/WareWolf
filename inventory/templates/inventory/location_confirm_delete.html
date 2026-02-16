@@ -5,10 +5,17 @@
 
 <p>Are you sure you want to delete <strong>{{ location.name }}</strong>?</p>
 
+{% if perms.inventory.delete_location %}
 <form method="POST">
     {% csrf_token %}
     <button type="submit" class="btn btn-danger">Delete</button>
     <a href="{% url 'location_list' %}" class="btn btn-secondary">Cancel</a>
 </form>
+{% else %}
+<div class="alert alert-warning">
+    You do not have permission to delete locations.
+</div>
+<a href="{% url 'location_list' %}" class="btn btn-secondary">Back</a>
+{% endif %}
 
 {% endblock %}

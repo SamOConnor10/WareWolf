@@ -64,9 +64,16 @@
         </select>
     </div>
 
-    <button type="submit" class="btn btn-success me-2">Submit</button>
+    {% if location %}
+        {% if perms.inventory.change_location %}
+            <button type="submit" class="btn btn-success me-2">Submit</button>
+        {% endif %}
+    {% else %}
+        {% if perms.inventory.add_location %}
+            <button type="submit" class="btn btn-success me-2">Submit</button>
+        {% endif %}
+    {% endif %}
     <a href="{% url 'location_list' %}" class="btn btn-secondary">Cancel</a>
 </form>
-
 
 {% endblock %}

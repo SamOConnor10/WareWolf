@@ -1,12 +1,13 @@
 {% extends "inventory/base.html" %}
 {% block content %}
+
 <h2>{{ location.name }}</h2>
 
 <p><strong>Breadcrumb:</strong> {{ location.get_breadcrumb }}</p>
 <p><strong>Type:</strong> {{ location.get_location_type_display }}</p>
 <p><strong>Structural:</strong> {{ location.structural }}</p>
 <p><strong>External:</strong> {{ location.external }}</p>
-<p><strong>Description:</strong> {{ location.description|default:"—" }}</p>
+<p><strong>Description:</strong> {{ location.description|default:"-" }}</p>
 
 <h4 class="mt-4">Items Stored Here ({{ items.count }})</h4>
 
@@ -20,17 +21,19 @@
     </thead>
     <tbody>
         {% for item in items %}
-        <tr>
-            <td>{{ item.name }}</td>
-            <td>{{ item.sku }}</td>
-            <td>{{ item.quantity }}</td>
-        </tr>
+            <tr>
+                <td>{{ item.name }}</td>
+                <td>{{ item.sku }}</td>
+                <td>{{ item.quantity }}</td>
+            </tr>
         {% empty %}
-        <tr><td colspan="3">No items in this location.</td></tr>
+            <tr><td colspan="3">No items in this location.</td></tr>
         {% endfor %}
     </tbody>
 </table>
 
-<a href="{% url 'location_edit' location.id %}" class="btn btn-secondary">Edit</a>
+{% if perms.inventory.change_location %}
+    <a href="{% url 'location_edit' location.id %}" class="btn btn-secondary">Edit</a>
+{% endif %}
 
 {% endblock %}

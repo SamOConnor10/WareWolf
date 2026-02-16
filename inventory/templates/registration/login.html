@@ -1,10 +1,32 @@
-{% extends "inventory/base.html" %}
+{% extends "registration/base_auth.html" %}
+{% block title %}Login · WareWolf{% endblock %}
+
 {% block content %}
-<h2>Login</h2>
-<form method="post">
-  {% csrf_token %}
-  {{ form.as_p }}
-  <button type="submit">Login</button>
-</form>
-<p>No account? <a href="{% url 'signup' %}">Create one</a></p>
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    <h1 class="h3 fw-bold mb-1">Login</h1>
+    <p class="text-muted mb-4">Sign in to continue.</p>
+
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="mb-3">
+        <label class="form-label">Username</label>
+        <input type="text" name="username" class="form-control" required autofocus>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Password</label>
+        <input type="password" name="password" class="form-control" required>
+      </div>
+
+      <button class="btn btn-primary w-100">Login</button>
+    </form>
+
+    <div class="text-center mt-3">
+      <span class="text-muted">No account?</span>
+      <a href="{% url 'signup' %}">Create one</a>
+    </div>
+  </div>
+</div>
 {% endblock %}

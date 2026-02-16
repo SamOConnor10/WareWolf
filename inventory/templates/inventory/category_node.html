@@ -4,8 +4,13 @@
         <span>{{ node.name }}</span>
 
         <div>
-            <a href="{% url 'category_edit' node.id %}" class="btn btn-sm btn-outline-secondary">Edit</a>
-            <a href="{% url 'category_delete' node.id %}" class="btn btn-sm btn-outline-danger">Delete</a>
+            {% if perms.inventory.change_category %}
+                <a href="{% url 'category_edit' node.id %}" class="btn btn-sm btn-outline-secondary">Edit</a>
+            {% endif %}
+
+            {% if perms.inventory.delete_category %}
+                <a href="{% url 'category_delete' node.id %}" class="btn btn-sm btn-outline-danger">Delete</a>
+            {% endif %}
         </div>
     </div>
 

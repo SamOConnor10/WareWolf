@@ -12,7 +12,10 @@
 
         <div class="d-flex justify-content-between align-items-center mb-3">
             <p class="text-muted">Manage your warehouse stock levels</p>
-            <a href="{% url 'item_create' %}" class="btn btn-primary">+ Add Item</a>
+
+            {% if perms.inventory.add_item %}
+                <a href="{% url 'item_create' %}" class="btn btn-primary">+ Add Item</a>
+            {% endif %}
         </div>
 
         <!-- SEARCH + FILTER -->
@@ -94,9 +97,14 @@
                     </td>
 
                     <td>
-                        <a href="{% url 'item_adjust' item.id %}" class="btn btn-sm btn-outline-primary">Adjust</a>
-                        <a href="{% url 'item_edit' item.id %}" class="btn btn-sm btn-outline-secondary">Edit</a>
-                        <a href="{% url 'item_delete' item.id %}" class="btn btn-sm btn-outline-danger">Delete</a>
+                        {% if perms.inventory.change_item %}
+                            <a href="{% url 'item_adjust' item.id %}" class="btn btn-sm btn-outline-primary">Adjust</a>
+                            <a href="{% url 'item_edit' item.id %}" class="btn btn-sm btn-outline-secondary">Edit</a>
+                        {% endif %}
+
+                        {% if perms.inventory.delete_item %}
+                            <a href="{% url 'item_delete' item.id %}" class="btn btn-sm btn-outline-danger">Delete</a>
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}

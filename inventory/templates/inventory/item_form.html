@@ -43,11 +43,13 @@
                     {{ form.category }}
                 </div>
 
-                <!-- Button triggers modal -->
-                <button type="button" class="btn btn-outline-primary"
-                        data-bs-toggle="modal" data-bs-target="#addCategoryModal">
-                    + New
-                </button>
+                {% if perms.inventory.add_category %}
+                    <!-- Button triggers modal -->
+                    <button type="button" class="btn btn-outline-primary"
+                            data-bs-toggle="modal" data-bs-target="#addCategoryModal">
+                        + New
+                    </button>
+                {% endif %}
             </div>
         </div>
 
@@ -76,7 +78,15 @@
         </div>
 
         <!-- BUTTONS -->
-        <button type="submit" class="btn btn-success me-2">Save</button>
+        {% if form.instance.pk %}
+            {% if perms.inventory.change_item %}
+                <button type="submit" class="btn btn-success me-2">Save</button>
+            {% endif %}
+        {% else %}
+            {% if perms.inventory.add_item %}
+                <button type="submit" class="btn btn-success me-2">Save</button>
+            {% endif %}
+        {% endif %}
         <a href="{% url 'item_list' %}" class="btn btn-secondary">Cancel</a>
     </form>
 </div>
@@ -87,6 +97,7 @@
 <!-- CATEGORY CREATION MODAL (Inline new-category creation UI) -->
 <!-- =================================================================== -->
 
+{% if perms.inventory.add_category %}
 <div class="modal fade" id="addCategoryModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -166,5 +177,6 @@ document.getElementById("saveCategoryBtn").onclick = function () {
     });
 };
 </script>
+{% endif %}
 
 {% endblock %}

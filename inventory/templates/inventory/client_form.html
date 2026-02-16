@@ -33,9 +33,16 @@
 
     <div class="card-footer d-flex justify-content-between">
         <a href="{% url 'contacts_list' %}" class="btn btn-secondary">Cancel</a>
-        <button type="submit" class="btn btn-primary">
-            {% if edit %}Save Changes{% else %}Add Customer{% endif %}
-        </button>
+
+        {% if edit %}
+            {% if perms.inventory.change_client %}
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+            {% endif %}
+        {% else %}
+            {% if perms.inventory.add_client %}
+                <button type="submit" class="btn btn-primary">Add Customer</button>
+            {% endif %}
+        {% endif %}
     </div>
 </form>
 
