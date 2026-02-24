@@ -26,36 +26,110 @@ from django.contrib.auth import logout
 from django.contrib import messages
 from .forms import SignUpForm
 from .models import ManagerRequest
+from django.contrib.auth.password_validation import password_validators_help_texts
+from django.contrib import messages
+from django.views.decorators.http import require_POST
+from django.contrib.auth import get_user_model
+User = get_user_model()
+from django.core.mail import send_mail
+from django.conf import settings
+
 
 def signup(request):
+    
     if request.method == "POST":
         form = SignUpForm(request.POST)
         if form.is_valid():
             role = form.cleaned_data["role"]
-            user = form.save()
 
-            staff_group = Group.objects.get(name="Staff")
-            manager_group = Group.objects.get(name="Manager")
+            user = form.save(commit=False)
 
+            # -------------------------
+            # STAFF: active immediately
+            # -------------------------
             if role == "staff":
+                user.is_active = True
+                user.save()
+
+                staff_group = Group.objects.get(name="Staff")
                 user.groups.add(staff_group)
+
+                # Notify everyone in-app
+                Notification.objects.bulk_create([
+                    Notification(
+                        user=u,
+                        message=f"New account created: {user.username} (Staff)."
+                    )
+                    for u in User.objects.all()
+                ])
+
+                # Email the user (confirmation)
+                if user.email:
+                    send_mail(
+                        subject="WareWolf: Account created",
+                        message=(
+                            f"Hi {user.username},\n\n"
+                            "Your WareWolf account has been created successfully as Staff.\n"
+                            "You can log in and start using the system right away.\n\n"
+                            "Regards,\n"
+                            "WareWolf"
+                        ),
+                        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+                        recipient_list=[user.email],
+                        fail_silently=True,
+                    )
+
                 login(request, user)
+                messages.success(request, f"Welcome back, {request.user.username}!")
                 return redirect("dashboard")
 
-            # manager requested
-            user.groups.add(staff_group)  # optional: keep them as staff while waiting
-            ManagerRequest.objects.create(user=user)
+            # ---------------------------------------
+            # MANAGER: must be approved before login
+            # ---------------------------------------
+            user.is_active = False
+            user.save()
+
+            ManagerRequest.objects.get_or_create(user=user)
+
+            # Notify everyone in-app
+            Notification.objects.bulk_create([
+                Notification(
+                    user=u,
+                    message=f"New account created: {user.username} (Manager request)."
+                )
+                for u in User.objects.all()
+            ])
+
+            # Email the user (request received)
+            if user.email:
+                send_mail(
+                    subject="WareWolf: Manager access requested",
+                    message=(
+                        f"Hi {user.username},\n\n"
+                        "Your WareWolf account has been created and your Manager access request has been submitted.\n"
+                        "You will receive another email once the request is approved or declined.\n\n"
+                        "Regards,\n"
+                        "WareWolf"
+                    ),
+                    from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+                    recipient_list=[user.email],
+                    fail_silently=True,
+                )
 
             messages.info(
                 request,
-                "Manager access requested. Your account is created and awaiting approval."
+                "Manager access requested. Your account has been created and is awaiting approval."
             )
-            # don’t auto-login; keep it simple + clear
             return redirect("login")
     else:
         form = SignUpForm()
 
-    return render(request, "registration/signup.html", {"form": form})
+    return render(request, "registration/signup.html", {
+        "form": form,
+        "password_help": password_validators_help_texts(),
+    })
+
+
 
 @login_required
 def logout_view(request):
@@ -143,7 +217,13 @@ def global_search(request):
 
 
 def _is_manager_or_admin(user):
-    return user.is_authenticated and user.groups.filter(name__in=["Manager", "Admin"]).exists()
+    return (
+        user.is_authenticated
+        and (
+            user.is_superuser
+            or user.groups.filter(name__in=["Manager", "Admin"]).exists()
+        )
+    )
 
 @login_required
 def approve_manager_request(request, request_id):
@@ -158,10 +238,29 @@ def approve_manager_request(request, request_id):
     req.decided_at = timezone.now()
     req.save()
 
+    # allow login + grant manager permissions
+    req.user.is_active = True
+    req.user.save()
     req.user.groups.add(manager_group)
+
+    # email user (ONLY if they have an email)
+    if req.user.email:
+        send_mail(
+            subject="WareWolf: Manager access approved",
+            message=(
+                f"Hi {req.user.username},\n\n"
+                "Your request for Manager access has been APPROVED.\n"
+                "You can now log in and use WareWolf with Manager permissions.\n\n"
+                "Regards,\nWareWolf"
+            ),
+            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+            recipient_list=[req.user.email],
+            fail_silently=True,
+        )
 
     messages.success(request, f"Approved manager access for {req.user.username}.")
     return redirect("dashboard")
+
 
 @login_required
 def decline_manager_request(request, request_id):
@@ -175,11 +274,51 @@ def decline_manager_request(request, request_id):
     req.decided_at = timezone.now()
     req.save()
 
+    # keep blocked from logging in
+    req.user.is_active = False
+    req.user.save()
+
+    # email user (ONLY if they have an email)
+    if req.user.email:
+        send_mail(
+            subject="WareWolf: Manager access declined",
+            message=(
+                f"Hi {req.user.username},\n\n"
+                "Your request for Manager access has been DECLINED.\n"
+                "If you believe this was a mistake, please contact an Admin/Manager.\n\n"
+                "Regards,\nWareWolf"
+            ),
+            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+            recipient_list=[req.user.email],
+            fail_silently=True,
+        )
+
     messages.warning(request, f"Declined manager access for {req.user.username}.")
     return redirect("dashboard")
 
 
+from .models import Notification
+@require_POST
+@login_required
+def dismiss_notification(request, notification_id):
+    n = get_object_or_404(Notification, id=notification_id, user=request.user)
+    n.is_read = True
+    n.save(update_fields=["is_read"])
+    return redirect(request.META.get("HTTP_REFERER", "dashboard"))
 
+
+@require_POST
+@login_required
+def dismiss_alert(request):
+    """
+    Session-based dismiss for 'dynamic' alerts (low stock / delivered / manager request).
+    """
+    key = request.POST.get("key")
+    if key:
+        dismissed = set(request.session.get("dismissed_alerts", []))
+        dismissed.add(key)
+        request.session["dismissed_alerts"] = list(dismissed)
+    return redirect(request.META.get("HTTP_REFERER", "dashboard"))
 
 
 
@@ -452,7 +591,8 @@ def item_adjust_quantity(request, pk):
         from django.apps import apps
         Activity = apps.get_model("inventory", "Activity")
         Activity.objects.create(
-            message=f"Adjusted quantity for {item.name}: change of {adjustment}"
+            message=f"Adjusted quantity for {item.name}: change of {adjustment}",
+            user=request.user
         )
 
         return redirect("item_list")
@@ -476,7 +616,8 @@ def item_create(request):
             from django.apps import apps
             Activity = apps.get_model("inventory", "Activity")
             Activity.objects.create(
-                message=f"New item created: {item.name}"
+                message=f"New item created: {item.name}",
+                user=request.user
             )
 
             return redirect("item_list")
@@ -503,7 +644,8 @@ def item_edit(request, pk):
             from django.apps import apps
             Activity = apps.get_model("inventory", "Activity")
             Activity.objects.create(
-                message=f"Item updated: {updated_item.name}"
+                message=f"Item updated: {updated_item.name}",
+                user=request.user
             )
 
             return redirect("item_list")
@@ -915,7 +1057,7 @@ def order_create(request):
 
         if form.is_valid():
             order = form.save()
-            order.apply_stock_if_needed()  # stock update logic
+            order.apply_stock_if_needed(actor=request.user)  # stock update logic
             return redirect("order_list")
 
     # -------------------------
@@ -984,7 +1126,7 @@ def order_mark_delivered(request, pk):
         # set status first, then apply stock once
         order.status = Order.STATUS_DELIVERED
         order.save(update_fields=["status"])
-        order.apply_stock_if_needed()
+        order.apply_stock_if_needed(actor=request.user)
         return redirect("order_list")
 
     return redirect("order_list")

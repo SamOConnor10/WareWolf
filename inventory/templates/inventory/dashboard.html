@@ -159,26 +159,39 @@
 
     <!-- Recent Activity -->
     <div class="col-md-6">
-        <div class="card shadow-sm p-4 border-0 h-100">
-            <h5 class="fw-bold mb-3">🕒 Recent Activity</h5>
+    <div class="card shadow-sm p-4 border-0 h-100">
+        <h5 class="fw-bold mb-3"><i class="bi bi-clock-history me-2"></i> Recent Activity</h5>
 
-            {% if recent_activity %}
-                {% for act in recent_activity %}
-                    <div class="d-flex align-items-center mb-3">
-                        <span class="badge bg-primary rounded-circle me-3" style="width:10px;height:10px;"></span>
-                        <div>
-                            <strong>{{ act.message }}</strong><br>
-                            <span class="text-muted small">{{ act.timestamp|timesince }} ago</span>
-                        </div>
-                    </div>
-                    {% if not forloop.last %}
-                        <hr class="my-2">
+        {% if recent_activity %}
+        {% for act in recent_activity %}
+            <div class="d-flex align-items-start mb-3">
+            <span class="badge bg-primary rounded-circle me-3" style="width:10px;height:10px;margin-top:8px;"></span>
+
+            <div class="w-100">
+                <div class="d-flex justify-content-between gap-2">
+                <div class="me-2">
+                    <strong>{{ act.message }}</strong>
+                    <div class="text-muted small">
+                    {% if act.user %}
+                        by <span class="fw-semibold">{{ act.user.username }}</span> ·
+                    {% else %}
+                        by <span class="fw-semibold">System</span> ·
                     {% endif %}
-                {% endfor %}
-            {% else %}
-                <p class="text-muted fst-italic">No recent activity yet.</p>
+                    {{ act.timestamp|timesince }} ago
+                    </div>
+                </div>
+                </div>
+            </div>
+            </div>
+
+            {% if not forloop.last %}
+            <hr class="my-2">
             {% endif %}
-        </div>
+        {% endfor %}
+        {% else %}
+        <p class="text-muted fst-italic mb-0">No recent activity yet.</p>
+        {% endif %}
+    </div>
     </div>
 
     <!-- Inventory by Category Pie -->

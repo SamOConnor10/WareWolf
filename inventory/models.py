@@ -229,7 +229,7 @@ class Order(models.Model):
             return self.client.name
         return "-"
 
-    def apply_stock_if_needed(self):
+    def apply_stock_if_needed(self, actor=None):
         """
         Apply stock movement once when the order is delivered.
         Purchase = increase stock, Sale = decrease stock.
@@ -261,11 +261,13 @@ class Order(models.Model):
             quantity=self.item.quantity
         )
 
-        # Log activity (safe lazy import)
+         # Log activity (safe lazy import)
         from django.apps import apps
         Activity = apps.get_model("inventory", "Activity")
+
         Activity.objects.create(
-            message=f"Order #{self.id} delivered — updated stock for {self.item.name}"
+            message=f"Order #{self.id} delivered — updated stock for {self.item.name}",
+            user=actor if actor and getattr(actor, "is_authenticated", False) else None,
         )
 
         # Mark order as applied to avoid duplicates
@@ -290,8 +292,33 @@ class Activity(models.Model):
     message = models.CharField(max_length=255)
     timestamp = models.DateTimeField(auto_now_add=True)
 
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL
+    )
+
     class Meta:
         ordering = ["-timestamp"]
 
     def __str__(self):
-        return f"{self.timestamp}: {self.message}"
+        who = self.user.username if self.user else "System"
+        return f"{self.timestamp}: {self.message} ({who})"
+    
+class Notification(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="notifications"
+    )
+    message = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    # read vs dismissed (dismissed = removed from bell dropdown)
+    is_read = models.BooleanField(default=False)
+    dismissed = models.BooleanField(default=False)
+    dismissed_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.user} - {self.message}"

@@ -1,3 +1,4 @@
+{# login.html #}
 {% extends "registration/base_auth.html" %}
 {% block title %}Login · WareWolf{% endblock %}
 
@@ -7,12 +8,27 @@
     <h1 class="h3 fw-bold mb-1">Login</h1>
     <p class="text-muted mb-4">Sign in to continue.</p>
 
-    <form method="post">
+    {% if form.errors %}
+      <div class="alert alert-danger py-2">
+        Your username and password didn’t match. Please try again.
+      </div>
+    {% endif %}
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} py-2 d-flex align-items-center justify-content-between" role="alert">
+          <div>{{ message }}</div>
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <form method="post" novalidate>
       {% csrf_token %}
 
       <div class="mb-3">
         <label class="form-label">Username</label>
-        <input type="text" name="username" class="form-control" required autofocus>
+        <input type="text" name="username" class="form-control" required autofocus value="{{ request.POST.username }}">
       </div>
 
       <div class="mb-3">

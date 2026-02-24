@@ -2,6 +2,7 @@ from django import forms
 from .models import Item, Supplier, Client, Location, Order, Category
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 
 
 class SignUpForm(UserCreationForm):
@@ -23,6 +24,19 @@ class SignUpForm(UserCreationForm):
         # Make built-in fields look like Bootstrap
         for f in ["username", "email", "password1", "password2"]:
             self.fields[f].widget.attrs.update({"class": "form-control"})
+
+    def clean_email(self):
+        email = self.cleaned_data["email"].strip().lower()
+        if User.objects.filter(email__iexact=email).exists():
+            raise ValidationError("Email already in use.")
+        return email
+    
+    def clean_username(self):
+        username = self.cleaned_data["username"].strip()
+        if User.objects.filter(username__iexact=username).exists():
+            raise ValidationError("Username already in use.")
+        return username
+
 
 # -------------------------------------------------
 # ITEM FORM

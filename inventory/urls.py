@@ -9,6 +9,10 @@ urlpatterns = [
     path("manager-requests/<int:request_id>/approve/", views.approve_manager_request, name="approve_manager_request"),
     path("manager-requests/<int:request_id>/decline/", views.decline_manager_request, name="decline_manager_request"),
 
+    path("notifications/<int:notification_id>/dismiss/", views.dismiss_notification, name="dismiss_notification"),
+    path("alerts/dismiss/", views.dismiss_alert, name="dismiss_alert"),
+    
+
     # Stock CRUD
     path("items/", views.item_list, name="item_list"),
     path("items/create/", views.item_create, name="item_create"),
