@@ -97,6 +97,10 @@
                     </td>
 
                     <td>
+                        {% if perms.inventory.view_item %}
+                            <a href="{% url 'item_forecast' item.id %}" class="btn btn-sm btn-outline-dark">Forecast</a>
+                        {% endif %}
+
                         {% if perms.inventory.change_item %}
                             <a href="{% url 'item_adjust' item.id %}" class="btn btn-sm btn-outline-primary">Adjust</a>
                             <a href="{% url 'item_edit' item.id %}" class="btn btn-sm btn-outline-secondary">Edit</a>

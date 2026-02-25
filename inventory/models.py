@@ -136,6 +136,9 @@ class Item(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    lead_time_days = models.PositiveIntegerField(default=7)
+    safety_stock = models.PositiveIntegerField(default=0)
+
     def __str__(self):
         return f"{self.name} ({self.sku})"
 

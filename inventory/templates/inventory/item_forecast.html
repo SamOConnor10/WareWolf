@@ -1,0 +1,223 @@
+{% extends "inventory/base_stock.html" %}
+{% block stock_content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="fw-bold mb-1">Demand Forecast</h1>
+    <p class="text-muted mb-0">
+      {{ item.name }} ({{ item.sku }})
+    </p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'item_list' %}" class="btn btn-outline-secondary">Back</a>
+    {% if perms.inventory.change_item %}
+      <a href="{% url 'item_edit' item.id %}" class="btn btn-primary">Edit Item</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="text-muted small">Model</div>
+        <div class="fs-5 fw-bold">{{ metrics.model|default:"—" }}</div>
+        {% if metrics.note %}
+          <div class="text-muted small mt-1">{{ metrics.note }}</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="text-muted small">MAE</div>
+        <div class="fs-5 fw-bold">
+          {% if metrics.mae %}{{ metrics.mae|floatformat:2 }}{% else %}—{% endif %}
+        </div>
+        <div class="text-muted small">Lower is better</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="text-muted small">MAPE</div>
+        <div class="fs-5 fw-bold">
+          {% if metrics.mape %}{{ metrics.mape|floatformat:2 }}{% else %}—{% endif %}
+        </div>
+        <div class="text-muted small">Lower is better</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="text-muted small">Avg Daily Demand (Forecast)</div>
+        <div class="fs-5 fw-bold">
+          {% if rec.avg_daily_demand %}{{ rec.avg_daily_demand }}{% else %}0{% endif %}
+        </div>
+        <div class="text-muted small">units/day</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <h5 class="fw-bold mb-3">Reorder Recommendation</h5>
+
+        <div class="mb-2">
+          <div class="text-muted small">Current Quantity</div>
+          <div class="fw-bold">{{ item.quantity }}</div>
+        </div>
+
+        <div class="mb-2">
+          <div class="text-muted small">Lead Time</div>
+          <div class="fw-bold">{{ rec.lead_time_days }} days</div>
+        </div>
+
+        <div class="mb-2">
+          <div class="text-muted small">Safety Stock</div>
+          <div class="fw-bold">{{ item.safety_stock }}</div>
+        </div>
+
+        <div class="mb-2">
+            <div class="text-muted small">Stockout Risk</div>
+            <div class="fw-bold">
+                {% if rec.risk == "High" %}
+                <span class="badge bg-danger">High</span>
+                {% elif rec.risk == "Medium" %}
+                <span class="badge bg-warning text-dark">Medium</span>
+                {% else %}
+                <span class="badge bg-success">Low</span>
+                {% endif %}
+            </div>
+        </div>
+        {% if rec.avg_daily_demand > 0 %}
+            <div class="text-muted small">
+                Upper-bound lead-time demand: {{ rec.lead_time_need_upper }}
+            </div>
+        {% endif %}
+
+        <hr>
+
+        {% if rec.reorder_qty > 0 %}
+            <div class="mb-2">
+                <div class="text-muted small">Suggested Reorder Qty</div>
+                <div class="fs-4 fw-bold">{{ rec.reorder_qty }}</div>
+            </div>
+        {% else %}
+            <div class="alert alert-success mt-3 mb-2">
+                No reorder required at the current forecasted demand rate.
+            </div>
+        {% endif %}
+
+        <div class="mb-2">
+          <div class="text-muted small">Reorder By</div>
+          <div class="fw-bold">{{ rec.reorder_by }}</div>
+        </div>
+
+        {% if rec.show_stockout %}
+            <div class="mb-2">
+                <div class="text-muted small">Expected Stockout</div>
+                <div class="fw-bold">
+                    {% if rec.expected_stockout %}{{ rec.expected_stockout }}{% else %}—{% endif %}
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="alert alert-info mt-3 mb-0">
+          This recommendation is generated using historical sales demand and time-series forecasting.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-8">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <h5 class="fw-bold mb-3">History + 30-day Forecast</h5>
+        <canvas id="forecastChart" height="110"></canvas>
+        {% if not forecast %}
+          <div class="text-muted small mt-3">
+            Not enough data to generate a forecast yet. Add more sales history for this item.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Chart.js (if you already load this globally in base.html, remove this script tag) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+  const history = {{ history|safe }};
+  const forecast = {{ forecast|safe }};
+
+  // Labels: show full horizon (history last 60 days + forecast)
+  const historyTrim = history.slice(Math.max(history.length - 60, 0));
+  const labels = historyTrim.map(p => p.ds).concat(forecast.map(p => p.ds));
+
+  const historyData = historyTrim.map(p => p.y);
+  const forecastData = new Array(historyTrim.length).fill(null).concat(forecast.map(p => p.yhat));
+
+  const lowerBand = new Array(historyTrim.length).fill(null).concat(forecast.map(p => p.yhat_lower));
+  const upperBand = new Array(historyTrim.length).fill(null).concat(forecast.map(p => p.yhat_upper));
+
+  const ctx = document.getElementById("forecastChart");
+
+  new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: "Historical Demand",
+          data: historyData.concat(new Array(forecast.length).fill(null)),
+          tension: 0.2,
+          pointRadius: 1
+        },
+        {
+          label: "Forecast (yhat)",
+          data: forecastData,
+          tension: 0.2,
+          pointRadius: 1
+        },
+        {
+          label: "Lower Bound",
+          data: lowerBand,
+          tension: 0.2,
+          pointRadius: 0,
+          borderDash: [6, 6]
+        },
+        {
+          label: "Upper Bound",
+          data: upperBand,
+          tension: 0.2,
+          pointRadius: 0,
+          borderDash: [6, 6]
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: true }
+      },
+      scales: {
+        y: { beginAtZero: true, title: { display: true, text: "Units / Day" } },
+        x: { ticks: { maxTicksLimit: 10 } }
+      }
+    }
+  });
+</script>
+
+{% endblock stock_content %}

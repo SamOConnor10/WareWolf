@@ -487,6 +487,21 @@ def dashboard(request):
     return render(request, "inventory/dashboard.html", context)
 
 
+@login_required
+@permission_required("inventory.view_item", raise_exception=True)
+def item_forecast(request, pk):
+    item = get_object_or_404(Item, pk=pk)
+    from inventory.ml.forecasting import prophet_forecast_item
+    result = prophet_forecast_item(item, horizon_days=30)
+
+    return render(request, "inventory/item_forecast.html", {
+        "item": item,
+        "history": result.history,
+        "forecast": result.forecast,
+        "metrics": result.metrics,
+        "rec": result.recommendation,
+    })
+
 
 
 # -------------------------------
