@@ -9,6 +9,15 @@
 
 <form method="post" class="card shadow-sm border-0">
     {% csrf_token %}
+
+    {% if form.errors %}
+        <div class="alert alert-danger">
+            <strong>Could not save. Please fix the errors below.</strong>
+            {{ form.non_field_errors }}
+            {{ form.errors }}
+        </div>
+    {% endif %}
+
     <div class="card-body row g-3">
 
         <!-- ORDER TYPE -->
@@ -93,7 +102,7 @@
 <script id="item-price-data" type="application/json">
     {
     {% for item in form.fields.item.queryset %}
-        "{{ item.id }}": "{{ item.unit_price|default:'0' }}"{% if not forloop.last %},{% endif %}
+        "{{ item.id }}": "{{ item.unit_cost|default:'0' }}"{% if not forloop.last %},{% endif %}
     {% endfor %}
     }
 </script>

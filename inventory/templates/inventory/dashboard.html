@@ -194,18 +194,66 @@
     </div>
     </div>
 
-    <!-- Inventory by Category Pie -->
+
     <div class="col-md-6">
         <div class="card shadow-sm p-4 border-0 h-100">
+            <h5 class="fw-bold mb-3">⚠️ Recent Demand Anomalies</h5>
+
+            <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                <tr>
+                    <th>Item</th>
+                    <th>Date</th>
+                    <th>Qty</th>
+                    <th>Score</th>
+                    <th>Severity</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for a in recent_anomalies %}
+                    <tr>
+                    <td class="text-truncate" style="max-width: 220px;">{{ a.item.name }}</td>
+                    <td>{{ a.date|date:"d/m/Y" }}</td>
+                    <td>{{ a.quantity }}</td>
+                    <td>{{ a.score|floatformat:2 }}</td>
+                    <td>
+                        {% if a.severity == "HIGH" %}
+                        <span class="badge bg-danger">High</span>
+                        {% elif a.severity == "MEDIUM" %}
+                        <span class="badge bg-warning text-dark">Medium</span>
+                        {% else %}
+                        <span class="badge bg-success">Low</span>
+                        {% endif %}
+                    </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="5" class="text-muted">No anomalies detected.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+
+            <div class="text-muted small mt-2">
+            Generated via robust anomaly detection on daily sales demand.
+            </div>
+        </div>
+    </div>
+
+    <!-- Inventory by Category Pie -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <div class="card shadow-sm p-4 border-0 h-100">
             <h5 class="fw-bold mb-3">📊 Inventory by Category</h5>
 
             {% if pie_labels %}
                 <div class="chart-box">
-                    <canvas id="pieChart"></canvas>
+                <canvas id="pieChart"></canvas>
                 </div>
             {% else %}
                 <p class="text-muted fst-italic">No category data available.</p>
             {% endif %}
+            </div>
         </div>
     </div>
 

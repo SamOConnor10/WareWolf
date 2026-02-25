@@ -36,6 +36,14 @@
                 </select>
             </div>
 
+            <div class="col-md-3">
+                <select name="status" class="form-select">
+                    <option value="active" {% if request.GET.status == "active" or not request.GET.status %}selected{% endif %}>Active</option>
+                    <option value="archived" {% if request.GET.status == "archived" %}selected{% endif %}>Archived</option>
+                    <option value="all" {% if request.GET.status == "all" %}selected{% endif %}>All</option>
+                </select>
+            </div>
+
             <div class="col-md-2 d-grid">
                 <button class="btn btn-secondary">Apply</button>
             </div>
@@ -106,8 +114,23 @@
                             <a href="{% url 'item_edit' item.id %}" class="btn btn-sm btn-outline-secondary">Edit</a>
                         {% endif %}
 
+                        {% if perms.inventory.change_item %}
+                            <a href="{% url 'item_toggle_archive' item.id %}"
+                                class="btn btn-sm {% if item.is_active %}btn-outline-warning{% else %}btn-outline-success{% endif %}">
+                                {% if item.is_active %}Archive{% else %}Unarchive{% endif %}
+                            </a>
+                        {% endif %}
+
                         {% if perms.inventory.delete_item %}
-                            <a href="{% url 'item_delete' item.id %}" class="btn btn-sm btn-outline-danger">Delete</a>
+                            {% if item.order_count == 0 %}
+                                <a href="{% url 'item_delete' item.id %}" class="btn btn-sm btn-outline-danger">Delete</a>
+                            {% else %}
+                                <form method="post" action="{% url 'item_hard_delete' item.id %}" style="display:inline;"
+                                        onsubmit="return confirm('This will permanently delete the item AND all related orders/history. Continue?');">
+                                    {% csrf_token %}
+                                    <a href="{% url 'item_hard_delete' item.id %}" class="btn btn-sm btn-danger">Delete</a>
+                                </form>
+                            {% endif %}
                         {% endif %}
                     </td>
                 </tr>

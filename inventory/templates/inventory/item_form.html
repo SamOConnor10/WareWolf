@@ -10,6 +10,14 @@
     <form method="POST" id="itemForm">
         {% csrf_token %}
 
+        {% if form.errors %}
+            <div class="alert alert-danger">
+                <strong>Could not save. Please fix the errors below.</strong>
+                {{ form.non_field_errors }}
+                {{ form.errors }}
+            </div>
+        {% endif %}
+
         <!-- NAME -->
         <div class="mb-3">
             <label class="form-label">Name</label>
@@ -75,6 +83,24 @@
         <div class="mb-4">
             <label class="form-label">Location</label>
             {{ form.location }}
+        </div>
+
+        <button class="btn btn-outline-secondary mb-3" type="button"
+                data-bs-toggle="collapse" data-bs-target="#advancedFields">
+            Advanced planning settings
+        </button>
+
+        <div class="collapse" id="advancedFields">
+            <div class="card card-body mb-3">
+                <div class="mb-3">
+                    <label class="form-label">Lead Time (days)</label>
+                    {{ form.lead_time_days }}
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Safety Stock</label>
+                    {{ form.safety_stock }}
+                </div>
+            </div>
         </div>
 
         <!-- BUTTONS -->

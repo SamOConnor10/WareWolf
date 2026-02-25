@@ -148,21 +148,14 @@
 
             <td>
                 {% if perms.inventory.change_order %}
-                    {% if order.status != 'DELIVERED' or not order.stock_applied %}
-                        <form method="post"
-                              action="{% url 'order_mark_delivered' order.id %}"
-                              class="d-inline">
+                    {% if order.status != 'DELIVERED' %}
+                        <form method="post" action="{% url 'order_mark_delivered' order.id %}" class="d-inline">
                             {% csrf_token %}
-                            <button class="btn btn-sm btn-success">
-                                Mark Delivered
-                            </button>
+                            <button class="btn btn-sm btn-success">Mark Delivered</button>
                         </form>
                     {% endif %}
 
-                    <a href="{% url 'order_edit' order.id %}"
-                       class="btn btn-sm btn-outline-secondary">
-                        Edit
-                    </a>
+                    <a href="{% url 'order_edit' order.id %}" class="btn btn-sm btn-outline-secondary">Edit</a>
                 {% endif %}
 
                 {% if perms.inventory.delete_order %}

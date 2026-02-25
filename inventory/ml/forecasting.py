@@ -56,7 +56,7 @@ def prophet_forecast_item(item: Item, horizon_days: int = 30) -> ForecastOutput:
     df = _daily_demand_series(item, days_back=180)
 
     # Not enough data -> return empty forecast but still provide recommendation baseline
-    if len(df) < 14:
+    if len(df) < 7:
         return ForecastOutput(
             history=df.to_dict("records"),
             forecast=[],
@@ -174,6 +174,15 @@ def _recommend(item: Item, avg_daily_demand: float, avg_daily_upper: float | Non
 
     show_stockout = (avg_daily_demand * lead_time_days) >= 1
 
+    reason = "Forecast-based recommendation"
+
+    if item.quantity <= 0:
+        reason = "Out of stock (min reorder to reorder level)"
+    elif item.quantity <= item.reorder_level:
+        reason = "Below reorder level (min top-up)"
+    elif avg_daily_demand == 0:
+        reason = "No recent demand (rule-based)"
+
     return {
         "avg_daily_demand": round(avg_daily_demand, 2),
         "lead_time_days": int(lead_time_days),
@@ -181,6 +190,7 @@ def _recommend(item: Item, avg_daily_demand: float, avg_daily_upper: float | Non
         "reorder_by": reorder_by,
         "expected_stockout": expected_stockout,
         "show_stockout": show_stockout,
+        "reason": reason,
 
         # NEW:
         "risk": risk,

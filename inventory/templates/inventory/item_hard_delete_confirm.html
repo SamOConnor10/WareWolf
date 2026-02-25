@@ -1,0 +1,25 @@
+{% extends "inventory/base_stock.html" %}
+{% block stock_content %}
+
+<div class="container py-4">
+  <h1 class="fw-bold">Hard Delete Item</h1>
+  <p class="text-muted">
+    This will permanently delete <strong>{{ item.name }}</strong> ({{ item.sku }}) and all related records.
+  </p>
+
+  <div class="alert alert-warning">
+    <strong>Warning:</strong> This action cannot be undone.
+    <ul class="mb-0 mt-2">
+      <li>Orders to be deleted: <strong>{{ order_count }}</strong></li>
+      <li>Stock history records to be deleted: <strong>{{ history_count }}</strong></li>
+    </ul>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger">Delete Permanently</button>
+    <a href="{% url 'item_list' %}" class="btn btn-secondary">Cancel</a>
+  </form>
+</div>
+
+{% endblock stock_content %}

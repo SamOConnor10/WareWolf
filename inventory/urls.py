@@ -7,7 +7,7 @@ urlpatterns = [
     path("", views.dashboard, name="dashboard"),
     path("items/<int:pk>/forecast/", views.item_forecast, name="item_forecast"),
     path("search/", views.global_search, name="global_search"),
-    
+
     path("manager-requests/<int:request_id>/approve/", views.approve_manager_request, name="approve_manager_request"),
     path("manager-requests/<int:request_id>/decline/", views.decline_manager_request, name="decline_manager_request"),
 
@@ -22,6 +22,8 @@ urlpatterns = [
     path("items/<int:pk>/delete/", views.item_delete, name="item_delete"),
     path("items/<int:pk>/adjust/", views.item_adjust_quantity, name="item_adjust"),
     path("items/export/csv/", views.item_export_csv, name="item_export_csv"),
+    path("items/<int:pk>/archive/", views.item_toggle_archive, name="item_toggle_archive"),
+    path("items/<int:pk>/hard-delete/", views.item_hard_delete, name="item_hard_delete"),
     # Categories CRUD
     path("categories/", views.category_list, name="category_list"),
     path("categories/add/", views.category_create, name="category_create"),

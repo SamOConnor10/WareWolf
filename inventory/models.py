@@ -139,6 +139,8 @@ class Item(models.Model):
     lead_time_days = models.PositiveIntegerField(default=7)
     safety_stock = models.PositiveIntegerField(default=0)
 
+    is_active = models.BooleanField(default=True)
+
     def __str__(self):
         return f"{self.name} ({self.sku})"
 
@@ -260,7 +262,7 @@ class Order(models.Model):
         # Log stock history
         StockHistory.objects.create(
             item=self.item,
-            date=date.today(),
+            date=self.order_date,
             quantity=self.item.quantity
         )
 
@@ -325,3 +327,28 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.message}"
+    
+
+class DemandAnomaly(models.Model):
+    SEV_LOW = "LOW"
+    SEV_MED = "MEDIUM"
+    SEV_HIGH = "HIGH"
+    SEVERITY_CHOICES = [
+        (SEV_LOW, "Low"),
+        (SEV_MED, "Medium"),
+        (SEV_HIGH, "High"),
+    ]
+
+    item = models.ForeignKey("Item", on_delete=models.CASCADE, related_name="demand_anomalies")
+    date = models.DateField()
+    quantity = models.PositiveIntegerField()
+    score = models.FloatField(help_text="IsolationForest anomaly score (lower = more abnormal)")
+    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, default=SEV_LOW)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("item", "date")
+        ordering = ["-date", "-created_at"]
+
+    def __str__(self):
+        return f"{self.item.name} anomaly on {self.date} ({self.severity})"

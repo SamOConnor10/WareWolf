@@ -330,6 +330,7 @@ def dashboard(request):
     from django.db.models import Sum, Count
     from django.db.models.functions import TruncWeek
     import datetime
+    from inventory.models import DemandAnomaly
 
     # ---- basic counts ----
     total_items = Item.objects.count()
@@ -386,6 +387,9 @@ def dashboard(request):
     # ---- recent activity feed ----
     from inventory.models import Activity
     recent_activity = Activity.objects.all()[:5]
+
+    # ---- recent demand anomalies ----
+    recent_anomalies = DemandAnomaly.objects.select_related("item").all()[:8]
 
     # ---- inventory-by-category pie data ----
     # Sum quantities grouped by category name
@@ -477,6 +481,7 @@ def dashboard(request):
 
         "top_item": top_item,
         "recent_activity": recent_activity,
+        "recent_anomalies": recent_anomalies,
 
         "pie_labels": pie_labels,
         "pie_values": pie_values,
@@ -515,9 +520,20 @@ def item_forecast(request, pk):
 @permission_required("inventory.view_item", raise_exception=True)
 def item_list(request):
 
-    items = Item.objects.select_related(
-        "supplier", "location", "category"
+    items = Item.objects.select_related("supplier", "location", "category").annotate(
+        order_count=Count("orders")
     )
+
+    # -----------------------------
+    # ACTIVE / ARCHIVED FILTER
+    # -----------------------------
+    status = request.GET.get("status", "active")  # active | archived | all
+
+    if status == "active":
+        items = items.filter(is_active=True)
+    elif status == "archived":
+        items = items.filter(is_active=False)
+    # "all" -> no filter
 
     # -------------------------
     # SEARCH
@@ -588,6 +604,21 @@ def item_list(request):
     })
 
 
+
+@login_required
+@permission_required("inventory.change_item", raise_exception=True)
+def item_toggle_archive(request, pk):
+    item = get_object_or_404(Item, pk=pk)
+    item.is_active = not item.is_active
+    item.save(update_fields=["is_active"])
+
+    if item.is_active:
+        messages.success(request, f"Unarchived item: {item.name}")
+    else:
+        messages.success(request, f"Archived item: {item.name}")
+
+    # Preserve filters if you want (optional), otherwise just go back to list
+    return redirect("item_list")
 
 # ======================================================
 # ITEM ADJUST QUANTITY
@@ -673,7 +704,8 @@ def item_edit(request, pk):
     })
 
 
-
+from django.db.models.deletion import ProtectedError
+from django.contrib import messages
 @login_required
 @permission_required("inventory.delete_item", raise_exception=True)
 def item_delete(request, pk):
@@ -682,8 +714,51 @@ def item_delete(request, pk):
     if request.method == "POST":
         item.delete()
         return redirect("item_list")
+    
+    try:
+        item.delete()
+        messages.success(request, "Item deleted.")
+    except ProtectedError:
+        messages.error(request, "Cannot delete item because it has order history. Archive it instead.")
+        return redirect("item_list")
 
     return render(request, "inventory/item_confirm_delete.html", {"item": item})
+
+from django.db import transaction
+from django.contrib.auth.decorators import login_required, user_passes_test
+@login_required
+@user_passes_test(_is_manager_or_admin)
+@transaction.atomic
+def item_hard_delete(request, pk):
+    item = get_object_or_404(Item, pk=pk)
+
+    if request.method == "POST":
+        # Count related records for messaging
+        orders_deleted = Order.objects.filter(item=item).count()
+        history_deleted = StockHistory.objects.filter(item=item).count()
+
+        # Delete related records first
+        Order.objects.filter(item=item).delete()
+        StockHistory.objects.filter(item=item).delete()
+
+        name = item.name
+        item.delete()
+
+        messages.success(
+            request,
+            f"Permanently deleted item '{name}' (orders: {orders_deleted}, history: {history_deleted})."
+        )
+        return redirect("item_list")
+
+    # GET -> show confirmation page with counts
+    order_count = Order.objects.filter(item=item).count()
+    history_count = StockHistory.objects.filter(item=item).count()
+
+    return render(request, "inventory/item_hard_delete_confirm.html", {
+        "item": item,
+        "order_count": order_count,
+        "history_count": history_count,
+    })
 
 @login_required
 @permission_required("inventory.view_item", raise_exception=True)
