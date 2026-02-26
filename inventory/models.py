@@ -325,6 +325,8 @@ class Notification(models.Model):
     dismissed = models.BooleanField(default=False)
     dismissed_at = models.DateTimeField(null=True, blank=True)
 
+    url = models.CharField(max_length=255, blank=True, default="")
+
     def __str__(self):
         return f"{self.user} - {self.message}"
     
@@ -345,6 +347,10 @@ class DemandAnomaly(models.Model):
     score = models.FloatField(help_text="IsolationForest anomaly score (lower = more abnormal)")
     severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, default=SEV_LOW)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    is_reviewed = models.BooleanField(default=False)
+    dismissed = models.BooleanField(default=False)
+    dismissed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         unique_together = ("item", "date")

@@ -197,7 +197,21 @@
 
     <div class="col-md-6">
         <div class="card shadow-sm p-4 border-0 h-100">
-            <h5 class="fw-bold mb-3">⚠️ Recent Demand Anomalies</h5>
+
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold mb-0">⚠️ Recent Demand Anomalies</h5>
+
+                {% if is_manager_or_admin %}
+                    <div class="d-flex gap-2">
+                    <a href="{% url 'anomaly_list' %}" class="btn btn-sm btn-outline-secondary">
+                        View all
+                    </a>
+                    <a href="{% url 'run_anomaly_scan' %}" class="btn btn-sm btn-outline-primary">
+                        Run anomaly scan
+                    </a>
+                    </div>
+                {% endif %}
+            </div>
 
             <div class="table-responsive">
             <table class="table table-sm table-hover mb-0">
@@ -213,7 +227,11 @@
                 <tbody>
                 {% for a in recent_anomalies %}
                     <tr>
-                    <td class="text-truncate" style="max-width: 220px;">{{ a.item.name }}</td>
+                    <td class="text-truncate" style="max-width: 220px;">
+                        <a href="{% url 'item_forecast' a.item.id %}" class="text-decoration-none">
+                        {{ a.item.name }}
+                        </a>
+                    </td>
                     <td>{{ a.date|date:"d/m/Y" }}</td>
                     <td>{{ a.quantity }}</td>
                     <td>{{ a.score|floatformat:2 }}</td>

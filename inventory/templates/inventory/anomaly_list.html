@@ -1,0 +1,110 @@
+{% extends "inventory/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="fw-bold mb-0">Demand Anomalies</h1>
+  <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">Back to Dashboard</a>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+  <div class="col-md-3">
+    <select name="severity" class="form-select">
+      <option value="">All severities</option>
+      <option value="HIGH" {% if severity == "HIGH" %}selected{% endif %}>High</option>
+      <option value="MEDIUM" {% if severity == "MEDIUM" %}selected{% endif %}>Medium</option>
+      <option value="LOW" {% if severity == "LOW" %}selected{% endif %}>Low</option>
+    </select>
+  </div>
+
+  <div class="col-md-3">
+    <select name="show" class="form-select">
+      <option value="active" {% if show == "active" %}selected{% endif %}>Active</option>
+      <option value="dismissed" {% if show == "dismissed" %}selected{% endif %}>Dismissed</option>
+      <option value="all" {% if show == "all" %}selected{% endif %}>All</option>
+    </select>
+  </div>
+
+  <div class="col-md-2 d-grid">
+    <button class="btn btn-primary">Apply</button>
+  </div>
+</form>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Item</th>
+          <th>Date</th>
+          <th>Qty</th>
+          <th>Score</th>
+          <th>Severity</th>
+          <th>Status</th>
+          <th style="width:260px;">Actions</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for a in anomalies %}
+          <tr>
+            <td>
+              <a href="{% url 'item_forecast' a.item.id %}" class="text-decoration-none">
+                {{ a.item.name }}
+              </a>
+            </td>
+            <td>{{ a.date|date:"d/m/Y" }}</td>
+            <td>{{ a.quantity }}</td>
+            <td>{{ a.score|floatformat:2 }}</td>
+
+            <td>
+              {% if a.severity == "HIGH" %}
+                <span class="badge bg-danger">High</span>
+              {% elif a.severity == "MEDIUM" %}
+                <span class="badge bg-warning text-dark">Medium</span>
+              {% else %}
+                <span class="badge bg-success">Low</span>
+              {% endif %}
+            </td>
+
+            <td>
+              {% if a.dismissed %}
+                <span class="badge bg-secondary">Dismissed</span>
+              {% elif a.is_reviewed %}
+                <span class="badge bg-info text-dark">Reviewed</span>
+              {% else %}
+                <span class="badge bg-light text-dark">New</span>
+              {% endif %}
+            </td>
+
+            <td>
+                <a href="{% url 'item_forecast' a.item.id %}" class="btn btn-sm btn-outline-dark">
+                    View Forecast
+                </a>
+
+                {% if not a.is_reviewed %}
+                    <form method="post" action="{% url 'anomaly_review' a.id %}" class="d-inline">
+                    {% csrf_token %}
+                    <button class="btn btn-sm btn-outline-primary">Mark Reviewed</button>
+                    </form>
+                {% endif %}
+
+                {% if not a.dismissed %}
+                    <form method="post" action="{% url 'anomaly_dismiss' a.id %}" class="d-inline">
+                    {% csrf_token %}
+                    <button class="btn btn-sm btn-outline-danger">Dismiss</button>
+                    </form>
+                {% else %}
+                    <form method="post" action="{% url 'anomaly_undismiss' a.id %}" class="d-inline">
+                    {% csrf_token %}
+                    <button class="btn btn-sm btn-outline-secondary">Undo</button>
+                    </form>
+                {% endif %}
+            </td>
+        {% empty %}
+          <tr><td colspan="7" class="text-muted">No anomalies found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -6,6 +6,11 @@ urlpatterns = [
     path("logout/", views.logout_view, name="logout"),
     path("", views.dashboard, name="dashboard"),
     path("items/<int:pk>/forecast/", views.item_forecast, name="item_forecast"),
+    path("anomalies/run/", views.run_anomaly_scan_view, name="run_anomaly_scan"),
+    path("anomalies/", views.anomaly_list, name="anomaly_list"),
+    path("anomalies/<int:pk>/dismiss/", views.anomaly_dismiss, name="anomaly_dismiss"),
+    path("anomalies/<int:pk>/review/", views.anomaly_review, name="anomaly_review"),
+    path("anomalies/<int:pk>/undismiss/", views.anomaly_undismiss, name="anomaly_undismiss"),
     path("search/", views.global_search, name="global_search"),
 
     path("manager-requests/<int:request_id>/approve/", views.approve_manager_request, name="approve_manager_request"),

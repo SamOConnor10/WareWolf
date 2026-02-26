@@ -160,13 +160,14 @@ def detect_sales_anomalies(
     return results
 
 
-def save_anomalies(results: list[AnomalyResult]) -> int:
+def save_anomalies(results: list[AnomalyResult]):
     """
     Persist anomalies in DemandAnomaly.
     Avoid duplicates using (item, date). Updates existing rows if re-run.
     Returns number of *new* records created.
     """
     created = 0
+    created_objs = []
 
     for r in results:
         d = pd.to_datetime(r.date, dayfirst=True).date()
@@ -183,6 +184,7 @@ def save_anomalies(results: list[AnomalyResult]) -> int:
 
         if was_created:
             created += 1
+            created_objs.append(obj)
         else:
             # Update existing anomaly in case thresholds change / rerun
             obj.quantity = r.quantity
@@ -190,4 +192,4 @@ def save_anomalies(results: list[AnomalyResult]) -> int:
             obj.severity = r.severity
             obj.save(update_fields=["quantity", "score", "severity"])
 
-    return created
+    return created, created_objs

@@ -33,6 +33,7 @@ def notifications(request):
                 "dismiss_post_url": reverse("dismiss_notification", args=[n.id]),
                 # keep a consistent key field so your template can always reference alert.key safely
                 "key": f"notification:{n.id}",
+                "url": reverse("anomaly_list"),
             })
 
     # B) Manager access requests (dismiss via session-based dismiss_alert)
@@ -58,6 +59,7 @@ def notifications(request):
                 "decline_url": reverse("decline_manager_request", args=[r.id]),
                 "dismiss_post_url": reverse("dismiss_alert"),
                 "key": key,
+                "url": reverse("anomaly_list"),
             })
 
     # C) Low stock items (dismiss via session-based dismiss_alert)
@@ -73,6 +75,7 @@ def notifications(request):
             "message": f"Low stock: {item.name}",
             "dismiss_post_url": reverse("dismiss_alert"),
             "key": key,
+            "url": reverse("anomaly_list"),
         })
 
     # D) Delivered orders recently (dismiss via session-based dismiss_alert)
@@ -90,6 +93,7 @@ def notifications(request):
             "time": f"{(today - order.order_date).days} days ago",
             "dismiss_post_url": reverse("dismiss_alert"),
             "key": key,
+            "url": reverse("anomaly_list"),
         })
 
     return {

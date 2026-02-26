@@ -33,6 +33,7 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 from django.core.mail import send_mail
 from django.conf import settings
+from django.contrib.auth.decorators import user_passes_test
 
 
 def signup(request):
@@ -216,7 +217,7 @@ def global_search(request):
     return JsonResponse({"results": results})
 
 
-def _is_manager_or_admin(user):
+def is_manager_or_admin(user):
     return (
         user.is_authenticated
         and (
@@ -227,7 +228,7 @@ def _is_manager_or_admin(user):
 
 @login_required
 def approve_manager_request(request, request_id):
-    if not _is_manager_or_admin(request.user):
+    if not is_manager_or_admin(request.user):
         return redirect("dashboard")
 
     req = get_object_or_404(ManagerRequest, id=request_id, status="PENDING")
@@ -264,7 +265,7 @@ def approve_manager_request(request, request_id):
 
 @login_required
 def decline_manager_request(request, request_id):
-    if not _is_manager_or_admin(request.user):
+    if not is_manager_or_admin(request.user):
         return redirect("dashboard")
 
     req = get_object_or_404(ManagerRequest, id=request_id, status="PENDING")
@@ -389,7 +390,7 @@ def dashboard(request):
     recent_activity = Activity.objects.all()[:5]
 
     # ---- recent demand anomalies ----
-    recent_anomalies = DemandAnomaly.objects.select_related("item").all()[:8]
+    recent_anomalies = DemandAnomaly.objects.filter(dismissed=False).select_related("item")[:5]
 
     # ---- inventory-by-category pie data ----
     # Sum quantities grouped by category name
@@ -465,6 +466,7 @@ def dashboard(request):
             "recommended_qty": recommended_qty,
         })
 
+    is_manager_or_admin = request.user.groups.filter(name__in=["Manager", "Admin"]).exists()
 
     context = {
         "total_items": total_items,
@@ -482,6 +484,7 @@ def dashboard(request):
         "top_item": top_item,
         "recent_activity": recent_activity,
         "recent_anomalies": recent_anomalies,
+        "is_manager_or_admin": is_manager_or_admin,
 
         "pie_labels": pie_labels,
         "pie_values": pie_values,
@@ -507,6 +510,139 @@ def item_forecast(request, pk):
         "rec": result.recommendation,
     })
 
+from inventory.ml.anomaly import detect_sales_anomalies, save_anomalies
+@login_required
+@user_passes_test(is_manager_or_admin)
+def run_anomaly_scan_view(request):
+    # Use the defaults that worked for you
+    results = detect_sales_anomalies(
+        days_back=120,
+        min_points=10,
+        last_n_days_only=180,
+        z_thresh_low=2.5,
+        z_thresh_med=3.5,
+        z_thresh_high=4.5,
+    )
+
+    created, created_objs = save_anomalies(results)
+
+    # Notifications for new MED/HIGH
+    from django.apps import apps
+    from django.contrib.auth import get_user_model
+
+    Notification = apps.get_model("inventory", "Notification")
+    User = get_user_model()
+
+    # Notify managers/admins for new MEDIUM/HIGH anomalies (one per item per scan)
+    notify = [a for a in created_objs if a.severity in ("MEDIUM", "HIGH")]
+
+    if notify:
+        # keep highest severity/score anomaly per item
+        sev_rank = {"HIGH": 2, "MEDIUM": 1, "LOW": 0}
+        best_by_item = {}
+
+        for a in notify:
+            cur = best_by_item.get(a.item_id)
+            if (
+                cur is None
+                or sev_rank.get(a.severity, 0) > sev_rank.get(cur.severity, 0)
+                or (a.severity == cur.severity and a.score > cur.score)
+            ):
+                best_by_item[a.item_id] = a
+
+        recipients = User.objects.filter(groups__name__in=["Manager", "Admin"]).distinct()
+
+        from django.urls import reverse
+        link = reverse("item_forecast", args=[a.item_id])
+
+        for a in list(best_by_item.values())[:25]:
+            msg = (
+                f"Demand anomaly ({a.severity}): {a.item.name} on {a.date:%d/%m/%Y} "
+                f"(Qty {a.quantity}, Score {a.score:.2f})"
+            )
+            for u in recipients:
+                Notification.objects.create(
+                    user=u,
+                    message=msg,
+                    url=link
+                )
+
+    messages.success(request, f"Anomaly scan complete. Detected {len(results)} anomalies ({created} new).")
+    return redirect("dashboard")
+
+
+
+from inventory.models import DemandAnomaly
+@login_required
+@user_passes_test(is_manager_or_admin)
+def anomaly_list(request):
+    qs = DemandAnomaly.objects.select_related("item")
+
+    # filters
+    severity = request.GET.get("severity", "")
+    show = request.GET.get("show", "active")  # active | dismissed | all
+
+    if severity:
+        qs = qs.filter(severity=severity)
+
+    if show == "active":
+        qs = qs.filter(dismissed=False)
+    elif show == "dismissed":
+        qs = qs.filter(dismissed=True)
+    # all -> no filter
+
+    anomalies = qs[:200]  # cap for UI safety
+
+    return render(request, "inventory/anomaly_list.html", {
+        "anomalies": anomalies,
+        "severity": severity,
+        "show": show,
+    })
+
+@require_POST
+@login_required
+@user_passes_test(is_manager_or_admin)
+def anomaly_review(request, pk):
+    a = get_object_or_404(DemandAnomaly, pk=pk)
+    a.is_reviewed = True
+    a.save(update_fields=["is_reviewed"])
+    messages.success(request, "Marked anomaly as reviewed.")
+    return redirect("anomaly_list")
+
+from django.apps import apps
+@require_POST
+@login_required
+@user_passes_test(is_manager_or_admin)
+def anomaly_dismiss(request, pk):
+    a = get_object_or_404(DemandAnomaly, pk=pk)
+    a.dismissed = True
+    a.dismissed_at = timezone.now()
+    a.save(update_fields=["dismissed", "dismissed_at"])
+
+    # Also dismiss matching notifications for this anomaly (clean up bell)
+    Notification = apps.get_model("inventory", "Notification")
+
+    needle = f": {a.item.name} on {a.date:%d/%m/%Y} "
+    Notification.objects.filter(
+        user=request.user,
+        dismissed=False,
+        message__startswith="Demand anomaly (",
+        message__contains=needle,
+    ).update(dismissed=True, dismissed_at=timezone.now())
+
+    messages.success(request, "Dismissed anomaly.")
+    return redirect("anomaly_list")
+
+@require_POST
+@login_required
+@user_passes_test(is_manager_or_admin)
+def anomaly_undismiss(request, pk):
+    a = get_object_or_404(DemandAnomaly, pk=pk)
+    a.dismissed = False
+    a.dismissed_at = None
+    a.save(update_fields=["dismissed", "dismissed_at"])
+    messages.success(request, "Restored anomaly.")
+    return redirect("anomaly_list")
 
 
 # -------------------------------
@@ -727,7 +863,7 @@ def item_delete(request, pk):
 from django.db import transaction
 from django.contrib.auth.decorators import login_required, user_passes_test
 @login_required
-@user_passes_test(_is_manager_or_admin)
+@user_passes_test(is_manager_or_admin)
 @transaction.atomic
 def item_hard_delete(request, pk):
     item = get_object_or_404(Item, pk=pk)
