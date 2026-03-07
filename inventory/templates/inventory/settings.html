@@ -1,0 +1,226 @@
+{% extends "inventory/base.html" %}
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+      <h1 class="fw-bold mb-1">Settings</h1>
+      <div class="text-muted">Configure notifications, appearance, and account preferences.</div>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'profile' %}?tab=profile">
+      <i class="bi bi-person me-1"></i> Go to Profile
+    </a>
+  </div>
+
+  <ul class="nav nav-pills gap-2 mb-4">
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'general' %}active{% endif %}" href="{% url 'settings' %}?tab=general">
+        <i class="bi bi-sliders me-1"></i> General
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'notifications' %}active{% endif %}" href="{% url 'settings' %}?tab=notifications">
+        <i class="bi bi-bell me-1"></i> Notifications
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'appearance' %}active{% endif %}" href="{% url 'settings' %}?tab=appearance">
+        <i class="bi bi-palette me-1"></i> Appearance
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'privacy' %}active{% endif %}" href="{% url 'settings' %}?tab=privacy">
+        <i class="bi bi-shield-check me-1"></i> Data &amp; Privacy
+      </a>
+    </li>
+  </ul>
+
+  <div class="card shadow-sm border-0">
+    <div class="card-body p-4 p-lg-5">
+      {% if active_tab != "privacy" %}
+        <form method="post" action="{% url 'settings' %}?tab={{ active_tab }}">
+          {% csrf_token %}
+          <input type="hidden" name="tab" value="{{ active_tab }}">
+          <input type="hidden" name="action" value="save">
+
+          {% if form.errors %}
+            <div class="alert alert-danger">
+              <strong>Could not save settings.</strong> Please review the fields below.
+            </div>
+          {% endif %}
+
+          {% if active_tab == "general" %}
+            <h5 class="fw-bold mb-1">General Preferences</h5>
+            <div class="text-muted mb-4">Basic display and list behavior used across your account.</div>
+
+            <div class="row g-3">
+              <div class="col-12 col-lg-6">
+                <div class="p-3 border rounded-3">
+                  <label class="fw-semibold mb-2 d-block">Items Per Page</label>
+                  <div class="text-muted small mb-2">Controls default list pagination size.</div>
+                  {{ form.items_per_page }}
+                  <div class="text-danger small mt-1">{{ form.items_per_page.errors|striptags }}</div>
+                </div>
+              </div>
+              <div class="col-12 col-lg-6">
+                <div class="p-3 border rounded-3">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                      <div class="fw-semibold">Compact Mode</div>
+                      <div class="text-muted small">Reduces spacing in cards and layout blocks.</div>
+                    </div>
+                    <div class="form-check form-switch m-0">
+                      {{ form.compact_mode }}
+                    </div>
+                  </div>
+                  <div class="text-danger small mt-1">{{ form.compact_mode.errors|striptags }}</div>
+                </div>
+              </div>
+            </div>
+
+          {% elif active_tab == "notifications" %}
+            <h5 class="fw-bold mb-1">Notification Preferences</h5>
+            <div class="text-muted mb-4">Choose which alerts you want and how they are delivered.</div>
+
+            <div class="row g-3">
+              <div class="col-12 col-lg-6">
+                <div class="p-3 border rounded-3">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                      <div class="fw-semibold">Demand Anomaly Alerts</div>
+                      <div class="text-muted small">Notify me when unusual demand is detected.</div>
+                    </div>
+                    <div class="form-check form-switch m-0">{{ form.notify_anomalies }}</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-12 col-lg-6">
+                <div class="p-3 border rounded-3">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                      <div class="fw-semibold">Low Stock Alerts</div>
+                      <div class="text-muted small">Notify me when stock reaches alert threshold.</div>
+                    </div>
+                    <div class="form-check form-switch m-0">{{ form.notify_low_stock }}</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-12 col-lg-6">
+                <div class="p-3 border rounded-3 bg-light-subtle">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                      <div class="fw-semibold">Email Notifications</div>
+                      <div class="text-muted small">Allow account notifications by email.</div>
+                    </div>
+                    <div class="form-check form-switch m-0">{{ form.email_notifications }}</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-12 col-lg-6">
+                <div class="p-3 border rounded-3 bg-light-subtle">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                      <div class="fw-semibold">Push Notifications</div>
+                      <div class="text-muted small">Allow browser-level notifications.</div>
+                    </div>
+                    <div class="form-check form-switch m-0">{{ form.push_notifications }}</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-12 col-lg-6">
+                <div class="p-3 border rounded-3">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                      <div class="fw-semibold">Weekly Reports</div>
+                      <div class="text-muted small">Receive a weekly summary digest.</div>
+                    </div>
+                    <div class="form-check form-switch m-0">{{ form.weekly_reports }}</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-12 col-lg-6">
+                <div class="p-3 border rounded-3">
+                  <label class="fw-semibold mb-2 d-block">Low Stock Threshold Buffer</label>
+                  <div class="text-muted small mb-2">Set to 0 to use each item's reorder level only.</div>
+                  {{ form.low_stock_threshold }}
+                  <div class="text-danger small mt-1">{{ form.low_stock_threshold.errors|striptags }}</div>
+                </div>
+              </div>
+            </div>
+
+          {% elif active_tab == "appearance" %}
+            <h5 class="fw-bold mb-1">Appearance</h5>
+            <div class="text-muted mb-4">Personalize your theme and accent color.</div>
+
+            <div class="row g-3">
+              <div class="col-12 col-lg-6">
+                <div class="p-3 border rounded-3">
+                  <label class="fw-semibold mb-3 d-block">Theme</label>
+                  <div class="d-flex flex-column gap-2">{{ form.theme }}</div>
+                  <div class="text-danger small mt-1">{{ form.theme.errors|striptags }}</div>
+                </div>
+              </div>
+              <div class="col-12 col-lg-6">
+                <div class="p-3 border rounded-3">
+                  <label class="fw-semibold mb-3 d-block">Accent Color</label>
+                  <div class="d-flex flex-column gap-2">{{ form.accent_color }}</div>
+                  <div class="text-danger small mt-1">{{ form.accent_color.errors|striptags }}</div>
+                </div>
+              </div>
+            </div>
+          {% endif %}
+
+          <div class="mt-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <a class="btn btn-outline-secondary" href="{% url 'dashboard' %}">Cancel</a>
+            <button class="btn btn-primary" type="submit">
+              <i class="bi bi-save me-1"></i> Save Settings
+            </button>
+          </div>
+        </form>
+      {% else %}
+        <h5 class="fw-bold mb-1">Data &amp; Privacy</h5>
+        <div class="text-muted mb-4">Utility actions related to your account data and notifications.</div>
+
+        <div class="row g-3">
+          <div class="col-12 col-lg-6">
+            <div class="p-3 border rounded-3 h-100">
+              <div class="fw-semibold mb-1">Export Activity Log</div>
+              <div class="text-muted small mb-3">Download your recent account activity as CSV.</div>
+              <a href="{% url 'export_activity_log' %}" class="btn btn-outline-primary">
+                <i class="bi bi-download me-1"></i> Export Activity
+              </a>
+            </div>
+          </div>
+          <div class="col-12 col-lg-6">
+            <div class="p-3 border rounded-3 h-100">
+              <div class="fw-semibold mb-1">Restore Dismissed Alerts</div>
+              <div class="text-muted small mb-3">Re-enable previously dismissed session alerts in the navbar.</div>
+              <form method="post" action="{% url 'settings' %}?tab=privacy" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="tab" value="privacy">
+                <input type="hidden" name="action" value="clear_dismissed_alerts">
+                <button class="btn btn-outline-secondary" type="submit">
+                  <i class="bi bi-arrow-counterclockwise me-1"></i> Restore Alerts
+                </button>
+              </form>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="p-3 border rounded-3 bg-light-subtle d-flex justify-content-between align-items-center flex-wrap gap-2">
+              <div>
+                <div class="fw-semibold">Reset All Preferences</div>
+                <div class="text-muted small">Set all settings back to system defaults.</div>
+              </div>
+              <form method="post" action="{% url 'settings' %}?tab=privacy" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="tab" value="privacy">
+                <input type="hidden" name="action" value="reset_defaults">
+                <button class="btn btn-outline-danger" type="submit">Reset to Defaults</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 from inventory.ml.anomaly import detect_sales_anomalies, save_anomalies
 from django.urls import reverse
-
+from inventory.models import UserPreference
 
 class Command(BaseCommand):
     help = "Run demand anomaly detection (robust MAD z-score) and store results."
@@ -54,8 +54,12 @@ class Command(BaseCommand):
                     f"Demand anomaly ({a.severity}): {a.item.name} on {a.date:%d/%m/%Y} "
                     f"(Qty {a.quantity}, Score {a.score:.2f})"
                 )
+                link = reverse("anomaly_list")
+
                 for u in recipients:
-                    link = reverse("anomaly_list")  # or whatever your anomalies page url name is
+                    pref, _ = UserPreference.objects.get_or_create(user=u)
+                    if not pref.notify_anomalies:
+                        continue
                     Notification.objects.create(user=u, message=msg, url=link)
 
         self.stdout.write(self.style.SUCCESS(

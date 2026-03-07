@@ -1,0 +1,200 @@
+{% extends "inventory/base.html" %}
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+      <h1 class="fw-bold mb-1">My Profile</h1>
+      <div class="text-muted">Manage your account details, security, and access information.</div>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'settings' %}">
+      <i class="bi bi-gear me-1"></i> Open Settings
+    </a>
+  </div>
+
+  <ul class="nav nav-pills gap-2 mb-4">
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'profile' %}active{% endif %}" href="{% url 'profile' %}?tab=profile">
+        <i class="bi bi-person me-1"></i> Profile Information
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'security' %}active{% endif %}" href="{% url 'profile' %}?tab=security">
+        <i class="bi bi-shield-lock me-1"></i> Security
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'activity' %}active{% endif %}" href="{% url 'profile' %}?tab=activity">
+        <i class="bi bi-clock-history me-1"></i> Activity Log
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'permissions' %}active{% endif %}" href="{% url 'profile' %}?tab=permissions">
+        <i class="bi bi-key me-1"></i> Permissions
+      </a>
+    </li>
+  </ul>
+
+  <div class="card shadow-sm border-0">
+    <div class="card-body p-4 p-lg-5">
+      {% if active_tab == "profile" %}
+        <div class="row g-4 mb-4">
+          <div class="col-lg-8">
+            <div class="border rounded-3 p-3 bg-light-subtle">
+              <div class="small text-muted mb-2">Username</div>
+              <div class="fw-semibold">{{ request.user.username }}</div>
+            </div>
+          </div>
+          <div class="col-lg-4">
+            <div class="border rounded-3 p-3">
+              <div class="small text-muted mb-2">Role(s)</div>
+              <div class="d-flex flex-wrap gap-2">
+                {% for g in groups %}
+                  <span class="badge bg-primary-subtle text-primary border">{{ g }}</span>
+                {% empty %}
+                  <span class="badge bg-secondary-subtle text-secondary border">No role assigned</span>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <form method="post" action="{% url 'profile' %}?tab=profile" novalidate>
+          {% csrf_token %}
+          {% if form.non_field_errors or details_form.non_field_errors %}
+            <div class="alert alert-danger">
+              <strong>Could not save profile.</strong> Please review the errors and try again.
+            </div>
+          {% endif %}
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">First name</label>
+              {{ form.first_name }}
+              <div class="text-danger small">{{ form.first_name.errors|striptags }}</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Last name</label>
+              {{ form.last_name }}
+              <div class="text-danger small">{{ form.last_name.errors|striptags }}</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Email</label>
+              {{ form.email }}
+              <div class="text-danger small">{{ form.email.errors|striptags }}</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Phone</label>
+              {{ details_form.phone_number }}
+              <div class="text-danger small">{{ details_form.phone_number.errors|striptags }}</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Job title</label>
+              {{ details_form.job_title }}
+              <div class="text-danger small">{{ details_form.job_title.errors|striptags }}</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Department</label>
+              {{ details_form.department }}
+              <div class="text-danger small">{{ details_form.department.errors|striptags }}</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Employee ID</label>
+              {{ details_form.employee_id }}
+              <div class="text-danger small">{{ details_form.employee_id.errors|striptags }}</div>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Bio</label>
+              {{ details_form.bio }}
+              <div class="text-danger small">{{ details_form.bio.errors|striptags }}</div>
+            </div>
+          </div>
+
+          <div class="mt-4 d-flex flex-wrap gap-2">
+            <button class="btn btn-primary" type="submit">
+              <i class="bi bi-check2-circle me-1"></i> Save Profile
+            </button>
+            <a class="btn btn-outline-secondary" href="{% url 'dashboard' %}">Back to Dashboard</a>
+          </div>
+        </form>
+
+      {% elif active_tab == "security" %}
+        <div class="row g-3">
+          <div class="col-12">
+            <h5 class="fw-bold mb-1">Security</h5>
+            <div class="text-muted">Keep your account protected by updating your password regularly.</div>
+          </div>
+          <div class="col-12 col-lg-7">
+            <div class="border rounded-3 p-4">
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <div>
+                  <div class="fw-semibold">Password</div>
+                  <div class="text-muted small">Change your account password securely.</div>
+                </div>
+                <a href="{% url 'password_change' %}" class="btn btn-dark">
+                  <i class="bi bi-lock me-1"></i> Change Password
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      {% elif active_tab == "activity" %}
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+          <div>
+            <h5 class="fw-bold mb-1">Recent Activity</h5>
+            <div class="text-muted">A timeline of your latest account actions.</div>
+          </div>
+          <a href="{% url 'export_activity_log' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-download me-1"></i> Export CSV
+          </a>
+        </div>
+
+        <div class="border rounded-3">
+          {% for act in recent_activity %}
+            <div class="p-3 d-flex justify-content-between align-items-start gap-3">
+              <div>
+                <div class="fw-semibold">{{ act.message }}</div>
+                <div class="small text-muted">{{ act.timestamp|date:"d M Y, H:i" }}</div>
+              </div>
+              <span class="badge text-bg-light border">activity</span>
+            </div>
+            {% if not forloop.last %}<hr class="my-0">{% endif %}
+          {% empty %}
+            <div class="p-4 text-muted">No activity has been recorded for your account yet.</div>
+          {% endfor %}
+        </div>
+
+      {% elif active_tab == "permissions" %}
+        <h5 class="fw-bold mb-1">Access Permissions</h5>
+        <div class="text-muted mb-4">Your current role assignments and technical permission scope.</div>
+
+        <div class="mb-3">
+          <div class="fw-semibold mb-2">Assigned Groups</div>
+          <div class="d-flex flex-wrap gap-2">
+            {% for g in groups %}
+              <span class="badge bg-primary-subtle text-primary border">{{ g }}</span>
+            {% empty %}
+              <span class="text-muted">No groups assigned.</span>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="alert alert-info mb-0">
+          <div class="fw-semibold mb-2">Permission List</div>
+          <div class="small text-muted mb-2">Managed by administrators. Showing up to 30 permissions.</div>
+          <ul class="small mb-0">
+            {% for p in all_perms|slice:":30" %}
+              <li>{{ p }}</li>
+            {% empty %}
+              <li>No explicit permissions found.</li>
+            {% endfor %}
+          </ul>
+          {% if all_perms|length > 30 %}
+            <div class="small text-muted mt-2">Showing first 30 permissions.</div>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -142,3 +142,7 @@ EMAIL_HOST_USER = "samarthuroconnor@gmail.com"
 EMAIL_HOST_PASSWORD = "qvde srdw idli qnyy"   # 16-char app password
 
 DEFAULT_FROM_EMAIL = "WareWolf <samarthuroconnor@gmail.com>"
+
+TEMPLATES[0]["OPTIONS"]["context_processors"] += [
+    "inventory.context_processors.user_preferences",
+]

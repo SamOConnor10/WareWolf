@@ -358,3 +358,65 @@ class DemandAnomaly(models.Model):
 
     def __str__(self):
         return f"{self.item.name} anomaly on {self.date} ({self.severity})"
+
+
+class UserPreference(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="preferences"
+    )
+    notify_anomalies = models.BooleanField(default=True)
+    notify_low_stock = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # NEW (quick wins)
+    email_notifications = models.BooleanField(default=False)
+    push_notifications = models.BooleanField(default=False)
+    weekly_reports = models.BooleanField(default=False)
+
+    # “threshold” for low stock alerts (multiplier or absolute)
+    low_stock_threshold = models.PositiveIntegerField(default=0)  # 0 = use reorder_level
+
+    THEME_LIGHT = "light"
+    THEME_DARK = "dark"
+    THEME_AUTO = "auto"
+    THEME_CHOICES = [(THEME_LIGHT, "Light"), (THEME_DARK, "Dark"), (THEME_AUTO, "Auto")]
+
+    theme = models.CharField(max_length=10, choices=THEME_CHOICES, default=THEME_AUTO)
+
+    ACCENT_BLUE = "blue"
+    ACCENT_GREEN = "green"
+    ACCENT_PURPLE = "purple"
+    ACCENT_RED = "red"
+    ACCENT_ORANGE = "orange"
+    ACCENT_PINK = "pink"
+    ACCENT_CHOICES = [
+        (ACCENT_BLUE, "Blue"),
+        (ACCENT_GREEN, "Green"),
+        (ACCENT_PURPLE, "Purple"),
+        (ACCENT_RED, "Red"),
+        (ACCENT_ORANGE, "Orange"),
+        (ACCENT_PINK, "Pink"),
+    ]
+    accent_color = models.CharField(max_length=10, choices=ACCENT_CHOICES, default=ACCENT_BLUE)
+
+    compact_mode = models.BooleanField(default=False)
+
+    items_per_page = models.PositiveIntegerField(default=20)
+
+    def __str__(self):
+        return f"Preferences for {self.user}"
+    
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile")
+
+    job_title = models.CharField(max_length=80, blank=True)
+    department = models.CharField(max_length=80, blank=True)
+    phone_number = models.CharField(max_length=30, blank=True)
+    employee_id = models.CharField(max_length=30, blank=True)
+    bio = models.TextField(blank=True)
+
+    def __str__(self):
+        return f"Profile: {self.user.username}"

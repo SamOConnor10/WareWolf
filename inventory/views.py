@@ -561,10 +561,14 @@ def run_anomaly_scan_view(request):
                 f"(Qty {a.quantity}, Score {a.score:.2f})"
             )
             for u in recipients:
+                pref, _ = UserPreference.objects.get_or_create(user=u)
+                if not pref.notify_anomalies:
+                    continue
+
                 Notification.objects.create(
                     user=u,
                     message=msg,
-                    url=link
+                    url=link,   # keep only if your Notification model actually has url
                 )
 
     messages.success(request, f"Anomaly scan complete. Detected {len(results)} anomalies ({created} new).")
@@ -1568,4 +1572,123 @@ def client_delete(request, pk):
 
     return render(request, "inventory/client_confirm_delete.html", {
         "client": client
+    })
+
+
+
+from .forms import (
+    ProfileForm,
+    UserProfileDetailsForm,
+    GeneralPreferenceForm,
+    NotificationPreferenceForm,
+    AppearancePreferenceForm,
+)
+from .models import UserPreference, UserProfile
+
+@login_required
+def profile_view(request):
+    user = request.user
+    groups = list(user.groups.values_list("name", flat=True))
+    valid_tabs = {"profile", "security", "activity", "permissions", "info"}
+    tab = request.GET.get("tab", "profile")
+    if tab not in valid_tabs:
+        tab = "profile"
+    if tab == "info":
+        tab = "profile"
+
+    details, _ = UserProfile.objects.get_or_create(user=user)
+
+    if request.method == "POST" and tab == "profile":
+        form = ProfileForm(request.POST, instance=user)
+        details_form = UserProfileDetailsForm(request.POST, instance=details)
+        if form.is_valid() and details_form.is_valid():
+            form.save()
+            details_form.save()
+            messages.success(request, "Profile updated successfully.")
+            return redirect(f"{reverse('profile')}?tab=profile")
+    else:
+        form = ProfileForm(instance=user)
+        details_form = UserProfileDetailsForm(instance=details)
+
+    activities = []
+    if tab == "activity":
+        activities = (
+            Activity.objects
+            .filter(user=user)
+            .order_by("-timestamp")[:50]
+        )
+
+    all_perms = sorted(user.get_all_permissions())
+
+    return render(request, "inventory/profile.html", {
+        "form": form,
+        "details_form": details_form,
+        "groups": groups,
+        "active_tab": tab,
+        "recent_activity": activities,
+        "all_perms": all_perms,
+    })
+
+
+@login_required
+def export_activity_log(request):
+    qs = Activity.objects.filter(user=request.user).order_by("-timestamp")[:500]
+
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="activity_log.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow(["timestamp", "message"])
+    for a in qs:
+        writer.writerow([a.timestamp.strftime("%Y-%m-%d %H:%M:%S"), a.message])
+
+    return response
+
+
+@login_required
+def settings_view(request):
+    pref, _ = UserPreference.objects.get_or_create(user=request.user)
+    valid_tabs = {"general", "notifications", "appearance", "privacy"}
+    tab_form_map = {
+        "general": GeneralPreferenceForm,
+        "notifications": NotificationPreferenceForm,
+        "appearance": AppearancePreferenceForm,
+    }
+    active_tab = request.GET.get("tab", "notifications")
+    if active_tab not in valid_tabs:
+        active_tab = "notifications"
+
+    if request.method == "POST":
+        active_tab = request.POST.get("tab", active_tab)
+        if active_tab not in valid_tabs:
+            active_tab = "notifications"
+
+        action = request.POST.get("action", "save")
+        if action == "reset_defaults":
+            pref.delete()
+            UserPreference.objects.create(user=request.user)
+            messages.success(request, "Settings reset to defaults.")
+            return redirect(f"{reverse('settings')}?tab={active_tab}")
+        if action == "clear_dismissed_alerts":
+            request.session["dismissed_alerts"] = []
+            messages.success(request, "Dismissed alerts have been restored.")
+            return redirect(f"{reverse('settings')}?tab={active_tab}")
+
+        form_class = tab_form_map.get(active_tab)
+        if form_class is None:
+            messages.error(request, "This settings section is not editable.")
+            return redirect(f"{reverse('settings')}?tab={active_tab}")
+
+        form = form_class(request.POST, instance=pref)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Settings saved.")
+            return redirect(f"{reverse('settings')}?tab={active_tab}")
+    else:
+        form_class = tab_form_map.get(active_tab)
+        form = form_class(instance=pref) if form_class else None
+
+    return render(request, "inventory/settings.html", {
+        "form": form,
+        "active_tab": active_tab,
     })

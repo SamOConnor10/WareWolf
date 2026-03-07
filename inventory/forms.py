@@ -3,6 +3,9 @@ from .models import Item, Supplier, Client, Location, Order, Category
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.contrib.auth import get_user_model
+from .models import UserPreference
+from .models import UserProfile
 
 
 class SignUpForm(UserCreationForm):
@@ -187,4 +190,116 @@ class ClientForm(forms.ModelForm):
             "email": forms.EmailInput(attrs={"class": "form-control"}),
             "phone": forms.TextInput(attrs={"class": "form-control"}),
             "address": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+        }
+
+
+User = get_user_model()
+
+class ProfileForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = ["first_name", "last_name", "email"]
+        widgets = {
+            "first_name": forms.TextInput(attrs={"class": "form-control"}),
+            "last_name": forms.TextInput(attrs={"class": "form-control"}),
+            "email": forms.EmailInput(attrs={"class": "form-control"}),
+        }
+
+class UserProfileDetailsForm(forms.ModelForm):
+    class Meta:
+        model = UserProfile
+        fields = ["job_title", "department", "phone_number", "employee_id", "bio"]
+        widgets = {
+            "job_title": forms.TextInput(attrs={"class": "form-control"}),
+            "department": forms.TextInput(attrs={"class": "form-control"}),
+            "phone_number": forms.TextInput(attrs={"class": "form-control"}),
+            "employee_id": forms.TextInput(attrs={"class": "form-control"}),
+            "bio": forms.Textarea(attrs={"class": "form-control", "rows": 4}),
+        }
+
+class UserPreferenceForm(forms.ModelForm):
+    class Meta:
+        model = UserPreference
+        fields = [
+            "notify_anomalies",
+            "notify_low_stock",
+            "email_notifications",
+            "push_notifications",
+            "weekly_reports",
+            "low_stock_threshold",
+            "theme",
+            "accent_color",
+            "compact_mode",
+            "items_per_page",
+        ]
+        widgets = {
+            "notify_anomalies": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "notify_low_stock": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "email_notifications": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "push_notifications": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "weekly_reports": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "low_stock_threshold": forms.NumberInput(attrs={"class": "form-control", "min": 0}),
+            "theme": forms.RadioSelect(),
+            "accent_color": forms.RadioSelect(),
+            "compact_mode": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "items_per_page": forms.Select(attrs={"class": "form-select"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["items_per_page"].widget.choices = [
+            (10, "10"),
+            (20, "20"),
+            (50, "50"),
+            (100, "100"),
+        ]
+
+
+class GeneralPreferenceForm(forms.ModelForm):
+    class Meta:
+        model = UserPreference
+        fields = ["compact_mode", "items_per_page"]
+        widgets = {
+            "compact_mode": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "items_per_page": forms.Select(attrs={"class": "form-select"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["items_per_page"].widget.choices = [
+            (10, "10"),
+            (20, "20"),
+            (50, "50"),
+            (100, "100"),
+        ]
+
+
+class NotificationPreferenceForm(forms.ModelForm):
+    class Meta:
+        model = UserPreference
+        fields = [
+            "notify_anomalies",
+            "notify_low_stock",
+            "email_notifications",
+            "push_notifications",
+            "weekly_reports",
+            "low_stock_threshold",
+        ]
+        widgets = {
+            "notify_anomalies": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "notify_low_stock": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "email_notifications": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "push_notifications": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "weekly_reports": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "low_stock_threshold": forms.NumberInput(attrs={"class": "form-control", "min": 0}),
+        }
+
+
+class AppearancePreferenceForm(forms.ModelForm):
+    class Meta:
+        model = UserPreference
+        fields = ["theme", "accent_color"]
+        widgets = {
+            "theme": forms.RadioSelect(),
+            "accent_color": forms.RadioSelect(),
         }
