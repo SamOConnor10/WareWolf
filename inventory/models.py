@@ -248,9 +248,7 @@ class Order(models.Model):
     order_type = models.CharField(
         max_length=10, choices=ORDER_TYPE_CHOICES, default=TYPE_SALE
     )
-    item = models.ForeignKey("Item", on_delete=models.PROTECT, related_name="orders")
-    quantity = models.PositiveIntegerField(default=1)
-    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    # Line items: use order.lines for items, quantities, prices
 
     # Party (one of these will be set depending on type)
     supplier = models.ForeignKey(
@@ -272,6 +270,22 @@ class Order(models.Model):
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING
     )
+
+    # Order metadata (Inventree-style)
+    reference = models.CharField(
+        max_length=80, blank=True,
+        help_text="Order reference e.g. PO0020, SO0029",
+    )
+    description = models.TextField(blank=True)
+    party_reference = models.CharField(
+        max_length=100, blank=True,
+        help_text="Supplier/customer order reference code",
+    )
+    target_date = models.DateField(
+        null=True, blank=True,
+        help_text="Expected delivery date. Order overdue after this.",
+    )
+    external_link = models.URLField(blank=True)
 
     # Location fields (sale = shipping from, purchase = receiving to)
     shipping_location = models.ForeignKey(
@@ -304,11 +318,21 @@ class Order(models.Model):
         ordering = ["-order_date", "-id"]
 
     def __str__(self):
-        return f"Order #{self.id} – {self.item.name}"
+        lines = list(self.lines.all()[:2])
+        if lines:
+            names = ", ".join(ln.item.name for ln in lines)
+            if self.lines.count() > 2:
+                names += f" (+{self.lines.count() - 2} more)"
+            return f"Order #{self.id} – {names}"
+        return f"Order #{self.id}"
 
     @property
     def total(self):
-        return (self.unit_price or Decimal("0")) * self.quantity
+        return sum((ln.unit_price or Decimal("0")) * ln.quantity for ln in self.lines.all())
+
+    @property
+    def total_quantity(self):
+        return sum(ln.quantity for ln in self.lines.all())
 
     @property
     def party_name(self):
@@ -323,6 +347,7 @@ class Order(models.Model):
         Apply stock movement once when the order is delivered.
         Purchase = increase stock, Sale = decrease stock.
         Also log stock history for analytics.
+        Raises ValueError if a sale order would reduce stock below zero.
         """
         from django.db.models import F
         from inventory.models import StockHistory
@@ -331,51 +356,78 @@ class Order(models.Model):
         if self.status != self.STATUS_DELIVERED or self.stock_applied:
             return
 
-        # Update stock based on order type
-        if self.order_type == self.TYPE_PURCHASE:
-            self.item.quantity = F("quantity") + self.quantity
-            # When goods are received at a location, store the item there
-            if self.receiving_location_id:
-                self.item.location_id = self.receiving_location_id
-        else:  # SALE
-            self.item.quantity = F("quantity") - self.quantity
-
-        # Save updated item (quantity and location if changed)
-        update_fields = ["quantity"]
-        if self.order_type == self.TYPE_PURCHASE and self.receiving_location_id:
-            update_fields.append("location_id")
-        self.item.save(update_fields=update_fields)
-
-        # Refresh so item.quantity becomes the REAL number, not an F-expression
-        self.item.refresh_from_db(fields=["quantity"])
-
-        # Archive item if delete_on_deplete and stock is zero
-        self.item.maybe_archive_on_deplete()
-
-        # Log stock history (use delivery date, not order date, to avoid backdating)
-        # update_or_create prevents duplicate rows when multiple deliveries same item/day
         delivery_date = timezone.now().date()
-        StockHistory.objects.update_or_create(
-            item=self.item,
-            date=delivery_date,
-            defaults={"quantity": self.item.quantity},
-        )
-
-         # Log activity (safe lazy import)
         from django.apps import apps
         Activity = apps.get_model("inventory", "Activity")
 
-        Activity.objects.create(
-            message=f"Order #{self.id} delivered — updated stock for {self.item.name}",
-            user=actor if actor and getattr(actor, "is_authenticated", False) else None,
-        )
+        for line in self.lines.select_related("item").all():
+            item = line.item
+
+            # Sale orders: check stock before applying (quantity must not go below zero)
+            if self.order_type == self.TYPE_SALE:
+                current = item.quantity
+                if current < line.quantity:
+                    raise ValueError(
+                        f"Insufficient stock for {item.name}: "
+                        f"current quantity is {current}, but order requires {line.quantity}. "
+                        f"Stock cannot go below zero."
+                    )
+
+            # Update stock based on order type
+            if self.order_type == self.TYPE_PURCHASE:
+                item.quantity = F("quantity") + line.quantity
+                if self.receiving_location_id:
+                    item.location_id = self.receiving_location_id
+            else:  # SALE
+                item.quantity = F("quantity") - line.quantity
+
+            update_fields = ["quantity"]
+            if self.order_type == self.TYPE_PURCHASE and self.receiving_location_id:
+                update_fields.append("location_id")
+            item.save(update_fields=update_fields)
+            item.refresh_from_db(fields=["quantity"])
+            item.maybe_archive_on_deplete()
+
+            StockHistory.objects.update_or_create(
+                item=item,
+                date=delivery_date,
+                defaults={"quantity": item.quantity},
+            )
+
+            Activity.objects.create(
+                message=f"Order #{self.id} delivered — updated stock for {item.name}",
+                user=actor if actor and getattr(actor, "is_authenticated", False) else None,
+            )
 
         # Mark order as applied to avoid duplicates
         self.stock_applied = True
         self.save(update_fields=["stock_applied"])
 
 
+class OrderLine(models.Model):
+    """Line item on an order - allows multiple items per purchase/sale order."""
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.CASCADE,
+        related_name="lines",
+    )
+    item = models.ForeignKey(
+        "Item",
+        on_delete=models.PROTECT,
+        related_name="order_lines",
+    )
+    quantity = models.PositiveIntegerField(default=1)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
 
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.order} – {self.item.name} x {self.quantity}"
+
+    @property
+    def total(self):
+        return (self.unit_price or Decimal("0")) * self.quantity
 
 
 class StockHistory(models.Model):
@@ -453,6 +505,115 @@ class DemandAnomaly(models.Model):
 
     def __str__(self):
         return f"{self.item.name} anomaly on {self.date} ({self.severity})"
+
+
+class Recommendation(models.Model):
+    """
+    Unified recommendation model powering purchase/sales suggestions,
+    dormant stock alerts, and overstock warnings.
+    """
+
+    TYPE_PURCHASE_DEMAND = "PURCHASE_DEMAND"
+    TYPE_SALES_OVERSTOCK = "SALES_OVERSTOCK"
+    TYPE_DORMANT_STOCK = "DORMANT_STOCK"
+    TYPE_OVERSTOCK_ALERT = "OVERSTOCK_ALERT"
+
+    TYPE_CHOICES = [
+        (TYPE_PURCHASE_DEMAND, "Purchase recommendation"),
+        (TYPE_SALES_OVERSTOCK, "Sales recommendation"),
+        (TYPE_DORMANT_STOCK, "Dormant stock"),
+        (TYPE_OVERSTOCK_ALERT, "Overstock alert"),
+    ]
+
+    STATUS_ACTIVE = "ACTIVE"
+    STATUS_DISMISSED = "DISMISSED"
+    STATUS_ACCEPTED = "ACCEPTED"
+    STATUS_EXPIRED = "EXPIRED"
+
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, "Active"),
+        (STATUS_DISMISSED, "Dismissed"),
+        (STATUS_ACCEPTED, "Accepted"),
+        (STATUS_EXPIRED, "Expired"),
+    ]
+
+    PRIORITY_CRITICAL = 1
+    PRIORITY_HIGH = 2
+    PRIORITY_MEDIUM = 3
+    PRIORITY_LOW = 4
+
+    PRIORITY_CHOICES = [
+        (PRIORITY_CRITICAL, "Critical"),
+        (PRIORITY_HIGH, "High"),
+        (PRIORITY_MEDIUM, "Medium"),
+        (PRIORITY_LOW, "Low"),
+    ]
+
+    item = models.ForeignKey(
+        Item,
+        on_delete=models.CASCADE,
+        related_name="recommendations",
+    )
+
+    recommendation_type = models.CharField(
+        max_length=32,
+        choices=TYPE_CHOICES,
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=STATUS_CHOICES,
+        default=STATUS_ACTIVE,
+    )
+    priority = models.PositiveSmallIntegerField(
+        choices=PRIORITY_CHOICES,
+        default=PRIORITY_MEDIUM,
+    )
+
+    title = models.CharField(max_length=255)
+    reason = models.TextField(blank=True)
+
+    suggested_quantity = models.PositiveIntegerField(null=True, blank=True)
+    suggested_supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recommendations",
+    )
+    suggested_customer = models.ForeignKey(
+        Client,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recommendations",
+    )
+    target_date = models.DateField(null=True, blank=True)
+
+    # Fingerprint of the metrics/conditions used to generate this row.
+    source_hash = models.CharField(max_length=64, blank=True, default="")
+
+    # Approximate stock value involved in this recommendation (for ranking).
+    stock_value = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+
+    metadata = models.JSONField(blank=True, default=dict)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["priority", "-created_at"]
+        indexes = [
+            models.Index(fields=["recommendation_type", "status"]),
+            models.Index(fields=["item", "recommendation_type", "status"]),
+        ]
+
+    def __str__(self):
+        return f"{self.get_recommendation_type_display()} for {self.item} ({self.get_status_display()})"
 
 
 class UserPreference(models.Model):

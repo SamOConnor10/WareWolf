@@ -207,7 +207,7 @@
     <!-- TREE VIEW (replaces list) -->
     <div class="card shadow-sm border-0 mb-4" id="location-controls-card">
         <div class="card-body py-3 px-4">
-            <div class="d-flex flex-nowrap align-items-center gap-3">
+            <div class="d-flex flex-wrap align-items-center gap-3">
                 <div style="min-width: 0; max-width: 280px;">
                     <div class="input-group">
                         <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
@@ -217,6 +217,20 @@
                 <div class="btn-group btn-group-sm flex-shrink-0">
                     <button type="button" class="btn btn-outline-secondary" id="expand-all-tree" title="Expand all"><i class="bi bi-arrows-expand me-1"></i>Expand all</button>
                     <button type="button" class="btn btn-outline-secondary" id="collapse-all-tree" title="Collapse all"><i class="bi bi-arrows-collapse me-1"></i>Collapse all</button>
+                </div>
+                <div class="ms-auto d-flex gap-2 align-items-center flex-wrap" id="location-actions-bar"
+                     data-edit-url="{% url 'location_edit' 0 %}" data-delete-url="{% url 'location_delete' 0 %}">
+                    <label class="form-check mb-0 d-flex align-items-center gap-1">
+                        <input type="checkbox" class="form-check-input" id="location-select-all" title="Select all">
+                        <span class="small text-muted">Select all</span>
+                    </label>
+                    <span class="text-muted small" id="location-selected-count"></span>
+                    {% if perms.inventory.change_location %}
+                        <a href="#" id="btn-location-edit" class="btn btn-sm btn-outline-secondary disabled" title="Edit selected">Edit</a>
+                    {% endif %}
+                    {% if perms.inventory.delete_location %}
+                        <a href="#" id="btn-location-delete" class="btn btn-sm btn-outline-danger disabled" title="Delete selected">Delete</a>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -307,6 +321,15 @@
             {% endif %}
         </p>
         <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Table density">
+                <i class="bi bi-arrows-expand me-1"></i>Density
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm p-2">
+                <li><button type="button" class="dropdown-item small py-1 ww-density" data-density="comfortable">Comfortable</button></li>
+                <li><button type="button" class="dropdown-item small py-1 ww-density" data-density="compact">Compact</button></li>
+            </ul>
+        </div>
+        <div class="dropdown">
             <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Select columns">
                 <i class="bi bi-layout-three-columns me-1"></i>Columns
             </button>
@@ -335,10 +358,10 @@
         </div>
     </div>
 
-    <!-- LOCATIONS TABLE -->
-    <div class="card shadow-sm border-0 overflow-hidden">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0" id="locations-table">
+    <!-- LOCATIONS TABLE (sticky header, density) -->
+    <div class="card shadow-sm border-0 overflow-hidden" id="location-table-card">
+        <div class="table-responsive ww-table-responsive">
+            <table class="table table-hover align-middle mb-0 ww-sticky-header" id="locations-table">
                 <thead class="table-light">
                     <tr>
                         <th style="width:40px;"><input type="checkbox" class="form-check-input" id="location-select-all" title="Select all"></th>
@@ -355,7 +378,7 @@
                 </thead>
                 <tbody>
                     {% for location in locations %}
-                    <tr class="location-row" data-location-id="{{ location.id }}" data-location-name="{{ location.name|escapejs }}">
+                    <tr class="location-row" data-location-id="{{ location.id }}" data-location-name="{{ location.name|escape }}" data-item-count="{{ location.item_count }}" data-has-children="{{ location.child_count }}">
                         <td style="width:40px;"><input type="checkbox" class="form-check-input location-checkbox" value="{{ location.id }}"></td>
                         <td data-col="name">
                             <a href="{% url 'location_view' location.id %}" class="fw-medium text-decoration-none text-dark d-flex align-items-center gap-2">
@@ -454,6 +477,52 @@
     {% endif %}
 </div>
 
+<!-- DELETE CONFIRMATION MODAL -->
+{% if perms.inventory.delete_location %}
+<div class="modal fade" id="locationDeleteModal" tabindex="-1" aria-labelledby="locationDeleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow border-0 border-start border-danger border-4">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title d-flex align-items-center" id="locationDeleteModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill text-danger me-2 fs-4"></i>
+                    <span>Delete location?</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-2">
+                <p class="mb-2" id="location-delete-modal-desc"></p>
+                <div id="location-delete-modal-warning" class="alert alert-warning d-flex align-items-start mb-0" style="display:none;">
+                    <i class="bi bi-info-circle-fill me-2 mt-1"></i>
+                    <div><strong>Note:</strong> <span id="location-delete-modal-text"></span></div>
+                </div>
+                <div id="location-delete-children-options" class="mt-3" style="display:none;">
+                    <div class="small fw-semibold mb-1">This location has sub-locations. What would you like to do?</div>
+                    <div class="form-check small">
+                        <input class="form-check-input" type="radio" name="delete_mode" id="delete-mode-detach" value="detach" checked>
+                        <label class="form-check-label" for="delete-mode-detach">
+                            Delete this location only. Keep sub-locations as separate locations.
+                        </label>
+                    </div>
+                    <div class="form-check small mt-1">
+                        <input class="form-check-input" type="radio" name="delete_mode" id="delete-mode-cascade" value="cascade">
+                        <label class="form-check-label" for="delete-mode-cascade">
+                            Delete this location and all of its sub-locations.
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <form id="location-delete-form" method="POST" action="">
+                {% csrf_token %}
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger"><i class="bi bi-trash me-1"></i>Delete</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- MAP MODAL -->
 <div class="modal fade" id="locationMapModal" tabindex="-1" aria-labelledby="locationMapModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered">
@@ -490,6 +559,7 @@
 .locations-page .location-tree .location-node:hover { background: #f8fafc; }
 .locations-page .location-tree .location-node.match-highlight { background: #eff6ff; }
 .locations-page .location-tree .location-row { display: flex; align-items: center; gap: 8px; padding: 10px 16px; min-height: 44px; }
+.locations-page .location-tree .location-row .location-checkbox { width: 18px; height: 18px; margin: 0; }
 .locations-page .location-tree .location-row .toggle-btn { width: 24px; height: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: none; background: transparent; color: #64748b; border-radius: 6px; cursor: pointer; }
 .locations-page .location-tree .location-row .toggle-btn.has-children { cursor: pointer; }
 .locations-page .location-tree .location-row .toggle-btn.empty { cursor: default; visibility: hidden; }
@@ -505,23 +575,23 @@
 <script>
 (function() {
     var form = document.getElementById('location-filter-form');
-    if (!form) return;
-    function submitForm() { form.submit(); }
-    // Auto-submit on filter change
-    ['location-type', 'location-structural', 'location-external', 'location-status'].forEach(function(id) {
-        var el = document.getElementById(id);
-        if (el) el.addEventListener('change', submitForm);
-    });
-    // Debounced search (300ms)
-    var searchEl = document.getElementById('location-search');
-    var searchTimeout;
-    if (searchEl) {
-        searchEl.addEventListener('input', function() {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(submitForm, 300);
+    if (form) {
+        function submitForm() { form.submit(); }
+        ['location-type', 'location-structural', 'location-external', 'location-status'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.addEventListener('change', submitForm);
         });
+        var searchEl = document.getElementById('location-search');
+        var searchTimeout;
+        if (searchEl) {
+            searchEl.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(submitForm, 300);
+            });
+        }
     }
-    // Bulk selection
+
+    // Bulk selection (list and tree)
     var selectAll = document.getElementById('location-select-all');
     var checkboxes = document.querySelectorAll('.location-checkbox');
     var btnEdit = document.getElementById('btn-location-edit');
@@ -531,14 +601,18 @@
     function getSelectedIds() {
         return Array.from(checkboxes).filter(function(cb) { return cb.checked; }).map(function(cb) { return cb.value; });
     }
+    function getRowForId(id) {
+        return document.querySelector('[data-location-id="' + id + '"]');
+    }
     function updateActions() {
         var ids = getSelectedIds();
         var n = ids.length;
-        selectedCount.textContent = n > 0 ? n + ' selected' : '';
+        if (selectedCount) selectedCount.textContent = n > 0 ? n + ' selected' : '';
         [btnEdit, btnDelete].forEach(function(btn) {
             if (btn) {
-                btn.classList.toggle('disabled', n === 0 || (btn === btnEdit && n !== 1));
-                btn.style.pointerEvents = (n === 0 || (btn === btnEdit && n !== 1)) ? 'none' : '';
+                var disabled = n === 0 || (btn === btnEdit && n !== 1);
+                btn.classList.toggle('disabled', disabled);
+                btn.style.pointerEvents = disabled ? 'none' : '';
             }
         });
         if (selectAll) selectAll.checked = n > 0 && n === checkboxes.length;
@@ -555,15 +629,70 @@
     }
     if (btnEdit) btnEdit.addEventListener('click', function(e) {
         e.preventDefault();
-        if (this.classList.contains('disabled')) return;
+        if (btnEdit.classList.contains('disabled')) return;
         var id = getSelectedIds()[0];
         if (id) window.location.href = urlFor('edit', id);
     });
     if (btnDelete) btnDelete.addEventListener('click', function(e) {
         e.preventDefault();
         if (btnDelete.classList.contains('disabled')) return;
-        var id = getSelectedIds()[0];
-        if (id && confirm('Delete this location?')) window.location.href = urlFor('delete', id);
+        var ids = getSelectedIds();
+        if (!ids.length) return;
+        var primaryId = ids[0];
+        var row = getRowForId(primaryId);
+        var itemCount = row ? parseInt(row.dataset.itemCount || '0', 10) : 0;
+        var locationName = row ? (row.dataset.locationName || '') : '';
+        var hasChildren = row ? parseInt(row.dataset.hasChildren || '0', 10) > 0 : false;
+        // Any selected location with children?
+        var anyHasChildren = ids.some(function(id) {
+            var r = getRowForId(id);
+            return r && parseInt(r.dataset.hasChildren || '0', 10) > 0;
+        });
+        var deleteModal = document.getElementById('locationDeleteModal');
+        var deleteForm = document.getElementById('location-delete-form');
+        if (deleteModal && deleteForm) {
+            document.getElementById('location-delete-modal-desc').innerHTML =
+                (ids.length === 1)
+                    ? 'Are you sure you want to delete <strong>' + (locationName || 'this location') + '</strong>?'
+                    : 'Are you sure you want to delete <strong>' + ids.length + '</strong> selected locations?';
+            var warn = document.getElementById('location-delete-modal-warning');
+            var textEl = document.getElementById('location-delete-modal-text');
+            var options = document.getElementById('location-delete-children-options');
+            if (warn && textEl) {
+                if (ids.length === 1 && itemCount > 0) {
+                    textEl.textContent = itemCount + ' item' + (itemCount !== 1 ? 's' : '') + ' in this location will become unassigned.';
+                } else if (ids.length > 1) {
+                    textEl.textContent = 'Items in the selected locations will become unassigned.';
+                } else {
+                    textEl.textContent = 'No items in this location will be affected.';
+                }
+                warn.style.display = 'flex';
+            }
+            if (options) {
+                if (anyHasChildren) {
+                    options.style.display = '';
+                    var detachRadio = document.getElementById('delete-mode-detach');
+                    if (detachRadio) detachRadio.checked = true;
+                } else {
+                    options.style.display = 'none';
+                }
+            }
+            // Clear any previous ids
+            Array.from(deleteForm.querySelectorAll('input[name=\"ids\"]')).forEach(function(input) {
+                input.remove();
+            });
+            ids.forEach(function(id) {
+                var hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = 'ids';
+                hidden.value = id;
+                deleteForm.appendChild(hidden);
+            });
+            deleteForm.action = urlFor('delete', primaryId);
+            new bootstrap.Modal(deleteModal).show();
+        } else {
+            if (confirm('Delete selected location(s)?')) window.location.href = urlFor('delete', primaryId);
+        }
     });
     // Column visibility
     var STORAGE_KEY = 'warewolf_location_list_columns';
@@ -592,6 +721,23 @@
     });
     document.addEventListener('DOMContentLoaded', applyColumnVisibility);
     applyColumnVisibility();
+
+    var DENSITY_KEY = 'warewolf_location_list_density';
+    document.querySelectorAll('.ww-density').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var d = this.dataset.density;
+            var card = document.getElementById('location-table-card');
+            if (card) {
+                card.classList.remove('ww-table-compact');
+                if (d === 'compact') card.classList.add('ww-table-compact');
+            }
+            try { localStorage.setItem(DENSITY_KEY, d); } catch (e) {}
+        });
+    });
+    try {
+        var savedD = localStorage.getItem(DENSITY_KEY);
+        if (savedD === 'compact') document.getElementById('location-table-card')?.classList.add('ww-table-compact');
+    } catch (e) {}
 })();
 </script>
 {% if view_mode == 'tree' %}
@@ -607,6 +753,53 @@
     function allToggles() { return tree.querySelectorAll('.toggle-btn.has-children'); }
     function allChildren() { return tree.querySelectorAll('.location-children'); }
     function updateNoResults(show) { if (noResults) noResults.style.display = show ? 'block' : 'none'; }
+
+    // Persist tree expand/collapse state across page loads
+    var TREE_STATE_KEY = 'warewolf_location_tree_state';
+    function loadTreeState() {
+        try {
+            var s = localStorage.getItem(TREE_STATE_KEY);
+            return s ? JSON.parse(s) : null;
+        } catch (e) {
+            return null;
+        }
+    }
+    function saveTreeState(expandedIds) {
+        try {
+            localStorage.setItem(TREE_STATE_KEY, JSON.stringify(expandedIds));
+        } catch (e) {}
+    }
+    function captureAndSaveTreeState() {
+        var expandedIds = [];
+        allNodes().forEach(function(node) {
+            var id = node.getAttribute('data-location-id');
+            var children = node.querySelector('.location-children');
+            if (!id || !children) return;
+            if (!children.classList.contains('collapsed')) {
+                expandedIds.push(id);
+            }
+        });
+        saveTreeState(expandedIds);
+    }
+    function applyTreeState() {
+        var state = loadTreeState();
+        if (!state) return;
+        var expandedSet = new Set(state);
+        allNodes().forEach(function(node) {
+            var id = node.getAttribute('data-location-id');
+            var children = node.querySelector('.location-children');
+            var toggle = node.querySelector('.toggle-btn.has-children');
+            if (!children || !toggle || !id) return;
+            if (expandedSet.has(id)) {
+                children.classList.remove('collapsed');
+                toggle.classList.add('expanded');
+            } else {
+                children.classList.add('collapsed');
+                toggle.classList.remove('expanded');
+            }
+        });
+    }
+
     function filterTree(q) {
         var query = (q || '').trim().toLowerCase();
         var nodes = allNodes();
@@ -634,7 +827,12 @@
             }
         });
         updateNoResults(!anyVisible);
+        captureAndSaveTreeState();
     }
+
+    // Apply saved state on load
+    applyTreeState();
+
     if (searchEl) {
         var debounce;
         searchEl.addEventListener('input', function() {
@@ -645,10 +843,12 @@
     if (expandBtn) expandBtn.addEventListener('click', function() {
         allChildren().forEach(function(el) { el.classList.remove('collapsed'); });
         allToggles().forEach(function(t) { t.classList.add('expanded'); });
+        captureAndSaveTreeState();
     });
     if (collapseBtn) collapseBtn.addEventListener('click', function() {
         allChildren().forEach(function(el) { el.classList.add('collapsed'); });
         allToggles().forEach(function(t) { t.classList.remove('expanded'); });
+        captureAndSaveTreeState();
     });
     tree.addEventListener('click', function(e) {
         var toggle = e.target.closest('.toggle-btn.has-children');
@@ -658,6 +858,7 @@
         if (!children) return;
         children.classList.toggle('collapsed');
         toggle.classList.toggle('expanded');
+        captureAndSaveTreeState();
     });
 })();
 </script>

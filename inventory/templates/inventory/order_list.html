@@ -1,202 +1,367 @@
-{% extends "inventory/base.html" %}
+{% extends "inventory/base_orders.html" %}
 {% load querystring %}
 
-{% block content %}
+{% block orders_content %}
 
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-    <div>
-        <h1 class="fw-bold mb-1"><i class="bi bi-cart-check text-primary me-2"></i>Orders</h1>
-        <p class="text-muted mb-0">Track and manage purchase and sale orders</p>
-    </div>
-    {% if perms.inventory.view_order %}
-        <a href="{% url 'order_export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-outline-success" title="Export filtered orders">
-            <i class="bi bi-download me-1"></i>Export CSV
-        </a>
-    {% endif %}
-</div>
-
-<!-- Summary cards -->
-<div class="row mb-4">
-    <div class="col-md-3 mb-3">
-        <div class="card shadow-sm border-0">
-            <div class="card-body"><h6 class="text-muted mb-1">Purchase Orders</h6><div class="fs-3 fw-bold">{{ purchase_count }}</div></div>
+<div class="orders-page" id="orders-page">
+    <div class="ww-loading-bar" id="order-loading-bar" aria-hidden="true"></div>
+    <!-- HEADER -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h1 class="fw-bold mb-1">
+                {% if type_filter == 'purchase' %}
+                    <i class="bi bi-box-arrow-in-down text-primary me-2"></i>Purchase Orders
+                {% else %}
+                    <i class="bi bi-box-arrow-up text-success me-2"></i>Sale Orders
+                {% endif %}
+            </h1>
+            <p class="text-muted mb-0">
+                {% if type_filter == 'purchase' %}Manage incoming stock orders from suppliers{% else %}Manage outgoing orders to customers{% endif %}
+            </p>
         </div>
-    </div>
-    <div class="col-md-3 mb-3">
-        <div class="card shadow-sm border-0">
-            <div class="card-body"><h6 class="text-muted mb-1">Sale Orders</h6><div class="fs-3 fw-bold">{{ sale_count }}</div></div>
-        </div>
-    </div>
-    <div class="col-md-3 mb-3">
-        <div class="card shadow-sm border-0">
-            <div class="card-body"><h6 class="text-muted mb-1">Pending</h6><div class="fs-3 fw-bold">{{ pending_count }}</div></div>
-        </div>
-    </div>
-    <div class="col-md-3 mb-3">
-        <div class="card shadow-sm border-0">
-            <div class="card-body"><h6 class="text-muted mb-1">Delivered</h6><div class="fs-3 fw-bold">{{ delivered_count }}</div></div>
-        </div>
-    </div>
-</div>
-
-<!-- Search + filters (auto-submit) -->
-<form method="get" id="order-filter-form" class="row g-3 align-items-end mb-3">
-    <input type="hidden" name="sort" value="{{ sort }}">
-    <input type="hidden" name="type" value="{{ type_filter }}">
-    <input type="hidden" name="per_page" value="{{ per_page }}">
-    <div class="col-md-5">
-        <label class="form-label small text-muted mb-1">Search</label>
-        <div class="input-group">
-            <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
-            <input type="text" name="q" id="order-search" class="form-control" placeholder="Search orders or parties..."
-                   value="{{ search_query }}" autocomplete="off">
-        </div>
-    </div>
-    <div class="col-md-3">
-        <label class="form-label small text-muted mb-1">Status</label>
-        <select name="status" id="order-status" class="form-select">
-            <option value="all">All Statuses</option>
-            {% for code, label in status_choices %}
-                <option value="{{ code }}" {% if status_filter == code %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
-    </div>
-</form>
-
-<!-- Type tabs -->
-<div class="btn-group mb-3" role="group">
-    <a href="?{% querystring request type='all' %}" class="btn btn-sm {% if type_filter == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">All Orders</a>
-    <a href="?{% querystring request type='purchase' %}" class="btn btn-sm {% if type_filter == 'purchase' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Purchase Orders</a>
-    <a href="?{% querystring request type='sale' %}" class="btn btn-sm {% if type_filter == 'sale' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Sale Orders</a>
-</div>
-
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2">
-    <p class="text-muted small mb-0">
-        {% if orders.paginator %}
-            Showing {{ orders.start_index }}-{{ orders.end_index }} of {{ orders.paginator.count }} order{{ orders.paginator.count|pluralize }}
-        {% else %}
-            {{ orders|length }} order{{ orders|length|pluralize }}
-        {% endif %}
-    </p>
-    <div class="dropdown">
-        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Select columns">
-            <i class="bi bi-layout-three-columns me-1"></i>Columns
-        </button>
-        <ul class="dropdown-menu dropdown-menu-end shadow-sm p-2" style="min-width: 200px;">
-            <li class="dropdown-header small">Show columns</li>
-            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="ordernum" checked> Order #</label></li>
-            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="type" checked> Type</label></li>
-            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="item" checked> Item</label></li>
-            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="party" checked> Party</label></li>
-            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="location" checked> Location</label></li>
-            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="date" checked> Date</label></li>
-            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="qty" checked> Qty</label></li>
-            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="total" checked> Total</label></li>
-            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="status" checked> Status</label></li>
-        </ul>
-    </div>
-    <div class="d-flex gap-2 align-items-center" id="order-actions-bar"
-         data-edit-url="{% url 'order_edit' 0 %}" data-delete-url="{% url 'order_delete' 0 %}" data-delivered-url="{% url 'order_mark_delivered' 0 %}">
-        <span class="text-muted small" id="order-selected-count"></span>
-        {% if perms.inventory.change_order %}
-            <a href="#" id="btn-order-delivered" class="btn btn-sm btn-outline-success disabled" title="Mark selected as delivered">Mark Delivered</a>
-            <a href="#" id="btn-order-edit" class="btn btn-sm btn-outline-secondary disabled" title="Edit selected">Edit</a>
-        {% endif %}
-        {% if perms.inventory.delete_order %}
-            <a href="#" id="btn-order-delete" class="btn btn-sm btn-outline-danger disabled" title="Delete selected">Delete</a>
-        {% endif %}
-        {% if perms.inventory.add_order %}
-            {% if context_type == "purchase" %}
-                <a href="{% url 'order_create' %}?type=purchase" class="btn btn-primary btn-sm">+ Create PO</a>
-            {% elif context_type == "sale" %}
-                <a href="{% url 'order_create' %}?type=sale" class="btn btn-primary btn-sm">+ Create SO</a>
-            {% else %}
-                <a href="{% url 'order_create' %}" class="btn btn-primary btn-sm">+ Create Order</a>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            {% if perms.inventory.view_order %}
+                <a href="{% url 'order_export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-outline-success" title="Export filtered orders">
+                    <i class="bi bi-download me-1"></i>Export CSV
+                </a>
             {% endif %}
-        {% endif %}
+            {% if perms.inventory.add_order %}
+                {% if type_filter == 'purchase' %}
+                    <a href="{% url 'order_create' %}?type=purchase" class="btn btn-primary">+ Create Purchase Order</a>
+                {% else %}
+                    <a href="{% url 'order_create' %}?type=sale" class="btn btn-primary">+ Create Sale Order</a>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- SUMMARY CARDS with status distribution -->
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-4">
+            <a href="?{% querystring request status='all' date_from='' date_to='' overdue='' priority='' min_total='' %}" class="text-decoration-none d-block h-100">
+                <div class="card border-0 shadow-sm h-100 order-stat-card {% if not has_filters and status_filter == 'all' %}border-primary border-2{% endif %}">
+                    <div class="card-body d-flex align-items-center gap-3 py-3">
+                        <div class="rounded-3 bg-primary bg-opacity-10 p-2">
+                            <i class="bi bi-cart-check text-primary fs-4"></i>
+                        </div>
+                        <div class="flex-grow-1 min-width-0">
+                            <div class="text-muted small text-uppercase">Total {{ type_filter|title }} orders</div>
+                            <div class="fs-4 fw-bold">{{ current_total }}</div>
+                            {% if current_total > 0 %}
+                            <div class="mt-1 order-stat-bar">
+                                <div class="d-flex gap-1" style="height:4px; border-radius:2px; overflow:hidden; background:#eee;">
+                                    <span class="bg-warning" style="width:{% widthratio current_pending current_total 100 %}%"></span>
+                                    <span class="bg-info" style="width:{% widthratio current_processing current_total 100 %}%"></span>
+                                    <span class="bg-primary" style="width:{% widthratio current_shipped current_total 100 %}%"></span>
+                                    <span class="bg-success" style="width:{% widthratio current_delivered current_total 100 %}%"></span>
+                                </div>
+                                <div class="small text-muted mt-1">{{ current_pending }} pending · {{ current_delivered }} delivered</div>
+                            </div>
+                            {% else %}
+                            <div class="small text-muted">Click to view all</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-4">
+            <a href="?{% querystring request status='PENDING' %}" class="text-decoration-none d-block h-100">
+                <div class="card border-0 shadow-sm h-100 order-stat-card {% if status_filter == 'PENDING' %}border-warning border-2{% endif %}">
+                    <div class="card-body d-flex align-items-center gap-3 py-3">
+                        <div class="rounded-3 bg-warning bg-opacity-10 p-2">
+                            <i class="bi bi-hourglass-split text-warning fs-4"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small text-uppercase">Pending</div>
+                            <div class="fs-4 fw-bold">{{ current_pending }}</div>
+                            <div class="small text-muted">Awaiting delivery</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-4">
+            <a href="?{% querystring request status='DELIVERED' %}" class="text-decoration-none d-block h-100">
+                <div class="card border-0 shadow-sm h-100 order-stat-card {% if status_filter == 'DELIVERED' %}border-success border-2{% endif %}">
+                    <div class="card-body d-flex align-items-center gap-3 py-3">
+                        <div class="rounded-3 bg-success bg-opacity-10 p-2">
+                            <i class="bi bi-check-circle text-success fs-4"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small text-uppercase">Delivered</div>
+                            <div class="fs-4 fw-bold">{{ current_delivered }}</div>
+                            <div class="small text-muted">Stock updated</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <!-- Date presets + Quick filter chips -->
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <span class="text-muted small me-1">Date:</span>
+        <a href="?{% querystring request saved_view='today' %}" class="btn btn-sm {% if request.GET.saved_view == 'today' %}btn-primary{% else %}btn-outline-secondary{% endif %} py-0">Today</a>
+        <a href="?{% querystring request saved_view='week' %}" class="btn btn-sm {% if request.GET.saved_view == 'week' %}btn-primary{% else %}btn-outline-secondary{% endif %} py-0">This week</a>
+        <a href="?{% querystring request saved_view='30d' %}" class="btn btn-sm {% if request.GET.saved_view == '30d' %}btn-primary{% else %}btn-outline-secondary{% endif %} py-0">Last 30 days</a>
+        <span class="text-muted small mx-2">|</span>
+        <span class="text-muted small me-1">Quick:</span>
+        <a href="?{% querystring request overdue='1' %}" class="btn btn-sm {% if request.GET.overdue == '1' %}btn-danger{% else %}btn-outline-danger{% endif %} py-0">
+            <i class="bi bi-exclamation-triangle me-1"></i>Overdue {% if current_overdue %}({{ current_overdue }}){% endif %}
+        </a>
+        <a href="?{% querystring request priority='HIGH' %}" class="btn btn-sm {% if request.GET.priority == 'HIGH' %}btn-warning text-dark{% else %}btn-outline-warning{% endif %} py-0">High priority</a>
+        <a href="?{% querystring request min_total='500' %}" class="btn btn-sm {% if request.GET.min_total == '500' %}btn-info{% else %}btn-outline-info{% endif %} py-0">Large orders (€500+)</a>
+    </div>
+
+    <!-- SEARCH + FILTERS -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body py-3">
+            <form method="get" id="order-filter-form" class="row g-3 align-items-end">
+                <input type="hidden" name="type" value="{{ type_filter }}">
+                <input type="hidden" name="sort" value="{{ sort }}">
+                <input type="hidden" name="per_page" value="{{ per_page }}">
+                <div class="col-md-4">
+                    <label class="form-label small text-muted mb-1">Search</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" name="q" id="order-search" class="form-control"
+                               placeholder="Search orders, items or parties..."
+                               value="{{ search_query }}" autocomplete="off">
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">Status</label>
+                    <select name="status" id="order-status" class="form-select">
+                        <option value="all">All statuses</option>
+                        {% for code, label in status_choices %}
+                            <option value="{{ code }}" {% if status_filter == code %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">From date</label>
+                    <input type="date" name="date_from" id="order-date-from" class="form-control" value="{{ date_from }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">To date</label>
+                    <input type="date" name="date_to" id="order-date-to" class="form-control" value="{{ date_to }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">
+                        {% if type_filter == 'purchase' %}Receiving location{% else %}Shipping location{% endif %}
+                    </label>
+                    <select
+                        name="{% if type_filter == 'purchase' %}receiving_location{% else %}shipping_location{% endif %}"
+                        id="order-location"
+                        class="form-select"
+                    >
+                        <option value="">All locations</option>
+                        {% for loc in locations %}
+                            {% if type_filter == 'purchase' %}
+                                <option value="{{ loc.id }}" {% if receiving_location_id|default:'' == loc.id|stringformat:"d" %}selected{% endif %}>{{ loc.name }}</option>
+                            {% else %}
+                                <option value="{{ loc.id }}" {% if shipping_location_id|default:'' == loc.id|stringformat:"d" %}selected{% endif %}>{{ loc.name }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if has_filters %}
+    <div class="alert alert-light border d-flex align-items-center justify-content-between gap-3 mb-3" role="alert">
+        <span class="d-flex align-items-center gap-2">
+            <i class="bi bi-funnel-fill text-primary"></i>
+            <span>Showing filtered {{ type_filter }} orders.</span>
+        </span>
+        <a href="{% url 'order_list' %}?type={{ type_filter }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-x-circle me-1"></i>Clear filters
+        </a>
+    </div>
+    {% endif %}
+
+    <!-- TOOLBAR: results count, columns, actions (layout matches item/location lists) -->
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+        <p class="text-muted small mb-0">
+            {% if orders.paginator %}
+                Showing {{ orders.start_index }}-{{ orders.end_index }} of {{ orders.paginator.count }} order{{ orders.paginator.count|pluralize }}
+            {% else %}
+                {{ orders|length }} order{{ orders|length|pluralize }}
+            {% endif %}
+        </p>
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Table density">
+                <i class="bi bi-arrows-expand me-1"></i>Density
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm p-2">
+                <li><button type="button" class="dropdown-item small py-1 ww-density" data-density="comfortable">Comfortable</button></li>
+                <li><button type="button" class="dropdown-item small py-1 ww-density" data-density="compact">Compact</button></li>
+            </ul>
+        </div>
+        <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Select columns">
+                    <i class="bi bi-layout-three-columns me-1"></i>Columns
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm p-2" style="min-width: 200px;">
+                    <li class="dropdown-header small">Show columns</li>
+                    <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="ordernum" checked> Order #</label></li>
+                    <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="reference" checked> Reference</label></li>
+                    <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="item" checked> Item</label></li>
+                    <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="party" checked> Party</label></li>
+                    <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="location" checked> Location</label></li>
+                    <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="date" checked> Date</label></li>
+                    <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="qty" checked> Qty</label></li>
+                    <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="total" checked> Total</label></li>
+                    <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="status" checked> Status</label></li>
+                </ul>
+            </div>
+        <div class="ms-auto d-flex gap-2 align-items-center" id="order-actions-bar"
+             data-edit-url="{% url 'order_edit' 0 %}" data-delete-url="{% url 'order_delete' 0 %}"
+             data-delivered-url="{% url 'order_mark_delivered' 0 %}" data-duplicate-url="{% url 'order_duplicate' 0 %}">
+            <span class="text-muted small" id="order-selected-count"></span>
+            {% if perms.inventory.change_order %}
+                <a href="#" id="btn-order-delivered" class="btn btn-sm btn-outline-success disabled" title="Mark selected as delivered">Mark Delivered</a>
+                <a href="#" id="btn-order-edit" class="btn btn-sm btn-outline-secondary disabled" title="Edit selected">Edit</a>
+            {% endif %}
+            {% if perms.inventory.add_order %}
+                <a href="#" id="btn-order-duplicate" class="btn btn-sm btn-outline-primary disabled" title="Duplicate selected">Duplicate</a>
+            {% endif %}
+            {% if perms.inventory.delete_order %}
+                <a href="#" id="btn-order-delete" class="btn btn-sm btn-outline-danger disabled" title="Delete selected">Delete</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ORDERS TABLE (sticky header, density) -->
+    <div class="card shadow-sm border-0 overflow-hidden ww-table-card" id="order-table-card">
+        <div class="table-responsive ww-table-responsive">
+            <table class="table table-hover align-middle mb-0 ww-sticky-header" id="orders-table">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:40px;"><input type="checkbox" class="form-check-input" id="order-select-all" title="Select all"></th>
+                        <th data-col="ordernum"><a href="?{% querystring request sort=sort|toggle_sort:'id' %}" class="sort-link">Order #</a></th>
+                        <th data-col="reference"><a href="?{% querystring request sort=sort|toggle_sort:'reference' %}" class="sort-link">Reference</a></th>
+                        <th data-col="item"><a href="?{% querystring request sort=sort|toggle_sort:'item__name' %}" class="sort-link">Item</a></th>
+                        <th data-col="party"><a href="?{% querystring request sort=sort|toggle_sort:'party_name_sort' %}" class="sort-link">Party</a></th>
+                        <th data-col="location"><a href="?{% querystring request sort=sort|toggle_sort:'location_name_sort' %}" class="sort-link">Location</a></th>
+                        <th data-col="date"><a href="?{% querystring request sort=sort|toggle_sort:'order_date' %}" class="sort-link">Date</a></th>
+                        <th data-col="qty" class="text-end"><a href="?{% querystring request sort=sort|toggle_sort:'quantity' %}" class="sort-link">Qty</a></th>
+                        <th data-col="total" class="text-end"><a href="?{% querystring request sort=sort|toggle_sort:'total_value' %}" class="sort-link">Total</a></th>
+                        <th data-col="status"><a href="?{% querystring request sort=sort|toggle_sort:'status' %}" class="sort-link">Status</a></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders %}
+                    {% with lines=order.lines.all %}
+                    <tr class="order-row {% if order.target_date and order.target_date < today and order.status != 'DELIVERED' and order.status != 'CANCELLED' %}table-danger{% endif %} {% if order.total >= 500 %}ww-high-value{% endif %}" data-order-id="{{ order.id }}" data-order-status="{{ order.status }}" data-order-reference="{{ order.reference|default:'' }}" data-order-line-count="{{ lines|length }}" data-order-first-item="{% if lines %}{{ lines.0.item.name }}{% endif %}">
+                        <td style="width:40px;"><input type="checkbox" class="form-check-input order-checkbox" value="{{ order.id }}"></td>
+                        <td data-col="ordernum"><a href="{% url 'order_detail' order.id %}" class="fw-medium text-decoration-none">ORD-{{ order.id }}</a></td>
+                        <td data-col="reference">{{ order.reference|default:"—" }}</td>
+                        <td data-col="item">
+                                {% if lines|length == 1 %}
+                                    <a href="{% url 'item_detail' lines.0.item.id %}">{{ lines.0.item.name }}</a>
+                                {% else %}
+                                    {{ lines|length }} items
+                                    {% for ln in lines|slice:":2" %}
+                                        <a href="{% url 'item_detail' ln.item.id %}">{{ ln.item.name }}</a>{% if not forloop.last %}, {% endif %}
+                                    {% endfor %}
+                                    {% if lines|length > 2 %}…{% endif %}
+                                {% endif %}
+                        </td>
+                        <td data-col="party">{{ order.party_name }}</td>
+                        <td data-col="location">
+                            {% if order.order_type == 'SALE' and order.shipping_location %}
+                                <a href="{% url 'location_view' order.shipping_location.id %}">{{ order.shipping_location.name }}</a>
+                            {% elif order.order_type == 'PURCHASE' and order.receiving_location %}
+                                <a href="{% url 'location_view' order.receiving_location.id %}">{{ order.receiving_location.name }}</a>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td data-col="date">{{ order.order_date }}</td>
+                        <td data-col="qty" class="text-end">{{ order.total_quantity }}</td>
+                        <td data-col="total" class="text-end {% if order.total >= 500 %}fw-bold{% endif %}">€{{ order.total }}</td>
+                        <td data-col="status">
+                            {% if order.status == 'DELIVERED' %}
+                                <span class="badge bg-success-subtle text-success">Delivered</span>
+                            {% elif order.status == 'PENDING' %}
+                                <span class="badge bg-warning-subtle text-warning">Pending</span>
+                            {% elif order.status == 'PROCESSING' %}
+                                <span class="badge bg-info-subtle text-info">Processing</span>
+                            {% elif order.status == 'SHIPPED' %}
+                                <span class="badge bg-primary-subtle text-primary">Shipped</span>
+                            {% else %}
+                                <span class="badge bg-secondary-subtle text-secondary">Cancelled</span>
+                            {% endif %}
+                            {% if order.target_date and order.target_date < today and order.status != 'DELIVERED' and order.status != 'CANCELLED' %}
+                                <span class="badge bg-danger ms-1" title="Past target date {{ order.target_date }}">Overdue</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endwith %}
+                    {% empty %}
+                    <tr><td colspan="10" class="text-center text-muted py-5">No orders found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- PAGINATION -->
+    {% include "inventory/includes/pagination.html" with page_obj=orders per_page=per_page per_page_choices=per_page_choices %}
+</div>
+
+{% if perms.inventory.delete_order %}
+<div class="modal fade" id="orderDeleteModal" tabindex="-1" aria-labelledby="orderDeleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow border-0 border-start border-danger border-4">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title d-flex align-items-center" id="orderDeleteModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill text-danger me-2 fs-4"></i>
+                    <span>Delete order</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-2">
+                <p class="mb-2" id="order-delete-modal-desc"></p>
+                <p class="text-muted small mb-0">This action cannot be undone.</p>
+            </div>
+            <form id="order-delete-confirm-form" method="POST" action="">
+                {% csrf_token %}
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-1"></i>Delete
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
-
-<div class="card shadow-sm border-0 overflow-hidden">
-<div class="table-responsive">
-<table class="table table-hover align-middle mb-0" id="orders-table">
-    <thead class="table-light">
-        <tr>
-            <th style="width:40px;"><input type="checkbox" class="form-check-input" id="order-select-all" title="Select all"></th>
-            <th data-col="ordernum">Order #</th>
-            <th data-col="type"><a href="?{% querystring request sort=sort|toggle_sort:'order_type' %}" class="sort-link">Type</a></th>
-            <th data-col="item"><a href="?{% querystring request sort=sort|toggle_sort:'item__name' %}" class="sort-link">Item</a></th>
-            <th data-col="party">Party</th>
-            <th data-col="location">Location</th>
-            <th data-col="date"><a href="?{% querystring request sort=sort|toggle_sort:'order_date' %}" class="sort-link">Date</a></th>
-            <th data-col="qty" class="text-end"><a href="?{% querystring request sort=sort|toggle_sort:'quantity' %}" class="sort-link">Qty</a></th>
-            <th data-col="total" class="text-end">Total</th>
-            <th data-col="status"><a href="?{% querystring request sort=sort|toggle_sort:'status' %}" class="sort-link">Status</a></th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for order in orders %}
-        <tr class="order-row" data-order-id="{{ order.id }}" data-order-status="{{ order.status }}">
-            <td><input type="checkbox" class="form-check-input order-checkbox" value="{{ order.id }}"></td>
-            <td data-col="ordernum"><a href="{% url 'order_edit' order.id %}" class="fw-medium text-decoration-none text-dark">ORD-{{ order.id }}</a></td>
-            <td data-col="type">
-                {% if order.order_type == 'PURCHASE' %}
-                    <span class="badge bg-info-subtle text-info">Purchase</span>
-                {% else %}
-                    <span class="badge bg-success-subtle text-success">Sale</span>
-                {% endif %}
-            </td>
-            <td data-col="item"><a href="{% url 'item_detail' order.item.id %}">{{ order.item.name }}</a></td>
-            <td data-col="party">{{ order.party_name }}</td>
-            <td data-col="location">
-                {% if order.order_type == 'SALE' and order.shipping_location %}
-                    <a href="{% url 'location_view' order.shipping_location.id %}">{{ order.shipping_location.name }}</a>
-                {% elif order.order_type == 'PURCHASE' and order.receiving_location %}
-                    <a href="{% url 'location_view' order.receiving_location.id %}">{{ order.receiving_location.name }}</a>
-                {% else %}
-                    <span class="text-muted">—</span>
-                {% endif %}
-            </td>
-            <td data-col="date">{{ order.order_date }}</td>
-            <td data-col="qty" class="text-end">{{ order.quantity }}</td>
-            <td data-col="total" class="text-end">€{{ order.total }}</td>
-            <td data-col="status">
-                {% if order.status == 'DELIVERED' %}
-                    <span class="badge bg-success-subtle text-success">Delivered</span>
-                {% elif order.status == 'PENDING' %}
-                    <span class="badge bg-warning-subtle text-warning">Pending</span>
-                {% elif order.status == 'PROCESSING' %}
-                    <span class="badge bg-info-subtle text-info">Processing</span>
-                {% elif order.status == 'SHIPPED' %}
-                    <span class="badge bg-primary-subtle text-primary">Shipped</span>
-                {% else %}
-                    <span class="badge bg-secondary-subtle text-secondary">Cancelled</span>
-                {% endif %}
-            </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="10" class="text-center text-muted py-4">No orders found.</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
-</div>
-</div>
-
-<!-- PAGINATION -->
-{% include "inventory/includes/pagination.html" with page_obj=orders per_page=per_page per_page_choices=per_page_choices %}
+{% endif %}
 
 <style>
 .sort-link { color: inherit; text-decoration: none; }
 .sort-link:hover { color: var(--bs-primary); }
+.order-stat-card { transition: box-shadow 0.15s ease, transform 0.05s ease; }
+.order-stat-card:hover { box-shadow: 0 0.5rem 1.25rem rgba(15, 23, 42, 0.16); transform: translateY(-1px); }
 </style>
 
 <script>
 (function() {
     var form = document.getElementById('order-filter-form');
     if (!form) return;
-    function submitForm() { form.submit(); }
-    var statusEl = document.getElementById('order-status');
-    if (statusEl) statusEl.addEventListener('change', submitForm);
+    var loadingBar = document.getElementById('order-loading-bar');
+    function submitForm() {
+        if (loadingBar) loadingBar.classList.add('ww-loading');
+        form.submit();
+    }
+    ['order-status', 'order-location', 'order-date-from', 'order-date-to'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('change', submitForm);
+    });
     var searchEl = document.getElementById('order-search');
     var searchTimeout;
     if (searchEl) {
@@ -209,6 +374,7 @@
     var checkboxes = document.querySelectorAll('.order-checkbox');
     var btnDelivered = document.getElementById('btn-order-delivered');
     var btnEdit = document.getElementById('btn-order-edit');
+    var btnDuplicate = document.getElementById('btn-order-duplicate');
     var btnDelete = document.getElementById('btn-order-delete');
     var selectedCount = document.getElementById('order-selected-count');
     var bar = document.getElementById('order-actions-bar');
@@ -218,23 +384,47 @@
         var ids = getSelectedIds();
         var rows = getSelectedRows();
         var n = ids.length;
-        selectedCount.textContent = n > 0 ? n + ' selected' : '';
-        var allDelivered = rows.every(function(r) { return r.dataset.orderStatus === 'DELIVERED'; });
-        [btnDelivered, btnEdit, btnDelete].forEach(function(btn) {
+        if (selectedCount) selectedCount.textContent = n > 0 ? n + ' selected' : '';
+        var allDelivered = rows.every(function(r) { return r && r.dataset.orderStatus === 'DELIVERED'; });
+        [btnDelivered, btnEdit, btnDuplicate, btnDelete].forEach(function(btn) {
             if (btn) {
-                var disable = n === 0;
-                if (btn === btnDelivered) disable = n === 0 || n !== 1 || allDelivered;
-                btn.classList.toggle('disabled', disable);
-                btn.style.pointerEvents = disable ? 'none' : '';
+                var disabled = n === 0;
+                if (btn === btnDelivered) disabled = n === 0 || n !== 1 || allDelivered;
+                if (btn === btnEdit || btn === btnDuplicate || btn === btnDelete) disabled = n === 0 || n !== 1;
+                btn.classList.toggle('disabled', disabled);
+                btn.style.pointerEvents = disabled ? 'none' : '';
             }
         });
         if (selectAll) selectAll.checked = n > 0 && n === checkboxes.length;
     }
     if (selectAll) selectAll.addEventListener('change', function() { checkboxes.forEach(function(cb) { cb.checked = selectAll.checked; }); updateActions(); });
     checkboxes.forEach(function(cb) { cb.addEventListener('change', updateActions); });
-    function urlFor(name, id) { var u = bar.getAttribute('data-' + name + '-url'); return u ? u.replace('/0/', '/' + id + '/') : ''; }
-    if (btnEdit) btnEdit.addEventListener('click', function(e) { e.preventDefault(); if (this.classList.contains('disabled')) return; var id = getSelectedIds()[0]; if (id) window.location.href = urlFor('edit', id); });
-    if (btnDelete) btnDelete.addEventListener('click', function(e) { e.preventDefault(); if (btnDelete.classList.contains('disabled')) return; var id = getSelectedIds()[0]; if (id && confirm('Delete this order?')) window.location.href = urlFor('delete', id); });
+    function urlFor(name, id) { if (!bar) return ''; var u = bar.getAttribute('data-' + name + '-url'); return u ? u.replace('/0/', '/' + id + '/') : ''; }
+    if (btnEdit) btnEdit.addEventListener('click', function(e) { e.preventDefault(); if (btnEdit.classList.contains('disabled')) return; var id = getSelectedIds()[0]; if (id) window.location.href = urlFor('edit', id); });
+    if (btnDuplicate) btnDuplicate.addEventListener('click', function(e) { e.preventDefault(); if (btnDuplicate.classList.contains('disabled')) return; var id = getSelectedIds()[0]; if (id) window.location.href = urlFor('duplicate', id); });
+    if (btnDelete) btnDelete.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (btnDelete.classList.contains('disabled')) return;
+        var id = getSelectedIds()[0];
+        if (!id) return;
+        var row = document.querySelector('.order-row[data-order-id="' + id + '"]');
+        var ref = row ? (row.dataset.orderReference || '') : '';
+        var lineCount = row ? parseInt(row.dataset.orderLineCount || '0', 10) : 0;
+        var firstItem = row ? (row.dataset.orderFirstItem || '') : '';
+        var desc = 'Are you sure you want to delete <strong>Order #' + id + (ref ? ' (' + ref + ')' : '') + '</strong>';
+        if (lineCount === 1 && firstItem) desc += ' for <strong>' + firstItem + '</strong>';
+        else if (lineCount > 1) desc += ' with ' + lineCount + ' items';
+        desc += '?';
+        var modal = document.getElementById('orderDeleteModal');
+        var form = document.getElementById('order-delete-confirm-form');
+        if (modal && form) {
+            document.getElementById('order-delete-modal-desc').innerHTML = desc;
+            form.action = urlFor('delete', id);
+            new bootstrap.Modal(modal).show();
+        } else {
+            if (confirm('Delete this order?')) window.location.href = urlFor('delete', id);
+        }
+    });
     if (btnDelivered) btnDelivered.addEventListener('click', function(e) {
         e.preventDefault();
         if (btnDelivered.classList.contains('disabled')) return;
@@ -254,6 +444,7 @@
         document.body.appendChild(form);
         form.submit();
     });
+    updateActions();
     var STORAGE_KEY = 'warewolf_order_list_columns';
     function loadColumnPrefs() { try { var s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
     function saveColumnPrefs(obj) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(obj)); } catch (e) {} }
@@ -276,9 +467,29 @@
     });
     document.addEventListener('DOMContentLoaded', applyColumnVisibility);
     applyColumnVisibility();
+
+    var DENSITY_KEY = 'warewolf_order_list_density';
+    document.querySelectorAll('.ww-density').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var d = this.dataset.density;
+            var card = document.getElementById('order-table-card');
+            if (card) {
+                card.classList.remove('ww-table-compact');
+                if (d === 'compact') card.classList.add('ww-table-compact');
+            }
+            try { localStorage.setItem(DENSITY_KEY, d); } catch (e) {}
+        });
+    });
+    try {
+        var saved = localStorage.getItem(DENSITY_KEY);
+        if (saved === 'compact') document.getElementById('order-table-card')?.classList.add('ww-table-compact');
+    } catch (e) {}
+
 })();
 </script>
 
 <input type="hidden" id="order-csrf" value="{{ csrf_token }}">
+
+{% include "inventory/includes/recommendations_popup.html" %}
 
 {% endblock %}

@@ -1,5 +1,6 @@
-<li class="location-node" data-id="{{ node.id }}">
+<li class="location-node" data-location-id="{{ node.id }}" data-location-name="{{ node.name|escape }}" data-item-count="{{ node.inventory_items.count }}" data-has-children="{{ node.children.count }}">
     <div class="location-row">
+        <input type="checkbox" class="form-check-input location-checkbox flex-shrink-0" value="{{ node.id }}" title="Select">
         <button type="button" class="toggle-btn {% if node.children.all %}has-children{% else %}empty{% endif %}" aria-label="Toggle">
             <i class="bi bi-chevron-down"></i>
         </button>

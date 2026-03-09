@@ -1,8 +1,9 @@
 from django import forms
-from .models import Item, Supplier, Client, Location, Order, Category
+from .models import Item, Supplier, Client, Location, Order, OrderLine, Category
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.forms import inlineformset_factory
 from django.contrib.auth import get_user_model
 from .models import UserPreference
 from .models import UserProfile
@@ -125,6 +126,11 @@ class ItemForm(forms.ModelForm):
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2, "placeholder": "Internal notes (not shown externally)"}),
         }
 
+    def clean_quantity(self):
+        qty = self.cleaned_data.get("quantity")
+        if qty is not None and qty < 0:
+            raise ValidationError("Stock quantity cannot be below zero.")
+        return qty
 
 
 # -------------------------------------------------
@@ -200,41 +206,64 @@ class CategoryForm(forms.ModelForm):
         return parent
 
 
+OrderLineFormSet = inlineformset_factory(
+    Order,
+    OrderLine,
+    fields=("item", "quantity", "unit_price"),
+    extra=1,
+    min_num=1,
+    validate_min=True,
+    can_delete=True,
+    widgets={
+        "item": forms.Select(attrs={"class": "form-select order-line-item"}),
+        "quantity": forms.NumberInput(attrs={"class": "form-control order-line-qty", "min": 1}),
+        "unit_price": forms.NumberInput(attrs={"class": "form-control order-line-price"}),
+    },
+)
+
+
 class OrderForm(forms.ModelForm):
 
     order_date = forms.DateField(
         widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}),
         required=True,
     )
+    target_date = forms.DateField(
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+        required=False,
+    )
 
     class Meta:
         model = Order
         fields = [
             "order_type",
-            "item",
-            "quantity",
-            "unit_price",
+            "reference",
+            "description",
             "supplier",
             "client",
+            "party_reference",
             "order_date",
+            "target_date",
             "status",
             "priority",
             "shipping_location",
             "receiving_location",
+            "external_link",
             "notes",
         ]
 
         widgets = {
             "order_type": forms.Select(attrs={"class": "form-select"}),
-            "item": forms.Select(attrs={"class": "form-select"}),
-            "quantity": forms.NumberInput(attrs={"class": "form-control"}),
-            "unit_price": forms.NumberInput(attrs={"class": "form-control"}),
+            "reference": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. PO0020, SO0029"}),
+            "description": forms.Textarea(attrs={"class": "form-control", "rows": 2, "placeholder": "Order description (optional)"}),
             "supplier": forms.Select(attrs={"class": "form-select"}),
             "client": forms.Select(attrs={"class": "form-select"}),
+            "party_reference": forms.TextInput(attrs={"class": "form-control", "placeholder": "Supplier/customer order ref"}),
             "status": forms.Select(attrs={"class": "form-select"}),
             "priority": forms.Select(attrs={"class": "form-select"}),
             "shipping_location": forms.Select(attrs={"class": "form-select"}),
             "receiving_location": forms.Select(attrs={"class": "form-select"}),
+            "external_link": forms.URLInput(attrs={"class": "form-control", "placeholder": "https://..."}),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
         }
 
@@ -274,14 +303,10 @@ class OrderForm(forms.ModelForm):
         supplier = cleaned.get("supplier")
         client = cleaned.get("client")
 
-        # Purchase must have supplier
         if order_type == Order.TYPE_PURCHASE and not supplier:
             self.add_error("supplier", "Purchase orders must have a supplier.")
-
-        # Sale must have client
         if order_type == Order.TYPE_SALE and not client:
             self.add_error("client", "Sale orders must have a customer.")
-
         return cleaned
 
 

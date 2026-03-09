@@ -96,12 +96,13 @@ class Command(BaseCommand):
             receiving_location__isnull=False,
         )
         backfill_count = 0
-        for order in delivered_with_loc:
-            if order.item.location_id != order.receiving_location_id:
-                if not dry_run:
-                    order.item.location = order.receiving_location
-                    order.item.save(update_fields=["location"])
-                backfill_count += 1
+        for order in delivered_with_loc.select_related("receiving_location").prefetch_related("lines__item"):
+            for line in order.lines.all():
+                if line.item.location_id != order.receiving_location_id:
+                    if not dry_run:
+                        line.item.location = order.receiving_location
+                        line.item.save(update_fields=["location"])
+                    backfill_count += 1
         if backfill_count:
             self.stdout.write(
                 self.style.SUCCESS(

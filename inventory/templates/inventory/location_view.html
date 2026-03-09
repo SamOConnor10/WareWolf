@@ -281,13 +281,17 @@
                             <thead class="table-light"><tr><th>Date</th><th>Item</th><th class="text-end">Qty</th><th>Status</th><th></th></tr></thead>
                             <tbody>
                                 {% for o in sales_shipped %}
+                                {% for ln in o.lines.all %}
                                 <tr>
-                                    <td>{{ o.order_date|date:"d M Y" }}</td>
-                                    <td><a href="{% url 'item_detail' o.item.id %}">{{ o.item.name|truncatechars:30 }}</a></td>
-                                    <td class="text-end">{{ o.quantity }}</td>
-                                    <td>{{ o.get_status_display }}</td>
-                                    <td><a href="{% url 'order_edit' o.id %}" class="btn btn-sm btn-outline-secondary">Edit</a></td>
+                                    <td>{% if forloop.parentloop.first %}{{ o.order_date|date:"d M Y" }}{% endif %}</td>
+                                    <td><a href="{% url 'item_detail' ln.item.id %}">{{ ln.item.name|truncatechars:30 }}</a></td>
+                                    <td class="text-end">{{ ln.quantity }}</td>
+                                    <td>{% if forloop.first %}{{ o.get_status_display }}{% endif %}</td>
+                                    <td>{% if forloop.first %}<a href="{% url 'order_detail' o.id %}" class="btn btn-sm btn-outline-secondary">View</a>{% endif %}</td>
                                 </tr>
+                                {% endfor %}
+                                {% empty %}
+                                <tr><td colspan="5" class="text-muted text-center">No sale orders at this location</td></tr>
                                 {% endfor %}
                             </tbody>
                         </table>
@@ -309,13 +313,17 @@
                             <thead class="table-light"><tr><th>Date</th><th>Item</th><th class="text-end">Qty</th><th>Status</th><th></th></tr></thead>
                             <tbody>
                                 {% for o in purchases_received %}
+                                {% for ln in o.lines.all %}
                                 <tr>
-                                    <td>{{ o.order_date|date:"d M Y" }}</td>
-                                    <td><a href="{% url 'item_detail' o.item.id %}">{{ o.item.name|truncatechars:30 }}</a></td>
-                                    <td class="text-end">{{ o.quantity }}</td>
-                                    <td>{{ o.get_status_display }}</td>
-                                    <td><a href="{% url 'order_edit' o.id %}" class="btn btn-sm btn-outline-secondary">Edit</a></td>
+                                    <td>{% if forloop.first %}{{ o.order_date|date:"d M Y" }}{% endif %}</td>
+                                    <td><a href="{% url 'item_detail' ln.item.id %}">{{ ln.item.name|truncatechars:30 }}</a></td>
+                                    <td class="text-end">{{ ln.quantity }}</td>
+                                    <td>{% if forloop.first %}{{ o.get_status_display }}{% endif %}</td>
+                                    <td>{% if forloop.first %}<a href="{% url 'order_detail' o.id %}" class="btn btn-sm btn-outline-secondary">View</a>{% endif %}</td>
                                 </tr>
+                                {% endfor %}
+                                {% empty %}
+                                <tr><td colspan="5" class="text-muted text-center">No purchase orders at this location</td></tr>
                                 {% endfor %}
                             </tbody>
                         </table>

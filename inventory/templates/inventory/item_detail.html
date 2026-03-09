@@ -1,7 +1,7 @@
-{% extends "inventory/base_stock.html" %}
+{% extends "inventory/base.html" %}
 {% load static %}
 
-{% block stock_content %}
+{% block content %}
 
 <div class="item-detail-page">
     <!-- HEADER: Image + Info + Actions -->
@@ -267,7 +267,7 @@
                     <a href="{% url 'order_list' %}?item={{ item.id }}" class="btn btn-sm btn-outline-primary py-0">View all</a>
                 </div>
                 <div class="card-body p-0 d-flex flex-column min-h-0 flex-grow-1">
-                    {% if orders %}
+                    {% if order_lines %}
                     <div class="table-responsive item-detail-orders-table flex-grow-1">
                         <table class="table table-hover mb-0">
                             <thead class="table-light">
@@ -280,13 +280,13 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for o in orders %}
+                                {% for ln in order_lines %}
                                 <tr>
-                                    <td>{{ o.order_date|date:"d M Y" }}</td>
-                                    <td><span class="badge {% if o.order_type == 'PURCHASE' %}bg-info{% else %}bg-success{% endif %}">{{ o.get_order_type_display }}</span></td>
-                                    <td class="text-end">{{ o.quantity }}</td>
-                                    <td>{{ o.get_status_display }}</td>
-                                    <td><a href="{% url 'order_edit' o.id %}" class="btn btn-sm btn-outline-secondary">Edit</a></td>
+                                    <td>{{ ln.order.order_date|date:"d M Y" }}</td>
+                                    <td><span class="badge {% if ln.order.order_type == 'PURCHASE' %}bg-info{% else %}bg-success{% endif %}">{{ ln.order.get_order_type_display }}</span></td>
+                                    <td class="text-end">{{ ln.quantity }}</td>
+                                    <td>{{ ln.order.get_status_display }}</td>
+                                    <td><a href="{% url 'order_detail' ln.order.id %}" class="btn btn-sm btn-outline-secondary">View</a></td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -339,4 +339,4 @@
 .item-detail-history-table .table { font-size: 0.875rem; }
 </style>
 
-{% endblock %}
+{% endblock content %}

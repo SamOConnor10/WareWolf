@@ -1,211 +1,323 @@
 {% extends "inventory/base.html" %}
 
 {% block content %}
-<h1 class="fw-bold mb-3">
-    {% if edit %}Edit Order{% else %}New Order{% endif %}
-</h1>
+<div class="container py-4">
+    <div class="d-flex align-items-center gap-3 mb-4">
+        <a href="{% url 'order_list' %}?type={% if edit %}{{ order.order_type|lower }}{% elif forced_type %}{{ forced_type }}{% else %}purchase{% endif %}" class="btn btn-outline-secondary btn-sm" title="Back to orders">
+            <i class="bi bi-arrow-left"></i>
+        </a>
+        <h1 class="fw-bold mb-0">
+            {% if edit %}<i class="bi bi-pencil-square me-2"></i>Edit Order{% else %}<i class="bi bi-plus-circle me-2"></i>New {% if forced_type == 'purchase' %}Purchase{% elif forced_type == 'sale' %}Sale{% endif %} Order{% endif %}
+        </h1>
+    </div>
 
-{% if edit and perms.inventory.change_order or not edit and perms.inventory.add_order %}
+    {% if edit and perms.inventory.change_order or not edit and perms.inventory.add_order %}
 
-<form method="post" class="card shadow-sm border-0">
-    {% csrf_token %}
-
-    {% if form.errors %}
-        <div class="alert alert-danger">
-            <strong>Could not save. Please fix the errors below.</strong>
-            {{ form.non_field_errors }}
-            {{ form.errors }}
+    {% if form.errors or formset.errors %}
+        <div class="alert alert-danger d-flex align-items-start gap-2">
+            <i class="bi bi-exclamation-triangle-fill fs-5 mt-1"></i>
+            <div>
+                <strong>Please fix the errors below.</strong>
+                {{ form.non_field_errors }}{{ formset.non_form_errors }}
+                <ul class="mb-0 mt-2 small">
+                    {% for field in form %}
+                        {% for error in field.errors %}
+                            <li>{{ field.label }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
         </div>
     {% endif %}
 
-    <div class="card-body row g-3">
+    <form method="post" id="orderForm">
+        {% csrf_token %}
 
-        <!-- ORDER TYPE -->
-        <div class="col-md-3">
-            <label class="form-label">Order Type</label>
+        <div class="row g-4">
+            <!-- BASIC INFORMATION -->
+            <div class="col-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white border-bottom py-3">
+                        <h5 class="mb-0 fw-semibold">
+                            <i class="bi bi-file-earmark-text text-primary me-2"></i>Basic Information
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label fw-medium">Order Type</label>
+                                {% if forced_type %}
+                                    <select class="form-select" id="id_order_type" disabled data-forced-type="{{ forced_type }}">
+                                        <option value="{{ forced_type|upper }}">{{ forced_type|capfirst }}</option>
+                                    </select>
+                                    <input type="hidden" name="order_type" value="{{ forced_type|upper }}">
+                                {% else %}
+                                    {{ form.order_type }}
+                                {% endif %}
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-medium">Reference</label>
+                                {{ form.reference }}
+                                <small class="text-muted d-block">e.g. PO0020, SO0029</small>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-medium">Order Date</label>
+                                {{ form.order_date }}
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-medium">Target Date</label>
+                                {{ form.target_date }}
+                                <small class="text-muted d-block">Expected delivery</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-medium">Status</label>
+                                {{ form.status }}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-medium">Priority</label>
+                                {{ form.priority }}
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-medium">Description</label>
+                                {{ form.description }}
+                                <small class="text-muted d-block">Order description (optional)</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-            {% if forced_type %}
-                <select class="form-select" id="id_order_type" disabled data-forced-type="{{ forced_type }}">
-                    <option value="{{ forced_type|upper }}">{{ forced_type|capfirst }}</option>
-                </select>
-                <input type="hidden" name="order_type" value="{{ forced_type|upper }}">
-            {% else %}
-                {{ form.order_type }}
+            <!-- ITEM & LINE DETAILS -->
+            <div class="col-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 fw-semibold">
+                            <i class="bi bi-box-seam text-primary me-2"></i>Line Items
+                        </h5>
+                        <span class="badge bg-primary fs-6" id="live_total">Total: €0.00</span>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-3">Add as many items as you need. At least one line is required.</p>
+                        <div id="order-line-formset">
+                            {{ formset.management_form }}
+                            <div class="table-responsive">
+                                <table class="table table-borderless mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th class="text-muted small fw-medium">Item <span class="text-danger">*</span></th>
+                                            <th class="text-muted small fw-medium" style="width: 100px;">Qty</th>
+                                            <th class="text-muted small fw-medium" style="width: 120px;">Unit Price</th>
+                                            <th style="width: 40px;"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="order-line-tbody">
+                                        {% for f in formset %}
+                                        <tr class="order-line-row">
+                                            <td>{{ f.item }}{% if f.item.errors %}<div class="text-danger small">{{ f.item.errors }}</div>{% endif %}</td>
+                                            <td>{{ f.quantity }}{% if f.quantity.errors %}<div class="text-danger small">{{ f.quantity.errors }}</div>{% endif %}</td>
+                                            <td>{{ f.unit_price }}{% if f.unit_price.errors %}<div class="text-danger small">{{ f.unit_price.errors }}</div>{% endif %}</td>
+                                            <td>{% if formset.can_delete %}{{ f.DELETE }}{% endif %}{{ f.id }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="add-order-line">
+                                <i class="bi bi-plus-lg me-1"></i>Add another line
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PARTY & LOCATION -->
+            <div class="col-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white border-bottom py-3">
+                        <h5 class="mb-0 fw-semibold">
+                            <i class="bi bi-building text-primary me-2"></i>Party & Location
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6" id="supplier_box">
+                                <label class="form-label fw-medium">Supplier (Purchase)</label>
+                                {{ form.supplier }}
+                                <small class="text-muted d-block">Company items are ordered from</small>
+                            </div>
+                            <div class="col-md-6" id="customer_box">
+                                <label class="form-label fw-medium">Customer (Sale)</label>
+                                {{ form.client }}
+                                <small class="text-muted d-block">Company items are being sold to</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-medium">Party Reference</label>
+                                {{ form.party_reference }}
+                                <small class="text-muted d-block">Their order reference code</small>
+                            </div>
+                            <div class="col-md-6" id="shipping_location_box">
+                                <label class="form-label fw-medium">Shipping Location (Sale)</label>
+                                {{ form.shipping_location }}
+                                <small class="text-muted d-block">Where goods ship from</small>
+                            </div>
+                            <div class="col-md-6" id="receiving_location_box">
+                                <label class="form-label fw-medium">Receiving Location (Purchase)</label>
+                                {{ form.receiving_location }}
+                                <small class="text-muted d-block">Where goods are received</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NOTES & LINKS -->
+            <div class="col-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white border-bottom py-3">
+                        <h5 class="mb-0 fw-semibold">
+                            <i class="bi bi-chat-left-text text-primary me-2"></i>Notes & Links
+                            <small class="fw-normal text-muted ms-2">(internal notes not shown externally)</small>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-medium">External Link</label>
+                            {{ form.external_link }}
+                            <small class="text-muted d-block">Link to external page</small>
+                        </div>
+                        <div class="mb-0">
+                            <label class="form-label fw-medium">Internal Notes</label>
+                            {{ form.notes }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ACTIONS (matches stock item form) -->
+        <div class="d-flex flex-wrap gap-2 mt-4 pt-3 border-top">
+            {% if edit and perms.inventory.change_order %}
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-check-lg me-1"></i>Save changes
+                </button>
+            {% elif not edit and perms.inventory.add_order %}
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-plus-lg me-1"></i>Create order
+                </button>
             {% endif %}
+            <a href="{% url 'order_list' %}?type={% if edit %}{{ order.order_type|lower }}{% elif forced_type %}{{ forced_type }}{% else %}purchase{% endif %}" class="btn btn-secondary">
+                <i class="bi bi-x-lg me-1"></i>Cancel
+            </a>
         </div>
+    </form>
 
-        <div class="col-md-3">
-            <label class="form-label">Status</label>
-            {{ form.status }}
-        </div>
+    <script>
+    document.addEventListener("DOMContentLoaded", function () {
+        var priceDataTag = document.getElementById("item-price-data");
+        var itemPrices = {};
+        try { itemPrices = JSON.parse(priceDataTag ? priceDataTag.textContent : "{}"); } catch(e) {}
+        var totalBadge = document.getElementById("live_total");
 
-        <div class="col-md-3">
-            <label class="form-label">Priority</label>
-            {{ form.priority }}
-        </div>
+        function updateTotal() {
+            var total = 0;
+            document.querySelectorAll(".order-line-row").forEach(function(row) {
+                var qtyInput = row.querySelector(".order-line-qty, input[name*='quantity']");
+                var priceInput = row.querySelector(".order-line-price, input[name*='unit_price']");
+                var deleteCb = row.querySelector("input[name*='DELETE']");
+                if (deleteCb && deleteCb.checked) return;
+                if (qtyInput && priceInput) {
+                    total += (parseFloat(qtyInput.value) || 0) * (parseFloat(priceInput.value) || 0);
+                }
+            });
+            if (totalBadge) totalBadge.textContent = "Total: €" + total.toFixed(2);
+        }
 
-        <div class="col-md-3">
-            <label class="form-label">Order Date</label>
-            {{ form.order_date }}
-        </div>
-
-        <!-- ITEM -->
-        <div class="col-md-6">
-            <label class="form-label">Item</label>
-            {{ form.item }}
-        </div>
-
-        <!-- QTY -->
-        <div class="col-md-3">
-            <label class="form-label">Quantity</label>
-            {{ form.quantity }}
-        </div>
-
-        <!-- UNIT PRICE -->
-        <div class="col-md-3">
-            <label class="form-label">Unit Price</label>
-            {{ form.unit_price }}
-        </div>
-
-        <!-- SUPPLIER -->
-        <div class="col-md-6" id="supplier_box">
-            <label class="form-label">Supplier (for Purchase)</label>
-            {{ form.supplier }}
-        </div>
-
-        <!-- CUSTOMER -->
-        <div class="col-md-6" id="customer_box">
-            <label class="form-label">Customer (for Sale)</label>
-            {{ form.client }}
-        </div>
-
-        <!-- SHIPPING LOCATION (Sale orders) -->
-        <div class="col-md-6" id="shipping_location_box">
-            <label class="form-label">Shipping location (for Sale)</label>
-            {{ form.shipping_location }}
-        </div>
-
-        <!-- RECEIVING LOCATION (Purchase orders) -->
-        <div class="col-md-6" id="receiving_location_box">
-            <label class="form-label">Receiving location (for Purchase)</label>
-            {{ form.receiving_location }}
-        </div>
-
-        <div class="col-12">
-            <label class="form-label">Notes</label>
-            {{ form.notes }}
-        </div>
-
-        <!-- LIVE TOTAL DISPLAY -->
-        <div class="col-12 text-end">
-            <span class="badge bg-primary fs-6" id="live_total">Total: €0.00</span>
-        </div>
-
-    </div>
-
-    <div class="card-footer d-flex justify-content-between">
-        <a href="{% url 'order_list' %}" class="btn btn-secondary">Cancel</a>
-        <button type="submit" class="btn btn-primary">
-            {% if edit %}Save Changes{% else %}Create Order{% endif %}
-        </button>
-    </div>
-</form>
-
-<script id="item-price-data" type="application/json">
-    {
-    {% for item in form.fields.item.queryset %}
-        "{{ item.id }}": "{{ item.unit_cost|default:'0' }}"{% if not forloop.last %},{% endif %}
-    {% endfor %}
-    }
-</script>
-
-
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-
-    // Load price data from clean JSON script tag
-    const priceDataTag = document.getElementById("item-price-data");
-    const itemPrices = JSON.parse(priceDataTag.textContent);
-
-    const itemSelect = document.querySelector("#id_item");
-    const priceInput = document.querySelector("#id_unit_price");
-    const qtyInput = document.querySelector("#id_quantity");
-    const totalBadge = document.querySelector("#live_total");
-
-    function updateTotal() {
-        const qty = parseFloat(qtyInput.value) || 0;
-        const price = parseFloat(priceInput.value) || 0;
-        const total = (qty * price).toFixed(2);
-        if (totalBadge) totalBadge.textContent = `Total: €${total}`;
-    }
-
-    if (itemSelect) {
-        itemSelect.addEventListener("change", function () {
-            const id = itemSelect.value;
-            if (itemPrices[id]) {
-                priceInput.value = itemPrices[id];
+        document.getElementById("order-line-formset").addEventListener("input", function() {
+            updateTotal();
+        });
+        document.getElementById("order-line-formset").addEventListener("change", function(e) {
+            if (e.target.name && (e.target.name.indexOf("item") !== -1 || e.target.name.indexOf("quantity") !== -1 || e.target.name.indexOf("unit_price") !== -1 || e.target.name.indexOf("DELETE") !== -1)) {
                 updateTotal();
             }
         });
-    }
+        updateTotal();
+    });
+    </script>
+    <script>
+    document.addEventListener("DOMContentLoaded", function () {
+        var addBtn = document.getElementById("add-order-line");
+        var tbody = document.getElementById("order-line-tbody");
+        var totalInput = document.querySelector('input[name*="-TOTAL_FORMS"]');
+        if (!addBtn || !tbody || !totalInput) return;
 
-    qtyInput.addEventListener("input", updateTotal);
-    priceInput.addEventListener("input", updateTotal);
-    updateTotal();
-});
-</script>
+        addBtn.addEventListener("click", function () {
+            var rows = tbody.querySelectorAll(".order-line-row");
+            var lastRow = rows[rows.length - 1];
+            if (!lastRow) return;
+            var newRow = lastRow.cloneNode(true);
+            var nextNum = parseInt(totalInput.value, 10);
+            newRow.querySelectorAll("input, select").forEach(function(input) {
+                if (input.name) {
+                    input.name = input.name.replace(/-\d+-/, "-" + nextNum + "-");
+                    input.id = (input.id || "").replace(/_\d+_/, "_" + nextNum + "_");
+                }
+                if (input.type !== "hidden") input.value = "";
+                if (input.type === "checkbox" && input.name.indexOf("DELETE") !== -1) input.checked = false;
+            });
+            newRow.querySelectorAll("label").forEach(function(lbl) {
+                if (lbl.htmlFor) lbl.htmlFor = lbl.htmlFor.replace(/_\d+_/, "_" + nextNum + "_");
+            });
+            tbody.appendChild(newRow);
+            totalInput.value = nextNum + 1;
+        });
+    });
+    </script>
 
+    <script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const typeSelect = document.querySelector("#id_order_type");
+        const supplierBox = document.querySelector("#supplier_box");
+        const customerBox = document.querySelector("#customer_box");
+        const shippingLocBox = document.querySelector("#shipping_location_box");
+        const receivingLocBox = document.querySelector("#receiving_location_box");
 
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-
-    // -------------------------
-    // HANDLE SHOW/HIDE FIELDS
-    // -------------------------
-    const typeSelect = document.querySelector("#id_order_type");
-    const supplierBox = document.querySelector("#supplier_box");
-    const customerBox = document.querySelector("#customer_box");
-    const shippingLocBox = document.querySelector("#shipping_location_box");
-    const receivingLocBox = document.querySelector("#receiving_location_box");
-
-    function updatePartyAndLocationFields() {
-        let type = typeSelect ? typeSelect.value : "";
-        if (!type && typeSelect && typeSelect.dataset.forcedType) {
-            type = (typeSelect.dataset.forcedType + "").toUpperCase();
+        function updatePartyAndLocationFields() {
+            let type = typeSelect ? typeSelect.value : "";
+            if (!type && typeSelect && typeSelect.dataset.forcedType) {
+                type = (typeSelect.dataset.forcedType + "").toUpperCase();
+            }
+            if (type === "PURCHASE") {
+                if (supplierBox) supplierBox.style.display = "";
+                if (customerBox) customerBox.style.display = "none";
+                if (shippingLocBox) shippingLocBox.style.display = "none";
+                if (receivingLocBox) receivingLocBox.style.display = "";
+            } else if (type === "SALE") {
+                if (supplierBox) supplierBox.style.display = "none";
+                if (customerBox) customerBox.style.display = "";
+                if (shippingLocBox) shippingLocBox.style.display = "";
+                if (receivingLocBox) receivingLocBox.style.display = "none";
+            } else {
+                if (supplierBox) supplierBox.style.display = "";
+                if (customerBox) customerBox.style.display = "";
+                if (shippingLocBox) shippingLocBox.style.display = "";
+                if (receivingLocBox) receivingLocBox.style.display = "";
+            }
         }
-        if (type === "PURCHASE") {
-            if (supplierBox) supplierBox.style.display = "block";
-            if (customerBox) customerBox.style.display = "none";
-            if (shippingLocBox) shippingLocBox.style.display = "none";
-            if (receivingLocBox) receivingLocBox.style.display = "block";
-        } else if (type === "SALE") {
-            if (supplierBox) supplierBox.style.display = "none";
-            if (customerBox) customerBox.style.display = "block";
-            if (shippingLocBox) shippingLocBox.style.display = "block";
-            if (receivingLocBox) receivingLocBox.style.display = "none";
-        } else {
-            if (supplierBox) supplierBox.style.display = "block";
-            if (customerBox) customerBox.style.display = "block";
-            if (shippingLocBox) shippingLocBox.style.display = "block";
-            if (receivingLocBox) receivingLocBox.style.display = "block";
+
+        if (typeSelect) {
+            typeSelect.addEventListener("change", updatePartyAndLocationFields);
+            updatePartyAndLocationFields();
         }
-    }
+    });
+    </script>
 
-    if (typeSelect) {
-        typeSelect.addEventListener("change", updatePartyAndLocationFields);
-        updatePartyAndLocationFields();
-    }
+    {% else %}
 
-});
-</script>
+    <div class="alert alert-danger">
+        You don't have permission to {% if edit %}edit{% else %}create{% endif %} orders.
+    </div>
+    <a href="{% url 'order_list' %}?type={% if edit %}{{ order.order_type|lower }}{% elif forced_type %}{{ forced_type }}{% else %}purchase{% endif %}" class="btn btn-secondary">Back</a>
 
-{% else %}
-
-<div class="alert alert-danger">
-    You don’t have permission to {% if edit %}edit{% else %}create{% endif %} orders.
+    {% endif %}
 </div>
-<a href="{% url 'order_list' %}" class="btn btn-secondary">Back</a>
-
-{% endif %}
-
 {% endblock %}

@@ -27,6 +27,14 @@
         </div>
     </div>
 
+    <!-- Quick filter chips -->
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <span class="text-muted small me-1">Quick:</span>
+        <a href="?{% querystring request filter='low_stock' %}" class="btn btn-sm {% if filter_option == 'low_stock' %}btn-warning text-dark{% else %}btn-outline-warning{% endif %} py-0">Low stock</a>
+        <a href="?{% querystring request filter='out_of_stock' %}" class="btn btn-sm {% if filter_option == 'out_of_stock' %}btn-danger{% else %}btn-outline-danger{% endif %} py-0">Out of stock</a>
+        <a href="?{% querystring request filter='expired' %}" class="btn btn-sm {% if filter_option == 'expired' %}btn-secondary{% else %}btn-outline-secondary{% endif %} py-0">Expired</a>
+    </div>
+
     <!-- SEARCH + FILTER -->
     <div class="card shadow-sm border-0 mb-4">
         <div class="card-body py-3">
@@ -99,6 +107,15 @@
             {% endif %}
         </p>
         <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Table density">
+                <i class="bi bi-arrows-expand me-1"></i>Density
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm p-2">
+                <li><button type="button" class="dropdown-item small py-1 ww-density" data-density="comfortable">Comfortable</button></li>
+                <li><button type="button" class="dropdown-item small py-1 ww-density" data-density="compact">Compact</button></li>
+            </ul>
+        </div>
+        <div class="dropdown">
             <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Select columns">
                 <i class="bi bi-layout-three-columns me-1"></i>Columns
             </button>
@@ -140,10 +157,10 @@
         </div>
     </div>
 
-    <!-- STOCK TABLE -->
-    <div class="card shadow-sm border-0 overflow-hidden">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0" id="stock-items-table">
+    <!-- STOCK TABLE (sticky header, density) -->
+    <div class="card shadow-sm border-0 overflow-hidden" id="item-table-card">
+        <div class="table-responsive ww-table-responsive">
+            <table class="table table-hover align-middle mb-0 ww-sticky-header" id="stock-items-table">
                 <thead class="table-light">
                     <tr>
                         <th style="width:40px;">
@@ -365,13 +382,17 @@
     if (search && search !== '?') {
         try { localStorage.setItem(PARAMS_KEY, search); } catch (e) {}
     } else {
-        try {
-            var saved = localStorage.getItem(PARAMS_KEY);
-            if (saved && saved.length > 1) {
-                window.location.replace(baseUrl + (saved.startsWith('?') ? saved : '?' + saved));
-                return;
-            }
-        } catch (e) {}
+        /* Skip auto-restore when there are flash messages (e.g. error from adjust) */
+        var hasFlash = document.querySelector('.ww-alerts .alert');
+        if (!hasFlash) {
+            try {
+                var saved = localStorage.getItem(PARAMS_KEY);
+                if (saved && saved.length > 1) {
+                    window.location.replace(baseUrl + (saved.startsWith('?') ? saved : '?' + saved));
+                    return;
+                }
+            } catch (e) {}
+        }
     }
 
     var form = document.getElementById('item-filter-form');
@@ -425,6 +446,23 @@
     });
     document.addEventListener('DOMContentLoaded', applyColumnVisibility);
     applyColumnVisibility();
+
+    var DENSITY_KEY = 'warewolf_item_list_density';
+    document.querySelectorAll('.ww-density').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var d = this.dataset.density;
+            var card = document.getElementById('item-table-card');
+            if (card) {
+                card.classList.remove('ww-table-compact');
+                if (d === 'compact') card.classList.add('ww-table-compact');
+            }
+            try { localStorage.setItem(DENSITY_KEY, d); } catch (e) {}
+        });
+    });
+    try {
+        var savedD = localStorage.getItem(DENSITY_KEY);
+        if (savedD === 'compact') document.getElementById('item-table-card')?.classList.add('ww-table-compact');
+    } catch (e) {}
 
     // Row selection & actions
     var selectAll = document.getElementById('select-all');

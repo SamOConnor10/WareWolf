@@ -1,7 +1,7 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.db.models import Count, Sum
-from .models import Item, Supplier, Client, Location, Order, StockHistory, Category
-from .forms import ItemForm, OrderForm, SupplierForm, ClientForm, CategoryForm, LocationForm
+from .models import Item, Supplier, Client, Location, Order, OrderLine, StockHistory, Category
+from .forms import ItemForm, OrderForm, OrderLineFormSet, SupplierForm, ClientForm, CategoryForm, LocationForm
 from django.db.models import F, Q
 from django.core.paginator import Paginator
 from django.http import HttpResponse
@@ -12,7 +12,7 @@ from datetime import date, timedelta
 from django.db import models
 from decimal import Decimal
 from django.utils import timezone
-from django.db.models.functions import TruncWeek
+from django.db.models.functions import TruncWeek, Coalesce
 from django.http import JsonResponse
 from django.urls import reverse
 from inventory.models import Activity
@@ -35,6 +35,11 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.contrib.auth.decorators import user_passes_test
 from django.views.decorators.cache import never_cache
+from django.utils.dateparse import parse_date
+from .recommendation_engine import (
+    recalculate_all_recommendations,
+    get_recommendations_for_context,
+)
 
 # Shared pagination settings for all list views
 DEFAULT_PER_PAGE = 20
@@ -215,17 +220,21 @@ def global_search(request):
             "url": reverse("location_view", args=[l.id]),
         })
 
-    # Orders -> order edit (acts as profile page; no separate order_detail view)
-    for o in Order.objects.filter(
-        Q(id__icontains=q) |
+    # Orders -> order detail
+    for o in Order.objects.prefetch_related("lines__item").filter(
         Q(notes__icontains=q) |
-        Q(item__name__icontains=q)
-    )[:5]:
+        Q(reference__icontains=q) |
+        Q(lines__item__name__icontains=q)
+    ).distinct()[:5]:
+        lines = list(o.lines.select_related("item").all()[:2])
+        sub = ", ".join(ln.item.name for ln in lines) if lines else "—"
+        if o.lines.count() > 2:
+            sub += f" (+{o.lines.count() - 2} more)"
         results.append({
             "type": "Order",
             "name": f"Order #{o.id}",
-            "sub": f"{o.order_type.title()} – {o.item.name}",
-            "url": reverse("order_edit", args=[o.id]),
+            "sub": f"{o.order_type.title()} – {sub}",
+            "url": reverse("order_detail", args=[o.id]),
         })
 
     return JsonResponse({"results": results})
@@ -426,7 +435,7 @@ def dashboard(request):
     # ---- top items by number of orders (for chart + highlight) ----
     top_items_qs = (
         Item.objects
-        .annotate(total_orders=Count("orders"))
+        .annotate(total_orders=Count("order_lines"))
         .filter(total_orders__gt=0)
         .order_by("-total_orders")[:5]
     )
@@ -464,66 +473,10 @@ def dashboard(request):
     location_values = [int(row["total_qty"]) for row in location_qs]
 
     # -------------------------------
-    # SMART PURCHASE ORDER RECOMMENDATIONS
+    # SMART RECOMMENDATIONS (unified engine)
     # -------------------------------
-    recommendations = []
-    today = timezone.now().date()
-
-    for item in Item.objects.all():
-        # Must be low stock
-        if item.quantity > item.reorder_level:
-            continue
-
-        # Recent stock adjustments (from StockHistory):
-        recent_adjustments = StockHistory.objects.filter(
-            item=item,
-            date__gte=today - datetime.timedelta(days=7)
-        ).count()
-
-        # Recent sale orders:
-        recent_sales = Order.objects.filter(
-            item=item,
-            order_type="SALE",
-            order_date__gte=today - datetime.timedelta(days=7)
-        ).count()
-
-        # Total 30-day activity:
-        monthly_activity = recent_adjustments + Order.objects.filter(
-            item=item,
-            order_type="SALE",
-            order_date__gte=today - datetime.timedelta(days=30)
-        ).count()
-
-        # NEW RULES
-        active = False
-
-        # Rule 1: recent adjustments
-        if recent_adjustments >= 2:
-            active = True
-
-        # Rule 2: recent sales
-        if recent_sales >= 1:
-            active = True
-
-        # Rule 3: monthly activity threshold
-        if monthly_activity >= 3:
-            active = True
-
-        # Rule 4: new item but recently changed
-        if StockHistory.objects.filter(item=item).count() < 5:
-            if recent_adjustments >= 1 or recent_sales >= 1:
-                active = True
-
-        if not active:
-            continue
-
-        # Recommendation amount
-        recommended_qty = max(item.reorder_level * 2 - item.quantity, 1)
-
-        recommendations.append({
-            "item": item,
-            "recommended_qty": recommended_qty,
-        })
+    recalculate_all_recommendations()
+    recommendations = get_recommendations_for_context("dashboard", limit=8)
 
     is_manager_or_admin = request.user.groups.filter(name__in=["Manager", "Admin"]).exists()
 
@@ -561,6 +514,7 @@ def dashboard(request):
         "location_values": location_values,
 
         "recommendations": recommendations,
+        "context_type": "dashboard",
     }
 
     response = render(request, "inventory/dashboard.html", context)
@@ -742,7 +696,7 @@ def anomaly_undismiss(request, pk):
 def item_list(request):
 
     items = Item.objects.select_related("supplier", "location", "category").annotate(
-        order_count=Count("orders"),
+        order_count=Count("order_lines"),
         history_count=Count("history", distinct=True),
     )
 
@@ -869,23 +823,31 @@ def item_detail(request, pk):
         Item.objects.select_related("supplier", "location", "category"),
         pk=pk,
     )
-    orders = item.orders.select_related("supplier", "client", "shipping_location", "receiving_location").order_by("-order_date")[:20]
+    order_lines = (
+        OrderLine.objects.filter(item=item)
+        .select_related("order", "order__supplier", "order__client")
+        .order_by("-order__order_date")[:20]
+    )
     recent_history = item.history.order_by("-date")[:14]
     anomalies = item.demand_anomalies.filter(dismissed=False).order_by("-date")[:5]
 
     # Clients who have purchased this item (from sale orders)
     client_ids = (
-        item.orders.filter(order_type=Order.TYPE_SALE, client__isnull=False)
+        Order.objects.filter(
+            lines__item=item,
+            order_type=Order.TYPE_SALE,
+            client__isnull=False,
+        )
         .values_list("client", flat=True)
         .distinct()
     )
     clients = Client.objects.filter(id__in=client_ids)[:10]
 
-    # Order stats
-    order_stats = item.orders.aggregate(
-        total_purchased=Count("id", filter=Q(order_type=Order.TYPE_PURCHASE)),
-        total_sold=Count("id", filter=Q(order_type=Order.TYPE_SALE)),
-    )
+    # Order stats (count lines, not orders)
+    order_stats = {
+        "total_purchased": OrderLine.objects.filter(item=item, order__order_type=Order.TYPE_PURCHASE).count(),
+        "total_sold": OrderLine.objects.filter(item=item, order__order_type=Order.TYPE_SALE).count(),
+    }
 
     # Related items (same category)
     related_items = []
@@ -907,7 +869,7 @@ def item_detail(request, pk):
 
     return render(request, "inventory/item_detail.html", {
         "item": item,
-        "orders": orders,
+        "order_lines": order_lines,
         "recent_history": recent_history,
         "anomalies": anomalies,
         "clients": clients,
@@ -946,7 +908,15 @@ def item_adjust_quantity(request, pk):
 
     if request.method == "POST":
         adjustment = int(request.POST.get("adjustment"))
-        item.quantity = item.quantity + adjustment
+        new_qty = item.quantity + adjustment
+        if new_qty < 0:
+            messages.error(
+                request,
+                f"Cannot adjust {item.name}: quantity would become {new_qty}. "
+                "Stock cannot go below zero."
+            )
+            return redirect("item_list")
+        item.quantity = new_qty
         item.save()
         item.maybe_archive_on_deplete()
 
@@ -1056,11 +1026,11 @@ def item_hard_delete(request, pk):
 
     if request.method == "POST":
         # Count related records for messaging
-        orders_deleted = Order.objects.filter(item=item).count()
+        order_lines_deleted = OrderLine.objects.filter(item=item).count()
         history_deleted = StockHistory.objects.filter(item=item).count()
 
-        # Delete related records first
-        Order.objects.filter(item=item).delete()
+        # Delete related records first (OrderLine before Item)
+        OrderLine.objects.filter(item=item).delete()
         StockHistory.objects.filter(item=item).delete()
 
         name = item.name
@@ -1068,12 +1038,12 @@ def item_hard_delete(request, pk):
 
         messages.success(
             request,
-            f"Permanently deleted item '{name}' (orders: {orders_deleted}, history: {history_deleted})."
+            f"Permanently deleted item '{name}' (order lines: {order_lines_deleted}, history: {history_deleted})."
         )
         return redirect("item_list")
 
     # GET -> show confirmation page with counts
-    order_count = Order.objects.filter(item=item).count()
+    order_count = OrderLine.objects.filter(item=item).count()
     history_count = StockHistory.objects.filter(item=item).count()
 
     return render(request, "inventory/item_hard_delete_confirm.html", {
@@ -1247,6 +1217,7 @@ def location_list(request):
     locations = Location.objects.annotate(
         stock=Sum("inventory_items__quantity"),
         item_count=Count("inventory_items", distinct=True),
+        child_count=Count("children", distinct=True),
     )
 
     # -------------------------
@@ -1462,14 +1433,34 @@ def location_edit(request, pk):
 @login_required
 @permission_required("inventory.delete_location", raise_exception=True)
 def location_delete(request, pk):
-    location = get_object_or_404(Location, pk=pk)
-
     if request.method == "POST":
-        location.delete()
+        delete_mode = request.POST.get("delete_mode", "detach")
+        ids = request.POST.getlist("ids")
+        if ids:
+            roots = list(Location.objects.filter(id__in=ids))
+        else:
+            roots = [get_object_or_404(Location, pk=pk)]
+
+        if delete_mode == "cascade":
+            # Delete each selected location and all of its descendants
+            ids_to_delete = set()
+            queue = list(roots)
+            while queue:
+                current = queue.pop(0)
+                if current.id in ids_to_delete:
+                    continue
+                ids_to_delete.add(current.id)
+                queue.extend(list(current.children.all()))
+            Location.objects.filter(id__in=ids_to_delete).delete()
+        else:
+            # Delete only root locations and detach their direct children
+            for root in roots:
+                Location.objects.filter(parent=root).update(parent=None)
+                root.delete()
         return redirect("location_list")
 
     return render(request, "inventory/location_confirm_delete.html", {
-        "location": location,
+        "location": get_object_or_404(Location, pk=pk),
         "view": "locations",
     })
 
@@ -1553,14 +1544,14 @@ def location_view(request, pk):
     total_qty = items.aggregate(total=Sum("quantity"))["total"] or 0
 
     # Orders connected to this location
-    sales_shipped = Order.objects.filter(
+    sales_shipped = Order.objects.prefetch_related("lines__item").filter(
         order_type=Order.TYPE_SALE,
         shipping_location=location,
-    ).select_related("item", "client").order_by("-order_date")[:15]
-    purchases_received = Order.objects.filter(
+    ).select_related("client").order_by("-order_date")[:15]
+    purchases_received = Order.objects.prefetch_related("lines__item").filter(
         order_type=Order.TYPE_PURCHASE,
         receiving_location=location,
-    ).select_related("item", "supplier").order_by("-order_date")[:15]
+    ).select_related("supplier").order_by("-order_date")[:15]
     sales_shipped_count = Order.objects.filter(
         order_type=Order.TYPE_SALE,
         shipping_location=location,
@@ -1593,27 +1584,40 @@ def location_view(request, pk):
 @login_required
 @permission_required("inventory.view_order", raise_exception=True)
 def order_list(request):
-    orders = Order.objects.select_related("item", "supplier", "client", "shipping_location", "receiving_location")
+    orders = (
+        Order.objects.select_related(
+            "supplier", "client", "shipping_location", "receiving_location"
+        )
+        .prefetch_related("lines", "lines__item")
+        .annotate(
+            total_value=Sum(F("lines__quantity") * F("lines__unit_price")),
+            party_name_sort=Coalesce("supplier__name", "client__name"),
+            location_name_sort=Coalesce("shipping_location__name", "receiving_location__name"),
+        )
+    )
 
     # --- filter by item ---
     item_id = request.GET.get("item")
     if item_id:
-        orders = orders.filter(item_id=item_id)
+        orders = orders.filter(lines__item_id=item_id).distinct()
 
     # --- search ---
     q = request.GET.get("q", "").strip()
     if q:
         orders = orders.filter(
-            Q(item__name__icontains=q)
+            Q(lines__item__name__icontains=q)
             | Q(supplier__name__icontains=q)
             | Q(client__name__icontains=q)
-        )
+            | Q(reference__icontains=q)
+        ).distinct()
 
-    # --- filter by type (all / purchase / sale) ---
-    type_filter = request.GET.get("type", "all")
+    # --- filter by type (purchase / sale only; no "all") ---
+    type_filter = request.GET.get("type", "purchase")
+    if type_filter not in ("purchase", "sale"):
+        type_filter = "purchase"
     if type_filter == "purchase":
         orders = orders.filter(order_type=Order.TYPE_PURCHASE)
-    elif type_filter == "sale":
+    else:
         orders = orders.filter(order_type=Order.TYPE_SALE)
 
     # --- filter by status ---
@@ -1630,10 +1634,61 @@ def order_list(request):
     if receiving_location_id:
         orders = orders.filter(receiving_location_id=receiving_location_id)
 
+    # --- saved view presets (override date range) ---
+    today = timezone.now().date()
+    saved_view = request.GET.get("saved_view")
+    if saved_view == "today":
+        date_from_str = today.isoformat()
+        date_to_str = today.isoformat()
+    elif saved_view == "week":
+        start_week = today - timedelta(days=today.weekday())
+        date_from_str = start_week.isoformat()
+        date_to_str = today.isoformat()
+    elif saved_view == "30d":
+        date_from_str = (today - timedelta(days=30)).isoformat()
+        date_to_str = today.isoformat()
+    else:
+        date_from_str = request.GET.get("date_from")
+        date_to_str = request.GET.get("date_to")
+
+    # --- quick filter chips ---
+    if request.GET.get("overdue") == "1":
+        orders = orders.filter(
+            target_date__lt=today,
+            status__in=[Order.STATUS_PENDING, Order.STATUS_PROCESSING, Order.STATUS_SHIPPED],
+        )
+    if request.GET.get("priority") == "HIGH":
+        orders = orders.filter(priority=Order.PRIORITY_HIGH)
+    min_total_val = request.GET.get("min_total")
+    if min_total_val:
+        try:
+            min_t = Decimal(min_total_val)
+            orders = orders.filter(total_value__gte=min_t)
+        except (ValueError, TypeError):
+            pass
+
+    # --- date range filters ---
+    if date_from_str:
+        date_from = parse_date(date_from_str)
+        if date_from:
+            orders = orders.filter(order_date__gte=date_from)
+    if date_to_str:
+        date_to = parse_date(date_to_str)
+        if date_to:
+            orders = orders.filter(order_date__lte=date_to)
+
     # --- sorting ---
     sort = request.GET.get("sort", "-order_date")
-    valid_sorts = ["order_date", "-order_date", "id", "-id", "quantity", "-quantity", "status", "-status",
-                   "item__name", "-item__name", "order_type", "-order_type"]
+    valid_sorts = [
+        "order_date", "-order_date",
+        "id", "-id",
+        "reference", "-reference",
+        "status", "-status",
+        "party_name_sort", "-party_name_sort",
+        "location_name_sort", "-location_name_sort",
+        "total_value", "-total_value",
+        "order_type", "-order_type",
+    ]
     if sort not in valid_sorts:
         sort = "-order_date"
     orders = orders.order_by(sort)
@@ -1644,11 +1699,44 @@ def order_list(request):
     page = request.GET.get("page")
     orders = paginator.get_page(page)
 
-    # Summary cards
-    purchase_count = Order.objects.filter(order_type=Order.TYPE_PURCHASE).count()
-    sale_count = Order.objects.filter(order_type=Order.TYPE_SALE).count()
-    pending_count = Order.objects.filter(status=Order.STATUS_PENDING).count()
-    delivered_count = Order.objects.filter(status=Order.STATUS_DELIVERED).count()
+    # Summary counts for current order type only
+    type_qs = Order.objects.filter(
+        order_type=Order.TYPE_PURCHASE if type_filter == "purchase" else Order.TYPE_SALE
+    )
+    current_total = type_qs.count()
+    current_pending = type_qs.filter(status=Order.STATUS_PENDING).count()
+    current_delivered = type_qs.filter(status=Order.STATUS_DELIVERED).count()
+    current_processing = type_qs.filter(status=Order.STATUS_PROCESSING).count()
+    current_shipped = type_qs.filter(status=Order.STATUS_SHIPPED).count()
+    current_overdue = type_qs.filter(
+        target_date__lt=today,
+        status__in=[Order.STATUS_PENDING, Order.STATUS_PROCESSING, Order.STATUS_SHIPPED],
+    ).count()
+
+    # Locations for filters
+    locations = Location.objects.filter(is_active=True).order_by("name")
+
+    # Determine if any filters are active (for "clear filters" banner)
+    has_filters = any(
+        [
+            q,
+            status_filter != "all",
+            item_id,
+            shipping_location_id,
+            receiving_location_id,
+            date_from_str,
+            date_to_str,
+            request.GET.get("overdue") == "1",
+            request.GET.get("priority") == "HIGH",
+            request.GET.get("min_total"),
+        ]
+    )
+
+    # Recommendations for this context (purchase vs sale)
+    recalculate_all_recommendations()
+    recommendations = get_recommendations_for_context(
+        "purchase" if type_filter == "purchase" else "sale", limit=6
+    )
 
     return render(request, "inventory/order_list.html", {
         "orders": orders,
@@ -1660,65 +1748,137 @@ def order_list(request):
         "status_filter": status_filter,
         "status_choices": Order.STATUS_CHOICES,
         "sort": sort,
-        "purchase_count": purchase_count,
-        "sale_count": sale_count,
-        "pending_count": pending_count,
-        "delivered_count": delivered_count,
+        "date_from": date_from_str or "",
+        "date_to": date_to_str or "",
+        "shipping_location_id": shipping_location_id or "",
+        "receiving_location_id": receiving_location_id or "",
+        "locations": locations,
+        "has_filters": has_filters,
+        "current_total": current_total,
+        "current_pending": current_pending,
+        "current_delivered": current_delivered,
+        "current_processing": current_processing,
+        "current_shipped": current_shipped,
+        "current_overdue": current_overdue,
+        "today": today,
+        "recommendations": recommendations,
+        "context_type": type_filter,
+    })
+
+
+@login_required
+@permission_required("inventory.view_order", raise_exception=True)
+def order_detail(request, pk):
+    order = get_object_or_404(
+        Order.objects.prefetch_related("lines", "lines__item").select_related(
+            "supplier", "client", "shipping_location", "receiving_location"
+        ),
+        pk=pk,
+    )
+    # Other orders from same party (supplier/client)
+    other_orders = None
+    if order.supplier_id:
+        other_orders = Order.objects.filter(supplier_id=order.supplier_id).exclude(pk=order.pk).select_related("supplier").prefetch_related("lines", "lines__item").order_by("-order_date")[:10]
+    elif order.client_id:
+        other_orders = Order.objects.filter(client_id=order.client_id).exclude(pk=order.pk).select_related("client").prefetch_related("lines", "lines__item").order_by("-order_date")[:10]
+
+    return render(request, "inventory/order_detail.html", {
+        "order": order,
+        "today": timezone.now().date(),
+        "other_orders_from_party": other_orders or [],
+        "type_filter": order.order_type.lower(),
     })
 
 
 @login_required
 @permission_required("inventory.view_order", raise_exception=True)
 def order_export_csv(request):
-    """Export orders to CSV, respecting current filters."""
-    orders = Order.objects.select_related("item", "supplier", "client")
+    """Export orders to CSV, respecting current filters. Pass ids=1,2,3 to export only selected orders."""
+    orders = Order.objects.prefetch_related("lines", "lines__item").select_related("supplier", "client")
+    ids_param = request.GET.get("ids", "").strip()
+    if ids_param:
+        try:
+            id_list = [int(x.strip()) for x in ids_param.split(",") if x.strip()]
+            if id_list:
+                orders = orders.filter(pk__in=id_list)
+        except (ValueError, TypeError):
+            pass
     item_id = request.GET.get("item")
     if item_id:
-        orders = orders.filter(item_id=item_id)
+        orders = orders.filter(lines__item_id=item_id).distinct()
     q = request.GET.get("q", "").strip()
     if q:
         orders = orders.filter(
-            Q(item__name__icontains=q)
+            Q(lines__item__name__icontains=q)
             | Q(supplier__name__icontains=q)
             | Q(client__name__icontains=q)
-        )
-    type_filter = request.GET.get("type", "all")
+            | Q(reference__icontains=q)
+        ).distinct()
+
+    type_filter = request.GET.get("type", "purchase")
+    if type_filter not in ("purchase", "sale"):
+        type_filter = "purchase"
     if type_filter == "purchase":
         orders = orders.filter(order_type=Order.TYPE_PURCHASE)
-    elif type_filter == "sale":
+    else:
         orders = orders.filter(order_type=Order.TYPE_SALE)
+
     status_filter = request.GET.get("status", "all")
     valid_statuses = dict(Order.STATUS_CHOICES).keys()
     if status_filter in valid_statuses:
         orders = orders.filter(status=status_filter)
+
     shipping_location_id = request.GET.get("shipping_location")
     if shipping_location_id:
         orders = orders.filter(shipping_location_id=shipping_location_id)
     receiving_location_id = request.GET.get("receiving_location")
     if receiving_location_id:
         orders = orders.filter(receiving_location_id=receiving_location_id)
+
+    date_from_str = request.GET.get("date_from")
+    date_to_str = request.GET.get("date_to")
+    if date_from_str:
+        date_from = parse_date(date_from_str)
+        if date_from:
+            orders = orders.filter(order_date__gte=date_from)
+    if date_to_str:
+        date_to = parse_date(date_to_str)
+        if date_to:
+            orders = orders.filter(order_date__lte=date_to)
+
     sort = request.GET.get("sort", "-order_date")
-    valid_sorts = ["order_date", "-order_date", "id", "-id", "quantity", "-quantity", "status", "-status",
-                   "item__name", "-item__name", "order_type", "-order_type"]
+    valid_sorts = [
+        "order_date", "-order_date",
+        "id", "-id",
+        "status", "-status",
+        "order_type", "-order_type",
+    ]
     if sort in valid_sorts:
         orders = orders.order_by(sort)
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="orders.csv"'
     writer = csv.writer(response)
-    writer.writerow(["Order #", "Type", "Item", "Party", "Date", "Qty", "Total", "Status", "Shipping location", "Receiving location"])
+    writer.writerow(["Order #", "Type", "Item", "Party", "Date", "Qty", "Unit Price", "Line Total", "Order Total", "Status", "Shipping location", "Receiving location"])
     for o in orders:
-        writer.writerow([
-            f"ORD-{o.id}",
-            o.get_order_type_display(),
-            o.item.name if o.item else "",
-            o.party_name,
-            o.order_date,
-            o.quantity,
-            o.total,
-            o.get_status_display(),
-            o.shipping_location.name if o.shipping_location else "",
-            o.receiving_location.name if o.receiving_location else "",
-        ])
+        lines = list(o.lines.select_related("item").all())
+        if lines:
+            for i, ln in enumerate(lines):
+                writer.writerow([
+                    f"ORD-{o.id}" if i == 0 else "",
+                    o.get_order_type_display() if i == 0 else "",
+                    ln.item.name if ln.item else "",
+                    o.party_name if i == 0 else "",
+                    o.order_date if i == 0 else "",
+                    ln.quantity,
+                    ln.unit_price,
+                    ln.total,
+                    o.total if i == 0 else "",
+                    o.get_status_display() if i == 0 else "",
+                    o.shipping_location.name if o.shipping_location and i == 0 else "",
+                    o.receiving_location.name if o.receiving_location and i == 0 else "",
+                ])
+        else:
+            writer.writerow([f"ORD-{o.id}", o.get_order_type_display(), "", o.party_name, o.order_date, "", "", o.total, o.get_status_display(), "", ""])
     return response
 
 
@@ -1730,30 +1890,60 @@ def order_create(request):
     forced_type = request.GET.get("type")  
 
     # Recommendation parameters:
-    # ?item=ID  and ?qty=NUMBER
+    # ?item=ID  and ?qty=NUMBER (legacy)
+    # or ?rec=ID (unified Recommendation model)
     item_id = request.GET.get("item")
     qty = request.GET.get("qty")
+    rec_id = request.GET.get("rec")
 
     # Build initial form values
     initial = {}
 
-    # If recommendation supplied an item
-    if item_id:
+    # If unified Recommendation is provided, use it as the primary source
+    recommendation = None
+    if rec_id:
+        from .models import Recommendation
         try:
-            initial["item"] = Item.objects.get(pk=item_id)
-        except Item.DoesNotExist:
-            pass
+            recommendation = Recommendation.objects.select_related(
+                "item", "suggested_supplier", "suggested_customer"
+            ).get(pk=rec_id)
+        except Recommendation.DoesNotExist:
+            recommendation = None
 
-    # If recommendation supplied a quantity
-    if qty:
-        try:
-            initial["quantity"] = int(qty)
-        except ValueError:
-            pass
+    if recommendation:
+        rec_item = recommendation.item
+        initial["item"] = rec_item
+        if recommendation.suggested_quantity:
+            initial["quantity"] = int(recommendation.suggested_quantity)
+        # Infer order type from recommendation type if not forced via URL
+        if not forced_type:
+            if recommendation.recommendation_type == Recommendation.TYPE_SALES_OVERSTOCK:
+                initial["order_type"] = Order.TYPE_SALE
+            else:
+                initial["order_type"] = Order.TYPE_PURCHASE
+        # Party + dates for the header form
+        if recommendation.suggested_supplier:
+            initial["supplier"] = recommendation.suggested_supplier
+        if recommendation.suggested_customer:
+            initial["client"] = recommendation.suggested_customer
+        if recommendation.target_date:
+            initial["target_date"] = recommendation.target_date
+    else:
+        # Legacy query-string behaviour
+        if item_id:
+            try:
+                initial["item"] = Item.objects.get(pk=item_id)
+            except Item.DoesNotExist:
+                pass
 
-    # If coming from recommendation popup → default to PURCHASE
-    if item_id or qty:
-        initial["order_type"] = Order.TYPE_PURCHASE
+        if qty:
+            try:
+                initial["quantity"] = int(qty)
+            except ValueError:
+                pass
+
+        if item_id or qty:
+            initial["order_type"] = Order.TYPE_PURCHASE
 
     # Existing forced type from your URLs overrides everything else
     if forced_type in ["purchase", "sale"]:
@@ -1764,29 +1954,38 @@ def order_create(request):
     # -------------------------
     if request.method == "POST":
         form = OrderForm(request.POST)
-
-        # If field was locked in UI, reapply the forced value
         if forced_type in ["purchase", "sale"]:
             form.data = form.data.copy()
             form.data["order_type"] = forced_type.upper()
 
-        if form.is_valid():
+        formset = OrderLineFormSet(request.POST, instance=Order())
+        if form.is_valid() and formset.is_valid():
             order = form.save()
-            order.apply_stock_if_needed(actor=request.user)  # stock update logic
-            return redirect("order_list")
-
-    # -------------------------
-    # GET REQUEST (Render form)
-    # -------------------------
+            formset.instance = order
+            formset.save()
+            try:
+                order.apply_stock_if_needed(actor=request.user)
+            except ValueError as e:
+                order.status = Order.STATUS_PENDING
+                order.save(update_fields=["status"])
+                messages.error(request, str(e))
+                return redirect(reverse("order_edit", args=[order.pk]))
+            # Mark recommendation as accepted once the order is created successfully
+            if recommendation:
+                recommendation.status = Recommendation.STATUS_ACCEPTED
+                recommendation.save(update_fields=["status", "updated_at"])
+            return redirect(reverse("order_list") + f"?type={order.order_type.lower()}")
+        formset = OrderLineFormSet(request.POST, instance=Order())
     else:
         form = OrderForm(initial=initial)
-
-        # Lock drop-down if URL forced a type (?type=purchase)
+        line_initial = [{"item": initial["item"], "quantity": initial.get("quantity", 1)}] if initial.get("item") else None
+        formset = OrderLineFormSet(instance=Order(), initial=line_initial)
         if forced_type in ["purchase", "sale"]:
             form.fields["order_type"].widget.attrs.update({"disabled": True})
 
     return render(request, "inventory/order_form.html", {
         "form": form,
+        "formset": formset,
         "forced_type": forced_type,
     })
 
@@ -1795,21 +1994,63 @@ def order_create(request):
 @login_required
 @permission_required("inventory.change_order", raise_exception=True)
 def order_edit(request, pk):
-    order = get_object_or_404(Order, pk=pk)
+    order = get_object_or_404(Order.objects.prefetch_related("lines"), pk=pk)
 
     if request.method == "POST":
         form = OrderForm(request.POST, instance=order)
-        if form.is_valid():
+        formset = OrderLineFormSet(request.POST, instance=order)
+        if form.is_valid() and formset.is_valid():
             form.save()
-            return redirect("order_list")
+            formset.save()
+            return redirect(reverse("order_list") + f"?type={order.order_type.lower()}")
     else:
         form = OrderForm(instance=order)
+        formset = OrderLineFormSet(instance=order)
 
     return render(
         request,
         "inventory/order_form.html",
-        {"form": form, "edit": True, "order": order},
+        {"form": form, "formset": formset, "edit": True, "order": order},
     )
+
+
+@login_required
+@permission_required("inventory.add_order", raise_exception=True)
+def order_duplicate(request, pk):
+    """Create a copy of an order (same lines, party, location) with status PENDING."""
+    order = get_object_or_404(
+        Order.objects.prefetch_related("lines", "lines__item").select_related(
+            "supplier", "client", "shipping_location", "receiving_location"
+        ),
+        pk=pk,
+    )
+    new_order = Order(
+        order_type=order.order_type,
+        supplier=order.supplier,
+        client=order.client,
+        shipping_location=order.shipping_location,
+        receiving_location=order.receiving_location,
+        order_date=timezone.now().date(),
+        status=Order.STATUS_PENDING,
+        reference="",
+        description=order.description,
+        party_reference=order.party_reference,
+        target_date=order.target_date,
+        external_link=order.external_link,
+        priority=order.priority,
+        notes=order.notes,
+        stock_applied=False,
+    )
+    new_order.save()
+    for ln in order.lines.all():
+        OrderLine.objects.create(
+            order=new_order,
+            item=ln.item,
+            quantity=ln.quantity,
+            unit_price=ln.unit_price,
+        )
+    messages.success(request, f"Duplicated order #{order.id} as order #{new_order.id}.")
+    return redirect(reverse("order_edit", args=[new_order.pk]))
 
 
 @login_required
@@ -1818,8 +2059,10 @@ def order_delete(request, pk):
     order = get_object_or_404(Order, pk=pk)
 
     if request.method == "POST":
+        order_type = order.order_type.lower()
         order.delete()
-        return redirect("order_list")
+        messages.success(request, "Order deleted.")
+        return redirect(reverse("order_list") + f"?type={order_type}")
 
     return render(
         request,
@@ -1838,13 +2081,20 @@ def order_mark_delivered(request, pk):
     order = get_object_or_404(Order, pk=pk)
 
     if request.method == "POST":
-        # set status first, then apply stock once
+        prev_status = order.status
         order.status = Order.STATUS_DELIVERED
         order.save(update_fields=["status"])
-        order.apply_stock_if_needed(actor=request.user)
-        return redirect("order_list")
+        try:
+            order.apply_stock_if_needed(actor=request.user)
+        except ValueError as e:
+            order.status = prev_status
+            order.save(update_fields=["status"])
+            messages.error(request, str(e))
+        else:
+            messages.success(request, f"Order #{order.id} marked as delivered.")
+        return redirect(reverse("order_list") + f"?type={order.order_type.lower()}")
 
-    return redirect("order_list")
+    return redirect(reverse("order_list") + f"?type={order.order_type.lower()}")
 
 
 @login_required
@@ -1868,6 +2118,9 @@ def contacts_list(request):
     # SUPPLIERS
     for s in suppliers:
         supplier_orders = Order.objects.filter(supplier=s)
+        line_total = OrderLine.objects.filter(order__supplier=s).aggregate(
+            t=Sum(F("quantity") * F("unit_price"))
+        )["t"] or 0
         contacts.append({
             "id": s.id,
             "name": s.name,
@@ -1876,12 +2129,15 @@ def contacts_list(request):
             "phone": s.phone,
             "address": s.address,
             "orders": supplier_orders.count(),
-            "total_value": supplier_orders.aggregate(total=Sum("unit_price"))["total"] or 0,
+            "total_value": line_total,
         })
 
     # CUSTOMERS
     for c in clients:
         client_orders = Order.objects.filter(client=c)
+        line_total = OrderLine.objects.filter(order__client=c).aggregate(
+            t=Sum(F("quantity") * F("unit_price"))
+        )["t"] or 0
         contacts.append({
             "id": c.id,
             "name": c.name,
@@ -1890,7 +2146,7 @@ def contacts_list(request):
             "phone": c.phone,
             "address": c.address,
             "orders": client_orders.count(),
-            "total_value": client_orders.aggregate(total=Sum("unit_price"))["total"] or 0,
+            "total_value": line_total,
         })
 
     # ----------------------------
@@ -2003,19 +2259,25 @@ def contact_export_csv(request):
     contacts = []
     for s in suppliers:
         supplier_orders = Order.objects.filter(supplier=s)
+        line_total = OrderLine.objects.filter(order__supplier=s).aggregate(
+            t=Sum(F("quantity") * F("unit_price"))
+        )["t"] or 0
         contacts.append({
             "id": s.id, "name": s.name, "type": "supplier", "email": s.email, "phone": s.phone,
             "address": s.address or "",
             "orders": supplier_orders.count(),
-            "total_value": supplier_orders.aggregate(total=Sum("unit_price"))["total"] or 0,
+            "total_value": line_total,
         })
     for c in clients:
         client_orders = Order.objects.filter(client=c)
+        line_total = OrderLine.objects.filter(order__client=c).aggregate(
+            t=Sum(F("quantity") * F("unit_price"))
+        )["t"] or 0
         contacts.append({
             "id": c.id, "name": c.name, "type": "customer", "email": c.email, "phone": c.phone,
             "address": c.address or "",
             "orders": client_orders.count(),
-            "total_value": client_orders.aggregate(total=Sum("unit_price"))["total"] or 0,
+            "total_value": line_total,
         })
     if q:
         contacts = [c for c in contacts if q.lower() in (c["name"] or "").lower()

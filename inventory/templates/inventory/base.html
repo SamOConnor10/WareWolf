@@ -154,14 +154,24 @@
             border-color: #30363d !important;
         }
 
-        /* Toast-ish positioning for alerts */
+        /* Toast-style pop-up alerts (corner, fade away like anomaly scan etc.) */
         .ww-alerts {
             position: fixed;
             top: 80px;
             right: 24px;
             z-index: 2000;
             width: min(420px, calc(100% - 48px));
+            pointer-events: none;
         }
+        .ww-alerts .alert {
+            pointer-events: auto;
+        }
+
+        /* Shared: sticky table header, density (for order/item/location lists) */
+        .ww-table-responsive { max-height: 70vh; overflow: auto; }
+        .ww-sticky-header thead th { position: sticky; top: 0; z-index: 10; background: #f8f9fa !important; box-shadow: 0 1px 0 #dee2e6; }
+        body.dark-mode .ww-sticky-header thead th { background: #21262d !important; box-shadow: 0 1px 0 #30363d; }
+        .ww-table-compact .table td, .ww-table-compact .table th { padding: 0.35rem 0.5rem; font-size: 0.8125rem; }
     </style>
 
     <style>
@@ -222,7 +232,7 @@
 
         <li class="nav-item">
             <a class="nav-link {% if request.resolver_match.url_name == 'order_list' %}active{% endif %}"
-               href="{% url 'order_list' %}">
+               href="{% url 'order_list' %}?type=purchase">
                 <i class="bi bi-cart-check"></i> Orders
             </a>
         </li>
@@ -442,9 +452,21 @@
 {% if messages %}
 <div class="ww-alerts">
     {% for message in messages %}
-        <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show shadow-sm mb-2" role="alert">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show shadow-sm mb-2 d-flex align-items-start gap-2" role="alert">
+            {% if message.tags == 'error' %}
+                <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1" aria-hidden="true"></i>
+            {% elif message.tags == 'success' %}
+                <i class="bi bi-check-circle-fill flex-shrink-0 mt-1" aria-hidden="true"></i>
+            {% elif message.tags == 'warning' %}
+                <i class="bi bi-exclamation-circle-fill flex-shrink-0 mt-1" aria-hidden="true"></i>
+            {% endif %}
+            <div class="flex-grow-1">
+                {{ message }}
+                {% if message.tags == 'error' and 'stock' in message|lower %}
+                    <div class="mt-2 small opacity-90">Reduce the order quantity or adjust stock before marking as delivered.</div>
+                {% endif %}
+            </div>
+            <button type="button" class="btn-close flex-shrink-0" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     {% endfor %}
 </div>
@@ -527,15 +549,23 @@ document.addEventListener("DOMContentLoaded", () => {
         mediaQuery.addEventListener("change", applyTheme);
     }
 
-    // Auto-dismiss flash alerts after ~4.5s
+    // Auto-dismiss success/info after ~4.5s; errors after ~7s (longer for long messages)
     setTimeout(() => {
-        document.querySelectorAll(".ww-alerts .alert").forEach(el => {
+        document.querySelectorAll(".ww-alerts .alert-success, .ww-alerts .alert-info").forEach(el => {
             try {
                 const alert = bootstrap.Alert.getOrCreateInstance(el);
                 alert.close();
             } catch (e) {}
         });
     }, 4500);
+    setTimeout(() => {
+        document.querySelectorAll(".ww-alerts .alert-danger").forEach(el => {
+            try {
+                const alert = bootstrap.Alert.getOrCreateInstance(el);
+                alert.close();
+            } catch (e) {}
+        });
+    }, 7000);
 
     // Keep dropdown open when clicking action buttons, and allow UI-only dismiss
     document.querySelectorAll(".ww-stop-close").forEach(el => {

@@ -821,12 +821,13 @@ window.addEventListener('resize', function() {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    width: 330px;
+    width: 360px;
     background: #ffffff;
     border-radius: 12px;
     padding: 0;
     z-index: 9999;
-    border: 1px solid #ddd;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
 }
 
 .po-header {
@@ -841,62 +842,34 @@ window.addEventListener('resize', function() {
 
 .po-body {
     padding: 14px;
-    max-height: 300px;
+    max-height: 320px;
     overflow-y: auto;
 }
 
 .po-item {
-    padding-bottom: 8px;
+    padding-bottom: 10px;
 }
+
+.po-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+}
+
+.po-badge-critical { background: #fee2e2; color: #b91c1c; }
+.po-badge-high { background: #fef3c7; color: #92400e; }
+.po-badge-medium { background: #e0f2fe; color: #0369a1; }
+.po-badge-low { background: #e5e7eb; color: #374151; }
 
 /* Dark mode compatibility */
 .dark-mode .po-popup {
-    background-color: #161b22;
+    background-color: #111827;
     border-color: #30363d;
 }
 </style>
 
-<!-- PURCHASE RECOMMENDATION POPUP -->
-{% if recommendations %}
-<div id="poPopup" class="po-popup shadow-lg">
-    <div class="po-header">
-        <strong>Purchase Recommendations</strong>
-        <button id="poClose" class="btn-close btn-close-white"></button>
-    </div>
-
-    <div class="po-body">
-        {% for r in recommendations %}
-        <div class="po-item">
-            <strong>{{ r.item.name }}</strong><br>
-            <span class="text-muted small">
-                Recommend ordering {{ r.recommended_qty }} units
-            </span>
-
-            <div class="mt-2">
-                <a href="{% url 'order_create' %}?item={{ r.item.id }}&qty={{ r.recommended_qty }}"
-                   class="btn btn-sm btn-primary">
-                    Create Purchase Order
-                </a>
-            </div>
-
-            {% if not forloop.last %}
-                <hr class="my-2">
-            {% endif %}
-        </div>
-        {% endfor %}
-    </div>
-</div>
-{% endif %}
-
-<script>
-const poPopup = document.getElementById("poPopup");
-const poClose = document.getElementById("poClose");
-
-if (poPopup && poClose) {
-    poClose.addEventListener("click", () => {
-        poPopup.style.display = "none";
-    });
-}
-</script>
+{% include "inventory/includes/recommendations_popup.html" %}
 
 {% endblock %}

@@ -1,22 +1,36 @@
 {% extends "inventory/base.html" %}
 
 {% block content %}
-<h2 class="mb-4">Delete Order</h2>
-
-<p>Are you sure you want to delete <strong>Order #{{ order.id }}</strong> for
-   <strong>{{ order.item.name }}</strong>?</p>
-
-{% if perms.inventory.delete_order %}
-<form method="post">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-danger">Delete</button>
-    <a href="{% url 'order_list' %}" class="btn btn-secondary">Cancel</a>
-</form>
-{% else %}
-<div class="alert alert-danger">
-    You don’t have permission to delete orders.
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-5">
+            <div class="card shadow-sm border-0 border-start border-danger border-4">
+                <div class="card-header bg-white border-0 pt-4">
+                    <h5 class="fw-bold mb-0 d-flex align-items-center">
+                        <i class="bi bi-trash text-danger me-2"></i>
+                        Delete order
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if perms.inventory.delete_order %}
+                        <p class="mb-3">
+                            Are you sure you want to delete
+                            <strong>Order #{{ order.id }}{% if order.reference %} ({{ order.reference }}){% endif %}</strong>
+                            {% with lines=order.lines.all %}{% if lines|length == 1 %}for <strong>{{ lines.0.item.name }}</strong>{% else %}with {{ lines|length }} item{{ lines|length|pluralize }}{% endif %}?{% endwith %}
+                        </p>
+                        <p class="text-muted small mb-3">This action cannot be undone.</p>
+                        <form method="POST" class="d-flex gap-2">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger"><i class="bi bi-trash me-1"></i>Delete</button>
+                            <a href="{% url 'order_detail' order.id %}" class="btn btn-secondary">Cancel</a>
+                        </form>
+                    {% else %}
+                        <div class="alert alert-warning mb-0">You do not have permission to delete orders.</div>
+                        <a href="{% url 'order_list' %}?type={{ order.order_type|lower }}" class="btn btn-secondary mt-3">Back</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
-<a href="{% url 'order_list' %}" class="btn btn-secondary">Back</a>
-{% endif %}
-
-{% endblock %}
+{% endblock content %}

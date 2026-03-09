@@ -1,0 +1,109 @@
+{% if recommendations %}
+<style>
+.po-popup {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 360px;
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 0;
+    z-index: 9999;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+}
+.po-header {
+    background: #2563eb;
+    color: white;
+    padding: 10px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 12px 12px 0 0;
+}
+.po-body { padding: 14px; max-height: 320px; overflow-y: auto; }
+.po-item { padding-bottom: 10px; }
+.po-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; }
+.po-badge-critical { background: #fee2e2; color: #b91c1c; }
+.po-badge-high { background: #fef3c7; color: #92400e; }
+.po-badge-medium { background: #e0f2fe; color: #0369a1; }
+.po-badge-low { background: #e5e7eb; color: #374151; }
+.dark-mode .po-popup { background-color: #111827; border-color: #30363d; }
+</style>
+<div id="poPopup" class="po-popup shadow-lg">
+    <div class="po-header">
+        <strong>
+            {% if context_type == "purchase" %}Purchase & stock recommendations
+            {% elif context_type == "sale" %}Sales & stock recommendations
+            {% else %}Smart stock recommendations{% endif %}
+        </strong>
+        <button id="poClose" class="btn-close btn-close-white" type="button"></button>
+    </div>
+
+    <div class="po-body">
+        {% for r in recommendations %}
+        <div class="po-item">
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="me-2">
+                    <strong>{{ r.item.name }}</strong>
+                    <div class="text-muted small">
+                        {{ r.title }}
+                    </div>
+                </div>
+                <span class="po-badge
+                    {% if r.priority == 1 %}po-badge-critical
+                    {% elif r.priority == 2 %}po-badge-high
+                    {% elif r.priority == 3 %}po-badge-medium
+                    {% else %}po-badge-low{% endif %}">
+                    {% if r.priority == 1 %}Critical{% elif r.priority == 2 %}High{% elif r.priority == 3 %}Medium{% else %}Low{% endif %}
+                </span>
+            </div>
+
+            {% if r.reason %}
+            <div class="text-muted small mt-1">
+                {{ r.reason }}
+            </div>
+            {% endif %}
+
+            <div class="d-flex flex-wrap gap-2 mt-2">
+                {% if context_type == "sale" %}
+                    <a href="{% url 'order_create' %}?rec={{ r.id }}&type=sale"
+                       class="btn btn-sm btn-primary">Create Sales Order</a>
+                {% elif context_type == "purchase" %}
+                    <a href="{% url 'order_create' %}?rec={{ r.id }}&type=purchase"
+                       class="btn btn-sm btn-primary">Create Purchase Order</a>
+                {% elif r.recommendation_type == "PURCHASE_DEMAND" %}
+                    <a href="{% url 'order_create' %}?rec={{ r.id }}&type=purchase"
+                       class="btn btn-sm btn-primary">Create Purchase Order</a>
+                {% else %}
+                    {# DORMANT_STOCK, SALES_OVERSTOCK, OVERSTOCK_ALERT = sell, not buy #}
+                    <a href="{% url 'order_create' %}?rec={{ r.id }}&type=sale"
+                       class="btn btn-sm btn-primary">Create Sales Order</a>
+                {% endif %}
+
+                <a href="{% url 'item_detail' r.item.id %}"
+                   class="btn btn-sm btn-outline-secondary">
+                    View Item
+                </a>
+            </div>
+
+            {% if not forloop.last %}
+                <hr class="my-3">
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+(function() {
+    const popup = document.getElementById("poPopup");
+    const closeBtn = document.getElementById("poClose");
+    if (!popup || !closeBtn) return;
+    closeBtn.addEventListener("click", function() {
+        popup.style.display = "none";
+    });
+})();
+</script>
+{% endif %}
+
