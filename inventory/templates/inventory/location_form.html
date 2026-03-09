@@ -1,79 +1,189 @@
 {% extends "inventory/base.html" %}
+{% load django_bootstrap5 %}
 
 {% block content %}
-<h1 class="fw-bold mb-4">
-    {% if location %}Edit Location{% else %}New Location{% endif %}
-</h1>
-
-<form method="POST">
-    {% csrf_token %}
-
-    <!-- Parent -->
-    <div class="mb-3">
-        <label class="form-label">Parent Location</label>
-        <select name="parent" class="form-select">
-            <option value="">None</option>
-            {% for loc in all_locations %}
-                <option value="{{ loc.id }}"
-                        {% if location.parent.id == loc.id %}selected{% endif %}>
-                    {{ loc.name }}
-                </option>
-            {% endfor %}
-        </select>
+<div class="container py-4">
+    <div class="d-flex align-items-center gap-3 mb-4">
+        <a href="{% url 'location_list' %}" class="btn btn-outline-secondary btn-sm" title="Back to locations">
+            <i class="bi bi-arrow-left"></i>
+        </a>
+        <h1 class="fw-bold mb-0">
+            {% if location %}<i class="bi bi-pencil-square me-2"></i>Edit Location{% else %}<i class="bi bi-plus-circle me-2"></i>New Location{% endif %}
+        </h1>
     </div>
 
-    <!-- Name -->
-    <div class="mb-3">
-        <label class="form-label">Name *</label>
-        <input type="text" name="name" class="form-control"
-               value="{{ location.name|default:'' }}" required>
-    </div>
-
-    <!-- Description -->
-    <div class="mb-3">
-        <label class="form-label">Description</label>
-        <textarea name="description" class="form-control" rows="3">
-            {{ location.description|default:'' }}
-        </textarea>
-    </div>
-
-    <!-- Structural -->
-    <div class="form-check form-switch mb-3">
-        <input class="form-check-input" type="checkbox" name="structural"
-               {% if location.structural %}checked{% endif %}>
-        <label class="form-check-label">Structural</label>
-    </div>
-
-    <!-- External -->
-    <div class="form-check form-switch mb-3">
-        <input class="form-check-input" type="checkbox" name="external"
-               {% if location.external %}checked{% endif %}>
-        <label class="form-check-label">External</label>
-    </div>
-
-    <!-- Location Type -->
-    <div class="mb-3">
-        <label class="form-label">Location Type</label>
-        <select name="location_type" class="form-select">
-            {% for code, label in location_types %}
-                <option value="{{ code }}"
-                    {% if location.location_type == code %}selected{% endif %}>
-                    {{ label }}
-                </option>
-            {% endfor %}
-        </select>
-    </div>
-
-    {% if location %}
-        {% if perms.inventory.change_location %}
-            <button type="submit" class="btn btn-success me-2">Submit</button>
-        {% endif %}
-    {% else %}
-        {% if perms.inventory.add_location %}
-            <button type="submit" class="btn btn-success me-2">Submit</button>
-        {% endif %}
+    {% if form.errors %}
+        <div class="alert alert-danger d-flex align-items-start gap-2">
+            <i class="bi bi-exclamation-triangle-fill fs-5 mt-1"></i>
+            <div>
+                <strong>Please fix the errors below.</strong>
+                {{ form.non_field_errors }}
+                <ul class="mb-0 mt-2 small">
+                    {% for field in form %}
+                        {% for error in field.errors %}
+                            <li>{{ field.label }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
     {% endif %}
-    <a href="{% url 'location_list' %}" class="btn btn-secondary">Cancel</a>
-</form>
 
-{% endblock %}
+    <form method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <div class="row g-4">
+            <!-- BASIC INFO -->
+            <div class="col-lg-8">
+                <div class="card shadow-sm border-0 mb-0">
+                    <div class="card-header bg-white border-bottom py-3">
+                        <h5 class="mb-0 fw-semibold">
+                            <i class="bi bi-geo-alt text-primary me-2"></i>Basic Information
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label fw-medium">Image</label>
+                                {{ form.image }}
+                                {% if form.instance.image %}
+                                    <div class="mt-2">
+                                        <img src="{{ form.instance.image.url }}" alt="Current" style="max-height: 100px;" class="rounded">
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-medium">Name <span class="text-danger">*</span></label>
+                                {{ form.name }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-medium">Code</label>
+                                {{ form.code }}
+                                <small class="text-muted">Short identifier e.g. A-01, B-12</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-medium">Parent Location</label>
+                                {{ form.parent }}
+                                <small class="text-muted">Leave empty for top-level</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-medium">Location Type</label>
+                                {{ form.location_type }}
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-medium">Description</label>
+                                {{ form.description }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- OPTIONS -->
+            <div class="col-lg-4">
+                <div class="card shadow-sm border-0 mb-0">
+                    <div class="card-header bg-white border-bottom py-3">
+                        <h5 class="mb-0 fw-semibold">
+                            <i class="bi bi-gear text-primary me-2"></i>Options
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                {{ form.structural }}
+                                <label class="form-check-label" for="{{ form.structural.id_for_label }}">Structural</label>
+                            </div>
+                            <small class="text-muted">Physical structure (shelf, rack)</small>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                {{ form.external }}
+                                <label class="form-check-label" for="{{ form.external.id_for_label }}">External</label>
+                            </div>
+                            <small class="text-muted">Outside main warehouse</small>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                {{ form.is_active }}
+                                <label class="form-check-label" for="{{ form.is_active.id_for_label }}">Active</label>
+                            </div>
+                            <small class="text-muted">Inactive locations are hidden from dropdowns</small>
+                        </div>
+                        <div class="mb-0">
+                            <label class="form-label fw-medium">Capacity</label>
+                            {{ form.capacity }}
+                            <small class="text-muted">Max units this location can hold (optional, for utilisation tracking)</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ADDRESS & BARCODE -->
+            <div class="col-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white border-bottom py-3">
+                        <h5 class="mb-0 fw-semibold">
+                            <i class="bi bi-geo text-primary me-2"></i>Address & Tracking
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-medium">Address</label>
+                                {{ form.address }}
+                                <small class="text-muted">For external locations</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-medium">Barcode</label>
+                                {{ form.barcode }}
+                                <small class="text-muted">For scanning</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-medium">Latitude</label>
+                                {{ form.latitude }}
+                                <small class="text-muted">GPS coordinate (optional)</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-medium">Longitude</label>
+                                {{ form.longitude }}
+                                <small class="text-muted">GPS coordinate (optional)</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NOTES -->
+            <div class="col-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white border-bottom py-3">
+                        <h5 class="mb-0 fw-semibold">
+                            <i class="bi bi-sticky text-primary me-2"></i>Internal notes
+                            <small class="fw-normal text-muted ms-2">(not shown externally)</small>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        {{ form.notes }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ACTIONS -->
+        <div class="d-flex flex-wrap gap-2 mt-4 pt-3 border-top">
+            {% if location and perms.inventory.change_location %}
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-check-lg me-1"></i>Save changes
+                </button>
+            {% elif not location and perms.inventory.add_location %}
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-plus-lg me-1"></i>Create location
+                </button>
+            {% endif %}
+            <a href="{% url 'location_list' %}" class="btn btn-secondary">
+                <i class="bi bi-x-lg me-1"></i>Cancel
+            </a>
+        </div>
+    </form>
+</div>
+{% endblock content %}

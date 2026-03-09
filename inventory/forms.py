@@ -51,11 +51,37 @@ class ItemForm(forms.ModelForm):
         widget=forms.Select(attrs={"class": "form-select"})
     )
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.instance.pk:
+            self.fields["unit_of_measure"].initial = "pcs"
+
+    unit_of_measure = forms.ChoiceField(
+        choices=[
+            ("", "—"),
+            ("pcs", "Pieces (pcs)"),
+            ("kg", "Kilograms (kg)"),
+            ("g", "Grams (g)"),
+            ("L", "Liters (L)"),
+            ("ml", "Milliliters (ml)"),
+            ("m", "Meters (m)"),
+            ("cm", "Centimeters (cm)"),
+            ("box", "Box"),
+            ("pack", "Pack"),
+            ("unit", "Unit"),
+        ],
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
     class Meta:
         model = Item
         fields = [
             "name",
             "sku",
+            "image",
+            "barcode",
+            "unit_of_measure",
             "description",
             "quantity",
             "category",
@@ -63,22 +89,89 @@ class ItemForm(forms.ModelForm):
             "lead_time_days",
             "safety_stock",
             "unit_cost",
+            "currency",
             "supplier",
             "location",
+            "batch_code",
+            "stock_status",
+            "expiry_date",
+            "packaging",
+            "external_link",
+            "serial_numbers",
+            "delete_on_deplete",
+            "notes",
         ]
         widgets = {
-            "name": forms.TextInput(attrs={"class": "form-control"}),
-            "sku": forms.TextInput(attrs={"class": "form-control"}),
-            "description": forms.Textarea(attrs={"class": "form-control", "rows": 4}),
-            "quantity": forms.NumberInput(attrs={"class": "form-control"}),
-            "reorder_level": forms.NumberInput(attrs={"class": "form-control"}),
-            "lead_time_days": forms.NumberInput(attrs={"class": "form-control"}),
-            "safety_stock": forms.NumberInput(attrs={"class": "form-control"}),
-            "unit_cost": forms.NumberInput(attrs={"class": "form-control"}),
+            "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. Steel Bolts M8"}),
+            "sku": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. BOLT-M8-001"}),
+            "image": forms.FileInput(attrs={"class": "form-control", "accept": "image/*"}),
+            "barcode": forms.TextInput(attrs={"class": "form-control", "placeholder": "Optional barcode / ISBN"}),
+            "description": forms.Textarea(attrs={"class": "form-control", "rows": 3, "placeholder": "Product description"}),
+            "quantity": forms.NumberInput(attrs={"class": "form-control", "min": 0}),
+            "reorder_level": forms.NumberInput(attrs={"class": "form-control", "min": 0}),
+            "lead_time_days": forms.NumberInput(attrs={"class": "form-control", "min": 0}),
+            "safety_stock": forms.NumberInput(attrs={"class": "form-control", "min": 0}),
+            "unit_cost": forms.NumberInput(attrs={"class": "form-control", "min": 0, "step": "0.01", "placeholder": "0.00"}),
+            "currency": forms.Select(attrs={"class": "form-select"}),
             "supplier": forms.Select(attrs={"class": "form-select"}),
             "location": forms.Select(attrs={"class": "form-select"}),
+            "batch_code": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. BATCH-2026-001"}),
+            "stock_status": forms.Select(attrs={"class": "form-select"}),
+            "expiry_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "packaging": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. box, pallet"}),
+            "external_link": forms.URLInput(attrs={"class": "form-control", "placeholder": "https://"}),
+            "serial_numbers": forms.Textarea(attrs={"class": "form-control", "rows": 2, "placeholder": "One per line"}),
+            "delete_on_deplete": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2, "placeholder": "Internal notes (not shown externally)"}),
         }
 
+
+
+# -------------------------------------------------
+# LOCATION FORM
+# -------------------------------------------------
+class LocationForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields["parent"].queryset = Location.objects.exclude(id=self.instance.pk)
+
+    class Meta:
+        model = Location
+        fields = [
+            "name",
+            "code",
+            "parent",
+            "location_type",
+            "description",
+            "image",
+            "address",
+            "latitude",
+            "longitude",
+            "barcode",
+            "structural",
+            "external",
+            "is_active",
+            "capacity",
+            "notes",
+        ]
+        widgets = {
+            "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. Aisle A, Zone B"}),
+            "code": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. A-01, B-12"}),
+            "parent": forms.Select(attrs={"class": "form-select"}),
+            "location_type": forms.Select(attrs={"class": "form-select"}),
+            "description": forms.Textarea(attrs={"class": "form-control", "rows": 3, "placeholder": "Description of this location"}),
+            "image": forms.FileInput(attrs={"class": "form-control", "accept": "image/*"}),
+            "address": forms.Textarea(attrs={"class": "form-control", "rows": 2, "placeholder": "Physical address (for external)"}),
+            "latitude": forms.NumberInput(attrs={"class": "form-control", "step": "any", "placeholder": "e.g. 53.349805"}),
+            "longitude": forms.NumberInput(attrs={"class": "form-control", "step": "any", "placeholder": "e.g. -6.260310"}),
+            "barcode": forms.TextInput(attrs={"class": "form-control", "placeholder": "Barcode for scanning"}),
+            "structural": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "external": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "capacity": forms.NumberInput(attrs={"class": "form-control", "min": 1, "placeholder": "Max units (optional)"}),
+            "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2, "placeholder": "Internal notes"}),
+        }
 
 
 # -------------------------------------------------
@@ -90,9 +183,21 @@ class CategoryForm(forms.ModelForm):
         fields = ["name", "parent"]
 
         widgets = {
-            "name": forms.TextInput(attrs={"class": "form-control"}),
+            "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. Electronics, Cables"}),
             "parent": forms.Select(attrs={"class": "form-select"}),
         }
+
+    def clean_parent(self):
+        parent = self.cleaned_data.get("parent")
+        instance = self.instance
+        if parent and instance and instance.pk:
+            # Prevent circular reference: parent cannot be self or a descendant of self
+            current = parent
+            while current:
+                if current.pk == instance.pk:
+                    raise ValidationError("A category cannot be its own parent or a descendant of itself.")
+                current = current.parent
+        return parent
 
 
 class OrderForm(forms.ModelForm):
@@ -114,6 +219,8 @@ class OrderForm(forms.ModelForm):
             "order_date",
             "status",
             "priority",
+            "shipping_location",
+            "receiving_location",
             "notes",
         ]
 
@@ -126,6 +233,8 @@ class OrderForm(forms.ModelForm):
             "client": forms.Select(attrs={"class": "form-select"}),
             "status": forms.Select(attrs={"class": "form-select"}),
             "priority": forms.Select(attrs={"class": "form-select"}),
+            "shipping_location": forms.Select(attrs={"class": "form-select"}),
+            "receiving_location": forms.Select(attrs={"class": "form-select"}),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
         }
 
@@ -139,6 +248,13 @@ class OrderForm(forms.ModelForm):
         # Make supplier & client optional in forms
         self.fields["supplier"].required = False
         self.fields["client"].required = False
+        self.fields["shipping_location"].required = False
+        self.fields["receiving_location"].required = False
+
+        # Limit location choices to active locations
+        active_locations = Location.objects.filter(is_active=True).order_by("name")
+        self.fields["shipping_location"].queryset = active_locations
+        self.fields["receiving_location"].queryset = active_locations
 
         # If the type is forced, set it & disable the field
         if forced_type == "purchase":

@@ -49,10 +49,10 @@
             color: white !important;
         }
 
-        /* SEARCH BOX */
+        /* SEARCH BOX – slightly smaller for balanced layout */
         .search-wrapper {
             flex-grow: 1;
-            max-width: 420px;
+            max-width: 360px;
             margin: 0 24px;
         }
 
@@ -83,6 +83,23 @@
         }
 
         .icon-btn:hover { color: white; }
+
+        /* Right-side icons: consistent style and spacing */
+        .navbar-nav.navbar-nav-right {
+            gap: 12px;
+        }
+        .help-nav-btn {
+            color: #cbd5e1 !important;
+            background: none;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .help-nav-btn:hover { color: white !important; background: #1e293b !important; }
 
         /* Profile Dropdown */
         .profile-circle {
@@ -262,9 +279,16 @@
     </style>
 
     <!-- RIGHT SIDE ICONS / DROPDOWNS -->
-    <ul class="navbar-nav ms-auto align-items-center">
+    <ul class="navbar-nav navbar-nav-right ms-auto align-items-center">
 
-       <!-- Notifications -->
+        <!-- Help / Docs -->
+        <li class="nav-item">
+            <button type="button" class="help-nav-btn" data-bs-toggle="modal" data-bs-target="#helpModal" title="Help &amp; documentation">
+                <i class="bi bi-question-circle fs-5"></i>
+            </button>
+        </li>
+
+        <!-- Notifications -->
         <li class="nav-item dropdown">
         <a class="nav-link position-relative" href="#" role="button" data-bs-toggle="dropdown">
             <i class="bi bi-bell fs-5"></i>
@@ -372,6 +396,48 @@
 </nav>
 <!-- ======================= END NAVBAR ============================= -->
 
+<!-- Help Modal -->
+<div class="modal fade" id="helpModal" tabindex="-1" aria-labelledby="helpModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="helpModalLabel"><i class="bi bi-question-circle me-2"></i>WareWolf Help Centre</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <h6 class="fw-semibold text-secondary mb-2">Getting Started</h6>
+                <ul class="small mb-4">
+                    <li>How to add a stock item</li>
+                    <li>How to create a purchase order</li>
+                    <li>How to update stock quantities</li>
+                </ul>
+
+                <h6 class="fw-semibold text-secondary mb-2">Quick Tips</h6>
+                <ul class="small mb-4">
+                    <li>Use the search bar to find items instantly</li>
+                    <li>Low stock alerts appear in notifications</li>
+                    <li>Managers can approve reorder requests</li>
+                </ul>
+
+                <h6 class="fw-semibold text-secondary mb-2">Shortcuts</h6>
+                <ul class="small mb-2">
+                    <li>Press <kbd>/</kbd> to focus search instantly</li>
+                    <li><i class="bi bi-bell me-1"></i> Use the bell icon to view alerts</li>
+                </ul>
+                <div class="small mb-0">
+                    <p class="mb-1"><i class="bi bi-box me-2"></i><strong>Adding Stock</strong> &rarr; Stock &rarr; Add Item</p>
+                    <p class="mb-1"><i class="bi bi-geo-alt me-2"></i><strong>Managing Locations</strong> &rarr; Locations &rarr; Create Location</p>
+                    <p class="mb-1"><i class="bi bi-cart-check me-2"></i><strong>Creating Orders</strong> &rarr; Orders &rarr; Create Order</p>
+                    <p class="mb-0"><i class="bi bi-bell me-2"></i><strong>Notifications</strong> &rarr; Low stock alerts appear here</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Flash messages (success/error/info) -->
 {% if messages %}
 <div class="ww-alerts">
@@ -432,6 +498,17 @@ if (input && resultsBox) {
         }
     });
 }
+
+// Press "/" to focus search (skip when typing in inputs/textareas)
+document.addEventListener("keydown", (e) => {
+    if (e.key === "/" && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) {
+        e.preventDefault();
+        const searchInput = document.getElementById("globalSearchInput");
+        if (searchInput) {
+            searchInput.focus();
+        }
+    }
+});
 </script>
 
 <script>
@@ -476,6 +553,27 @@ document.addEventListener("DOMContentLoaded", () => {
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+(function() {
+    var PREFIX = 'warewolf_ui_';
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.collapse[data-persist]').forEach(function(el) {
+            var key = PREFIX + el.getAttribute('data-persist');
+            try {
+                var saved = localStorage.getItem(key);
+                if (saved === 'false') {
+                    el.classList.remove('show');
+                    var trigger = document.querySelector('[data-bs-target="#' + CSS.escape(el.id) + '"]');
+                    if (trigger) trigger.setAttribute('aria-expanded', 'false');
+                }
+            } catch (e) {}
+            el.addEventListener('shown.bs.collapse', function() { try { localStorage.setItem(key, 'true'); } catch (e) {} });
+            el.addEventListener('hidden.bs.collapse', function() { try { localStorage.setItem(key, 'false'); } catch (e) {} });
+        });
+    });
+})();
+</script>
 
 </body>
 </html>

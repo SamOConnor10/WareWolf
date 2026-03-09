@@ -1,7 +1,7 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.db.models import Count, Sum
 from .models import Item, Supplier, Client, Location, Order, StockHistory, Category
-from .forms import ItemForm, OrderForm, SupplierForm, ClientForm, CategoryForm
+from .forms import ItemForm, OrderForm, SupplierForm, ClientForm, CategoryForm, LocationForm
 from django.db.models import F, Q
 from django.core.paginator import Paginator
 from django.http import HttpResponse
@@ -34,6 +34,20 @@ User = get_user_model()
 from django.core.mail import send_mail
 from django.conf import settings
 from django.contrib.auth.decorators import user_passes_test
+from django.views.decorators.cache import never_cache
+
+# Shared pagination settings for all list views
+DEFAULT_PER_PAGE = 20
+PER_PAGE_CHOICES = [10, 20, 50, 100]
+
+
+def get_per_page(request):
+    """Read and validate per_page from request. Returns int in PER_PAGE_CHOICES or DEFAULT_PER_PAGE."""
+    try:
+        val = int(request.GET.get("per_page", DEFAULT_PER_PAGE))
+        return val if val in PER_PAGE_CHOICES else DEFAULT_PER_PAGE
+    except (TypeError, ValueError):
+        return DEFAULT_PER_PAGE
 
 
 def signup(request):
@@ -150,7 +164,7 @@ def global_search(request):
 
     results = []
 
-    # Stock Items
+    # Stock Items -> detail/profile page
     for i in Item.objects.filter(
         Q(name__icontains=q) |
         Q(sku__icontains=q) |
@@ -160,19 +174,19 @@ def global_search(request):
             "type": "Stock Item",
             "name": i.name,
             "sub": f"SKU: {i.sku}",
-            "url": reverse("item_edit", args=[i.id]),
+            "url": reverse("item_detail", args=[i.id]),
         })
 
-    # Categories
+    # Categories -> item list filtered by category (shows items in that category)
     for c in Category.objects.filter(Q(name__icontains=q))[:5]:
         results.append({
             "type": "Category",
             "name": c.name,
             "sub": c.full_path,
-            "url": reverse("category_edit", args=[c.id]),
+            "url": reverse("item_list") + f"?category={c.id}",
         })
 
-    # Suppliers
+    # Suppliers -> edit page (no separate profile view; edit shows details)
     for s in Supplier.objects.filter(Q(name__icontains=q))[:5]:
         results.append({
             "type": "Supplier",
@@ -181,7 +195,7 @@ def global_search(request):
             "url": reverse("supplier_edit", args=[s.id]),
         })
 
-    # Customers
+    # Customers -> edit page (no separate profile view; edit shows details)
     for c in Client.objects.filter(
         Q(name__icontains=q) | Q(email__icontains=q)
     )[:5]:
@@ -192,7 +206,7 @@ def global_search(request):
             "url": reverse("client_edit", args=[c.id]),
         })
 
-    # Locations
+    # Locations -> profile/view page (already correct)
     for l in Location.objects.filter(Q(name__icontains=q))[:5]:
         results.append({
             "type": "Location",
@@ -201,7 +215,7 @@ def global_search(request):
             "url": reverse("location_view", args=[l.id]),
         })
 
-    # Orders (both purchase + sale)
+    # Orders -> order edit (acts as profile page; no separate order_detail view)
     for o in Order.objects.filter(
         Q(id__icontains=q) |
         Q(notes__icontains=q) |
@@ -339,13 +353,16 @@ def dashboard(request):
     supplier_count = Supplier.objects.count()
     client_count = Client.objects.count()
 
-    # ---- inventory trend (last 30 days) ----
+    # ---- inventory trend (configurable: 7, 14, or 30 days) ----
     today = timezone.now().date()
-    start_date = today - datetime.timedelta(days=29)
+    trend_days = int(request.GET.get("trend_days", 30))
+    trend_days = max(7, min(30, trend_days))  # clamp 7–30
+    start_date = today - datetime.timedelta(days=trend_days - 1)
 
+    # Exclude today from history: StockHistory for today is incomplete (only items with deliveries)
     history_qs = (
         StockHistory.objects
-        .filter(date__range=(start_date, today))
+        .filter(date__range=(start_date, today), date__lt=today)
         .values("date")
         .annotate(total_qty=Sum("quantity"))
         .order_by("date")
@@ -354,14 +371,32 @@ def dashboard(request):
     stock_dates = [row["date"].strftime("%d %b") for row in history_qs]
     stock_values = [int(row["total_qty"]) for row in history_qs]
 
-    # Simple Moving Average forecast
+    # Always append today with live total (Sum of all Item.quantity) — the only accurate source
+    current_total = Item.objects.aggregate(t=Sum("quantity"))["t"] or 0
+    today_str = today.strftime("%d %b")
+    stock_dates.append(today_str)
+    stock_values.append(int(current_total))
+
+    # Simple Moving Average forecast (average of last 7 data points, includes today)
     forecast = None
+    sma_dates = []
+    sma_values = []
+    sma_trend = "stable"  # up, down, stable
     if stock_values:
         window = min(len(stock_values), 7)
         sma = sum(stock_values[-window:]) / window
         forecast = round(sma)
+        sma_dates = stock_dates[-window:]
+        sma_values = stock_values[-window:]
+        if window >= 2:
+            first_val = sma_values[0]
+            last_val = sma_values[-1]
+            if last_val > first_val:
+                sma_trend = "up"
+            elif last_val < first_val:
+                sma_trend = "down"
 
-    # ---- weekly orders activity (last 6 weeks) ----
+    # ---- weekly orders activity (last 6 weeks, split by purchase vs sale) ----
     orders_start = today - datetime.timedelta(weeks=5)
 
     weekly_qs = (
@@ -369,28 +404,42 @@ def dashboard(request):
         .filter(order_date__gte=orders_start)
         .annotate(week=TruncWeek("order_date"))
         .values("week")
-        .annotate(count=Count("id"))
+        .annotate(
+            purchase_count=Count("id", filter=Q(order_type=Order.TYPE_PURCHASE)),
+            sale_count=Count("id", filter=Q(order_type=Order.TYPE_SALE)),
+        )
         .order_by("week")
     )
 
-    weekly_labels = [row["week"].strftime("%d %b") for row in weekly_qs if row["week"]]
-    weekly_counts = [row["count"] for row in weekly_qs]
+    weekly_data = [
+        (row["week"].strftime("%d %b"), row["purchase_count"], row["sale_count"])
+        for row in weekly_qs if row["week"]
+    ]
+    weekly_labels = [x[0] for x in weekly_data]
+    weekly_purchase_counts = [x[1] for x in weekly_data]
+    weekly_sale_counts = [x[2] for x in weekly_data]
+    weekly_counts = [x[1] + x[2] for x in weekly_data]  # total for backwards compat
 
-    # ---- top item by number of orders ----
-    top_item = (
+    this_week_orders = weekly_counts[-1] if weekly_counts else 0
+    last_week_orders = weekly_counts[-2] if len(weekly_counts) >= 2 else None
+
+    # ---- top items by number of orders (for chart + highlight) ----
+    top_items_qs = (
         Item.objects
         .annotate(total_orders=Count("orders"))
         .filter(total_orders__gt=0)
-        .order_by("-total_orders")
-        .first()
+        .order_by("-total_orders")[:5]
     )
+    top_item = top_items_qs.first()
+    top_items_labels = [item.name[:25] + ("…" if len(item.name) > 25 else "") for item in top_items_qs]
+    top_items_counts = [item.total_orders for item in top_items_qs]
 
     # ---- recent activity feed ----
     from inventory.models import Activity
     recent_activity = Activity.objects.all()[:5]
 
     # ---- recent demand anomalies ----
-    recent_anomalies = DemandAnomaly.objects.filter(dismissed=False).select_related("item")[:5]
+    recent_anomalies = DemandAnomaly.objects.filter(dismissed=False).select_related("item")[:8]
 
     # ---- inventory-by-category pie data ----
     # Sum quantities grouped by category name
@@ -403,6 +452,16 @@ def dashboard(request):
 
     pie_labels = [row["category__name"] or "Uncategorised" for row in category_qs]
     pie_values = [int(row["total_qty"]) for row in category_qs]
+
+    # ---- inventory-by-location (for chart next to category pie) ----
+    location_qs = (
+        Item.objects
+        .values("location__name")
+        .annotate(total_qty=Sum("quantity"))
+        .order_by("-total_qty")[:8]
+    )
+    location_labels = [row["location__name"] or "No location" for row in location_qs]
+    location_values = [int(row["total_qty"]) for row in location_qs]
 
     # -------------------------------
     # SMART PURCHASE ORDER RECOMMENDATIONS
@@ -474,29 +533,46 @@ def dashboard(request):
         "supplier_count": supplier_count,
         "client_count": client_count,
 
+        "trend_days": trend_days,
         "stock_dates": stock_dates,
         "stock_values": stock_values,
         "forecast": forecast,
+        "sma_dates": sma_dates,
+        "sma_values": sma_values,
+        "sma_trend": sma_trend,
 
         "weekly_order_labels": weekly_labels,
         "weekly_order_counts": weekly_counts,
+        "weekly_purchase_counts": weekly_purchase_counts,
+        "weekly_sale_counts": weekly_sale_counts,
+        "this_week_orders": this_week_orders,
+        "last_week_orders": last_week_orders,
 
         "top_item": top_item,
+        "top_items_labels": top_items_labels,
+        "top_items_counts": top_items_counts,
         "recent_activity": recent_activity,
         "recent_anomalies": recent_anomalies,
         "is_manager_or_admin": is_manager_or_admin,
 
         "pie_labels": pie_labels,
         "pie_values": pie_values,
+        "location_labels": location_labels,
+        "location_values": location_values,
 
         "recommendations": recommendations,
     }
 
-    return render(request, "inventory/dashboard.html", context)
+    response = render(request, "inventory/dashboard.html", context)
+    response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response["Pragma"] = "no-cache"
+    response["Expires"] = "0"
+    return response
 
 
 @login_required
 @permission_required("inventory.view_item", raise_exception=True)
+@never_cache
 def item_forecast(request, pk):
     item = get_object_or_404(Item, pk=pk)
     from inventory.ml.forecasting import prophet_forecast_item
@@ -508,6 +584,8 @@ def item_forecast(request, pk):
         "forecast": result.forecast,
         "metrics": result.metrics,
         "rec": result.recommendation,
+        "view": "items",
+        "hide_stock_sidebar": True,
     })
 
 from inventory.ml.anomaly import detect_sales_anomalies, save_anomalies
@@ -583,6 +661,9 @@ def anomaly_list(request):
     qs = DemandAnomaly.objects.select_related("item")
 
     # filters
+    item_id = request.GET.get("item")
+    if item_id:
+        qs = qs.filter(item_id=item_id)
     severity = request.GET.get("severity", "")
     show = request.GET.get("show", "active")  # active | dismissed | all
 
@@ -661,7 +742,8 @@ def anomaly_undismiss(request, pk):
 def item_list(request):
 
     items = Item.objects.select_related("supplier", "location", "category").annotate(
-        order_count=Count("orders")
+        order_count=Count("orders"),
+        history_count=Count("history", distinct=True),
     )
 
     # -----------------------------
@@ -686,18 +768,23 @@ def item_list(request):
         )
 
     # -------------------------
-    # STOCK FILTER
+    # STOCK LEVEL / EXPIRY FILTER (merged)
     # -------------------------
     filter_option = request.GET.get("filter", "")
+    today = timezone.now().date()
 
     if filter_option == "in_stock":
         items = items.filter(quantity__gt=F("reorder_level"))
-
     elif filter_option == "low_stock":
         items = items.filter(quantity__gt=0, quantity__lte=F("reorder_level"))
-
     elif filter_option == "out_of_stock":
         items = items.filter(quantity__lte=0)
+    elif filter_option == "expired":
+        items = items.filter(expiry_date__lt=today)
+    elif filter_option == "expiring_soon":
+        from datetime import timedelta
+        soon = today + timedelta(days=30)
+        items = items.filter(expiry_date__isnull=False, expiry_date__lte=soon, expiry_date__gte=today)
 
     # -------------------------
     # CATEGORY FILTER
@@ -706,7 +793,25 @@ def item_list(request):
     if category_id:
         items = items.filter(category_id=category_id)
 
-    categories = Category.objects.all()
+    # -------------------------
+    # LOCATION FILTER
+    # -------------------------
+    location_id = request.GET.get("location")
+    if location_id:
+        items = items.filter(location_id=location_id)
+
+    categories = Category.objects.order_by("name")
+    locations = Location.objects.order_by("name")
+
+    # -------------------------
+    # CONDITION (stock status) FILTER
+    # -------------------------
+    stock_status_filter = request.GET.get("stock_status", "")
+    if stock_status_filter:
+        items = items.filter(stock_status=stock_status_filter)
+
+    # Legacy: expiry_filter removed (merged into filter_option); keep for URL compatibility
+    expiry_filter = ""
 
     # -------------------------
     # SORTING
@@ -718,6 +823,9 @@ def item_list(request):
         "sku", "-sku",
         "quantity", "-quantity",
         "reorder_level", "-reorder_level",
+        "unit_cost", "-unit_cost",
+        "expiry_date", "-expiry_date",
+        "stock_status",
         "supplier__name", "-supplier__name",
         "location__name", "-location__name",
         "category__name", "-category__name",
@@ -731,18 +839,86 @@ def item_list(request):
     # -------------------------
     # PAGINATION
     # -------------------------
-    paginator = Paginator(items, 12)
+    per_page = get_per_page(request)
+    paginator = Paginator(items, per_page)
     page = request.GET.get("page")
     items = paginator.get_page(page)
 
     return render(request, "inventory/item_list.html", {
         "items": items,
+        "per_page": per_page,
+        "per_page_choices": PER_PAGE_CHOICES,
         "query": q,
         "filter_option": filter_option,
         "sort": sort,
-        "show_categories": False,
+        "categories": categories,
+        "locations": locations,
+        "today": today,
+        "stock_status_filter": stock_status_filter,
+        "expiry_filter": expiry_filter,
+        "view": "items",
     })
 
+
+@login_required
+@permission_required("inventory.view_item", raise_exception=True)
+@never_cache
+def item_detail(request, pk):
+    """Stock item profile page with full details and related data (always fresh)."""
+    item = get_object_or_404(
+        Item.objects.select_related("supplier", "location", "category"),
+        pk=pk,
+    )
+    orders = item.orders.select_related("supplier", "client", "shipping_location", "receiving_location").order_by("-order_date")[:20]
+    recent_history = item.history.order_by("-date")[:14]
+    anomalies = item.demand_anomalies.filter(dismissed=False).order_by("-date")[:5]
+
+    # Clients who have purchased this item (from sale orders)
+    client_ids = (
+        item.orders.filter(order_type=Order.TYPE_SALE, client__isnull=False)
+        .values_list("client", flat=True)
+        .distinct()
+    )
+    clients = Client.objects.filter(id__in=client_ids)[:10]
+
+    # Order stats
+    order_stats = item.orders.aggregate(
+        total_purchased=Count("id", filter=Q(order_type=Order.TYPE_PURCHASE)),
+        total_sold=Count("id", filter=Q(order_type=Order.TYPE_SALE)),
+    )
+
+    # Related items (same category)
+    related_items = []
+    if item.category_id:
+        related_items = (
+            Item.objects.filter(category_id=item.category_id, is_active=True)
+            .exclude(pk=item.pk)
+            .order_by("name")[:5]
+        )
+
+    try:
+        from inventory.ml.forecasting import prophet_forecast_item
+        result = prophet_forecast_item(item, horizon_days=30)
+        rec = result.recommendation
+        has_forecast = bool(result.forecast)
+    except Exception:
+        rec = None
+        has_forecast = False
+
+    return render(request, "inventory/item_detail.html", {
+        "item": item,
+        "orders": orders,
+        "recent_history": recent_history,
+        "anomalies": anomalies,
+        "clients": clients,
+        "order_stats": order_stats,
+        "related_items": related_items,
+        "rec": rec,
+        "has_forecast": has_forecast,
+        "today": timezone.now().date(),
+        "view": "items",
+        "hide_stock_sidebar": True,
+    })
 
 
 @login_required
@@ -772,6 +948,9 @@ def item_adjust_quantity(request, pk):
         adjustment = int(request.POST.get("adjustment"))
         item.quantity = item.quantity + adjustment
         item.save()
+        item.maybe_archive_on_deplete()
+
+        messages.success(request, f"Adjusted {item.name}: quantity updated by {adjustment:+d}")
 
         # Log activity
         from django.apps import apps
@@ -794,7 +973,7 @@ def item_adjust_quantity(request, pk):
 @permission_required("inventory.add_item", raise_exception=True)
 def item_create(request):
     if request.method == "POST":
-        form = ItemForm(request.POST)
+        form = ItemForm(request.POST, request.FILES)
         if form.is_valid():
             item = form.save()
 
@@ -813,6 +992,8 @@ def item_create(request):
     return render(request, "inventory/item_form.html", {
         "form": form,
         "all_categories": Category.objects.all(),
+        "view": "items",
+        "auto_scan": request.GET.get("scan") == "1",
     })
 
 
@@ -822,7 +1003,7 @@ def item_edit(request, pk):
     item = get_object_or_404(Item, pk=pk)
 
     if request.method == "POST":
-        form = ItemForm(request.POST, instance=item)
+        form = ItemForm(request.POST, request.FILES, instance=item)
         if form.is_valid():
             updated_item = form.save()
 
@@ -841,6 +1022,7 @@ def item_edit(request, pk):
     return render(request, "inventory/item_form.html", {
         "form": form,
         "all_categories": Category.objects.all(),
+        "view": "items",
     })
 
 
@@ -898,6 +1080,7 @@ def item_hard_delete(request, pk):
         "item": item,
         "order_count": order_count,
         "history_count": history_count,
+        "view": "items",
     })
 
 @login_required
@@ -938,9 +1121,14 @@ def item_export_csv(request):
 def category_list(request):
     roots = Category.objects.filter(parent__isnull=True)
 
+    add_form = CategoryForm()
+    all_categories = Category.objects.order_by("name")
     return render(request, "inventory/category_list.html", {
         "categories": roots,
         "show_categories": True,
+        "view": "categories",
+        "add_form": add_form,
+        "all_categories": all_categories,
     })
 
 @login_required
@@ -1043,6 +1231,7 @@ def category_delete(request, pk):
 # -------------------------------
 @login_required
 @permission_required("inventory.view_location", raise_exception=True)
+@never_cache
 def location_list(request):
     """
     Location listing with:
@@ -1056,7 +1245,8 @@ def location_list(request):
     # Base Query + STOCK ANNOTATION
     # -------------------------
     locations = Location.objects.annotate(
-        stock=Sum("inventory_items__quantity")
+        stock=Sum("inventory_items__quantity"),
+        item_count=Count("inventory_items", distinct=True),
     )
 
     # -------------------------
@@ -1064,7 +1254,7 @@ def location_list(request):
     # -------------------------
     q = request.GET.get("q", "")
     if q:
-        locations = locations.filter(name__icontains=q)
+        locations = locations.filter(Q(name__icontains=q) | Q(code__icontains=q))
 
     # -------------------------
     # FILTERS
@@ -1072,6 +1262,12 @@ def location_list(request):
     type_filter = request.GET.get("type")
     structural_filter = request.GET.get("structural")
     external_filter = request.GET.get("external")
+    status_filter = request.GET.get("status", "active")
+
+    if status_filter == "active":
+        locations = locations.filter(is_active=True)
+    elif status_filter == "inactive":
+        locations = locations.filter(is_active=False)
 
     if type_filter:
         locations = locations.filter(location_type=type_filter)
@@ -1082,72 +1278,184 @@ def location_list(request):
     if external_filter in ["yes", "no"]:
         locations = locations.filter(external=(external_filter == "yes"))
 
+    # Quick-filter from summary cards
+    quick_filter = request.GET.get("filter")
+    if quick_filter == "with_stock":
+        locations = locations.filter(item_count__gt=0)
+    elif quick_filter == "empty":
+        locations = locations.filter(item_count=0)
+    elif quick_filter == "low_stock":
+        locations = locations.filter(
+            inventory_items__quantity__lte=F("inventory_items__reorder_level"),
+            inventory_items__quantity__gt=0,
+        ).distinct()
+    elif quick_filter == "warehouses":
+        locations = locations.filter(location_type="warehouse")
+
     # -------------------------
     # SORTING
     # -------------------------
     sort = request.GET.get("sort", "name")
-
-    # prevent invalid sorting fields from crashing the query
-    valid_sorts = ["name", "parent__name", "location_type", "structural", "external", "stock"]
-
+    valid_sorts = ["name", "-name", "code", "-code", "parent__name", "-parent__name", "location_type",
+                   "structural", "external", "stock", "-stock", "item_count", "-item_count"]
     if sort not in valid_sorts:
         sort = "name"
-
     locations = locations.order_by(sort)
 
     # -------------------------
-    # RENDER
+    # PAGINATION
     # -------------------------
+    per_page = get_per_page(request)
+    paginator = Paginator(locations, per_page)
+    page = request.GET.get("page")
+    locations = paginator.get_page(page)
+
+    # -------------------------
+    # SUMMARY STATS (global, unfiltered)
+    # -------------------------
+    base_locations = Location.objects.filter(is_active=True)
+    total_locations = base_locations.count()
+    warehouse_count = base_locations.filter(location_type="warehouse").count()
+    total_stock_qty = Item.objects.aggregate(total=Sum("quantity"))["total"] or 0
+    locations_with_stock = (
+        base_locations.annotate(c=Count("inventory_items")).filter(c__gt=0).count()
+    )
+    empty_locations_count = (
+        base_locations.annotate(c=Count("inventory_items")).filter(c=0).count()
+    )
+    low_stock_locations_count = (
+        base_locations.filter(
+            inventory_items__quantity__lte=F("inventory_items__reorder_level"),
+            inventory_items__quantity__gt=0,
+        )
+        .distinct()
+        .count()
+    )
+
+    # Stock distribution chart (top 10 locations by stock)
+    stock_chart_qs = (
+        Location.objects.filter(is_active=True)
+        .annotate(loc_stock=Sum("inventory_items__quantity"))
+        .filter(loc_stock__gt=0)
+        .order_by("-loc_stock")[:10]
+    )
+    stock_chart_labels = [loc.name for loc in stock_chart_qs]
+    stock_chart_values = [int(loc.loc_stock) for loc in stock_chart_qs]
+
+    # Top location by stock (busiest)
+    top_location = (
+        Location.objects.filter(is_active=True)
+        .annotate(
+            loc_stock=Sum("inventory_items__quantity"),
+            loc_item_count=Count("inventory_items", distinct=True),
+        )
+        .filter(loc_item_count__gt=0)
+        .order_by("-loc_stock")
+        .first()
+    )
+
+    # Top shipping location (most sales shipped from)
+    top_shipping_loc = (
+        Location.objects.filter(is_active=True)
+        .annotate(
+            sales_count=Count(
+                "orders_shipped_from",
+                filter=Q(orders_shipped_from__order_type=Order.TYPE_SALE),
+                distinct=True,
+            )
+        )
+        .filter(sales_count__gt=0)
+        .order_by("-sales_count")
+        .first()
+    )
+
+    # Top receiving location (most purchases received at)
+    top_receiving_loc = (
+        Location.objects.filter(is_active=True)
+        .annotate(
+            purchases_count=Count(
+                "orders_received_at",
+                filter=Q(orders_received_at__order_type=Order.TYPE_PURCHASE),
+                distinct=True,
+            )
+        )
+        .filter(purchases_count__gt=0)
+        .order_by("-purchases_count")
+        .first()
+    )
+
+    view_mode = request.GET.get("view", "list")
+    roots = Location.objects.filter(parent__isnull=True) if view_mode == "tree" else None
+
+    # Map data: locations with coordinates (for popup map)
+    locations_with_coords = list(
+        Location.objects.filter(
+            is_active=True,
+            latitude__isnull=False,
+            longitude__isnull=False,
+        ).values("id", "name", "address", "latitude", "longitude", "location_type")
+    )
+    for loc in locations_with_coords:
+        loc["latitude"] = float(loc["latitude"])
+        loc["longitude"] = float(loc["longitude"])
+        loc["map_url"] = (
+            f"https://www.google.com/maps?q={loc['latitude']},{loc['longitude']}&z=17"
+        )
+        loc["detail_url"] = reverse("location_view", args=[loc["id"]])
+
     return render(request, "inventory/location_list.html", {
         "locations": locations,
+        "per_page": per_page,
+        "per_page_choices": PER_PAGE_CHOICES,
         "location_types": Location.LOCATION_TYPES,
         "query": q,
+        "sort": sort,
+        "status_filter": status_filter,
+        "view": "locations",
+        "view_mode": view_mode,
+        "roots": roots,
+        "total_locations": total_locations,
+        "warehouse_count": warehouse_count,
+        "total_stock_qty": total_stock_qty,
+        "locations_with_stock": locations_with_stock,
+        "empty_locations_count": empty_locations_count,
+        "low_stock_locations_count": low_stock_locations_count,
+        "stock_chart_labels": stock_chart_labels,
+        "stock_chart_values": stock_chart_values,
+        "top_location": top_location,
+        "top_shipping_loc": top_shipping_loc,
+        "top_receiving_loc": top_receiving_loc,
+        "active_filter": quick_filter,
+        "locations_with_coords": locations_with_coords,
     })
 
 
 @login_required
 @permission_required("inventory.add_location", raise_exception=True)
 def location_create(request):
-    if request.method == "POST":
-        parent_id = request.POST.get("parent") or None
-
-        Location.objects.create(
-            parent=Location.objects.get(id=parent_id) if parent_id else None,
-            name=request.POST.get("name"),
-            description=request.POST.get("description"),
-            structural=("structural" in request.POST),
-            external=("external" in request.POST),
-            location_type=request.POST.get("location_type"),
-        )
+    form = LocationForm(request.POST or None, request.FILES or None)
+    if request.method == "POST" and form.is_valid():
+        form.save()
         return redirect("location_list")
-
     return render(request, "inventory/location_form.html", {
-        "all_locations": Location.objects.all(),
-        "location_types": Location.LOCATION_TYPES,
+        "form": form,
+        "location": None,
+        "view": "locations",
     })
+
 
 @login_required
 @permission_required("inventory.change_location", raise_exception=True)
 def location_edit(request, pk):
     location = get_object_or_404(Location, pk=pk)
-
-    if request.method == "POST":
-        parent_id = request.POST.get("parent") or None
-
-        location.parent = Location.objects.get(id=parent_id) if parent_id else None
-        location.name = request.POST.get("name")
-        location.description = request.POST.get("description")
-        location.structural = ("structural" in request.POST)
-        location.external = ("external" in request.POST)
-        location.location_type = request.POST.get("location_type")
-        location.save()
-
+    form = LocationForm(request.POST or None, request.FILES or None, instance=location)
+    if request.method == "POST" and form.is_valid():
+        form.save()
         return redirect("location_list")
-
     return render(request, "inventory/location_form.html", {
+        "form": form,
         "location": location,
-        "all_locations": Location.objects.exclude(id=location.id),
-        "location_types": Location.LOCATION_TYPES,
+        "view": "locations",
     })
 
 
@@ -1160,7 +1468,62 @@ def location_delete(request, pk):
         location.delete()
         return redirect("location_list")
 
-    return render(request, "inventory/location_confirm_delete.html", {"location": location})
+    return render(request, "inventory/location_confirm_delete.html", {
+        "location": location,
+        "view": "locations",
+    })
+
+
+@login_required
+@permission_required("inventory.view_location", raise_exception=True)
+def location_export_csv(request):
+    """Export locations to CSV, respecting current filters."""
+    locations = Location.objects.annotate(
+        stock=Sum("inventory_items__quantity"),
+        item_count=Count("inventory_items", distinct=True),
+    )
+    q = request.GET.get("q", "")
+    if q:
+        locations = locations.filter(Q(name__icontains=q) | Q(code__icontains=q))
+    status_filter = request.GET.get("status", "active")
+    if status_filter == "active":
+        locations = locations.filter(is_active=True)
+    elif status_filter == "inactive":
+        locations = locations.filter(is_active=False)
+    type_filter = request.GET.get("type")
+    if type_filter:
+        locations = locations.filter(location_type=type_filter)
+    structural_filter = request.GET.get("structural")
+    if structural_filter in ["yes", "no"]:
+        locations = locations.filter(structural=(structural_filter == "yes"))
+    external_filter = request.GET.get("external")
+    if external_filter in ["yes", "no"]:
+        locations = locations.filter(external=(external_filter == "yes"))
+    sort = request.GET.get("sort", "name")
+    valid_sorts = ["name", "-name", "code", "-code", "parent__name", "-parent__name", "location_type",
+                   "structural", "external", "stock", "-stock", "item_count", "-item_count"]
+    if sort in valid_sorts:
+        locations = locations.order_by(sort)
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="locations.csv"'
+    writer = csv.writer(response)
+    writer.writerow(["Name", "Code", "Breadcrumb", "Parent", "Type", "Structural", "External", "Active", "Address", "Barcode", "Notes", "Item Count"])
+    for loc in locations:
+        writer.writerow([
+            loc.name,
+            loc.code or "",
+            loc.get_breadcrumb(),
+            loc.parent.name if loc.parent else "",
+            loc.get_location_type_display(),
+            "Yes" if loc.structural else "No",
+            "Yes" if loc.external else "No",
+            "Yes" if loc.is_active else "No",
+            loc.address or "",
+            loc.barcode or "",
+            (loc.notes or "").replace("\n", " "),
+            loc.item_count,
+        ])
+    return response
 
 
 # -------------------------------
@@ -1170,7 +1533,10 @@ def location_delete(request, pk):
 @permission_required("inventory.view_location", raise_exception=True)
 def location_tree(request):
     roots = Location.objects.filter(parent__isnull=True)
-    return render(request, "inventory/location_tree.html", {"roots": roots})
+    return render(request, "inventory/location_tree.html", {
+        "roots": roots,
+        "view": "locations",
+    })
 
 
 # -------------------------------
@@ -1178,13 +1544,47 @@ def location_tree(request):
 # -------------------------------
 @login_required
 @permission_required("inventory.view_location", raise_exception=True)
+@never_cache
 def location_view(request, pk):
+    """Location profile page (always fresh - orders, items, stats)."""
     location = get_object_or_404(Location, pk=pk)
-    items = location.inventory_items.all()
+    items = location.inventory_items.select_related("category", "supplier").order_by("name")
+    children = location.children.all()
+    total_qty = items.aggregate(total=Sum("quantity"))["total"] or 0
+
+    # Orders connected to this location
+    sales_shipped = Order.objects.filter(
+        order_type=Order.TYPE_SALE,
+        shipping_location=location,
+    ).select_related("item", "client").order_by("-order_date")[:15]
+    purchases_received = Order.objects.filter(
+        order_type=Order.TYPE_PURCHASE,
+        receiving_location=location,
+    ).select_related("item", "supplier").order_by("-order_date")[:15]
+    sales_shipped_count = Order.objects.filter(
+        order_type=Order.TYPE_SALE,
+        shipping_location=location,
+    ).count()
+    purchases_received_count = Order.objects.filter(
+        order_type=Order.TYPE_PURCHASE,
+        receiving_location=location,
+    ).count()
+
+    utilisation_pct = None
+    if location.capacity and location.capacity > 0:
+        utilisation_pct = min(100, round(100 * int(total_qty) / location.capacity, 1))
 
     return render(request, "inventory/location_view.html", {
         "location": location,
         "items": items,
+        "children": children,
+        "total_qty": total_qty,
+        "item_count": items.count(),
+        "sales_shipped": sales_shipped,
+        "purchases_received": purchases_received,
+        "sales_shipped_count": sales_shipped_count,
+        "purchases_received_count": purchases_received_count,
+        "utilisation_pct": utilisation_pct,
     })
 
 # -------------------------------
@@ -1193,7 +1593,12 @@ def location_view(request, pk):
 @login_required
 @permission_required("inventory.view_order", raise_exception=True)
 def order_list(request):
-    orders = Order.objects.select_related("item", "supplier", "client")
+    orders = Order.objects.select_related("item", "supplier", "client", "shipping_location", "receiving_location")
+
+    # --- filter by item ---
+    item_id = request.GET.get("item")
+    if item_id:
+        orders = orders.filter(item_id=item_id)
 
     # --- search ---
     q = request.GET.get("q", "").strip()
@@ -1217,6 +1622,28 @@ def order_list(request):
     if status_filter in valid_statuses:
         orders = orders.filter(status=status_filter)
 
+    # --- filter by location ---
+    shipping_location_id = request.GET.get("shipping_location")
+    if shipping_location_id:
+        orders = orders.filter(shipping_location_id=shipping_location_id)
+    receiving_location_id = request.GET.get("receiving_location")
+    if receiving_location_id:
+        orders = orders.filter(receiving_location_id=receiving_location_id)
+
+    # --- sorting ---
+    sort = request.GET.get("sort", "-order_date")
+    valid_sorts = ["order_date", "-order_date", "id", "-id", "quantity", "-quantity", "status", "-status",
+                   "item__name", "-item__name", "order_type", "-order_type"]
+    if sort not in valid_sorts:
+        sort = "-order_date"
+    orders = orders.order_by(sort)
+
+    # Pagination
+    per_page = get_per_page(request)
+    paginator = Paginator(orders, per_page)
+    page = request.GET.get("page")
+    orders = paginator.get_page(page)
+
     # Summary cards
     purchase_count = Order.objects.filter(order_type=Order.TYPE_PURCHASE).count()
     sale_count = Order.objects.filter(order_type=Order.TYPE_SALE).count()
@@ -1225,16 +1652,74 @@ def order_list(request):
 
     return render(request, "inventory/order_list.html", {
         "orders": orders,
+        "per_page": per_page,
+        "per_page_choices": PER_PAGE_CHOICES,
         "search_query": q,
         "type_filter": type_filter,
-        "context_type": type_filter,   # <-- IMPORTANT FOR TEMPLATE BUTTONS
+        "context_type": type_filter,
         "status_filter": status_filter,
         "status_choices": Order.STATUS_CHOICES,
+        "sort": sort,
         "purchase_count": purchase_count,
         "sale_count": sale_count,
         "pending_count": pending_count,
         "delivered_count": delivered_count,
     })
+
+
+@login_required
+@permission_required("inventory.view_order", raise_exception=True)
+def order_export_csv(request):
+    """Export orders to CSV, respecting current filters."""
+    orders = Order.objects.select_related("item", "supplier", "client")
+    item_id = request.GET.get("item")
+    if item_id:
+        orders = orders.filter(item_id=item_id)
+    q = request.GET.get("q", "").strip()
+    if q:
+        orders = orders.filter(
+            Q(item__name__icontains=q)
+            | Q(supplier__name__icontains=q)
+            | Q(client__name__icontains=q)
+        )
+    type_filter = request.GET.get("type", "all")
+    if type_filter == "purchase":
+        orders = orders.filter(order_type=Order.TYPE_PURCHASE)
+    elif type_filter == "sale":
+        orders = orders.filter(order_type=Order.TYPE_SALE)
+    status_filter = request.GET.get("status", "all")
+    valid_statuses = dict(Order.STATUS_CHOICES).keys()
+    if status_filter in valid_statuses:
+        orders = orders.filter(status=status_filter)
+    shipping_location_id = request.GET.get("shipping_location")
+    if shipping_location_id:
+        orders = orders.filter(shipping_location_id=shipping_location_id)
+    receiving_location_id = request.GET.get("receiving_location")
+    if receiving_location_id:
+        orders = orders.filter(receiving_location_id=receiving_location_id)
+    sort = request.GET.get("sort", "-order_date")
+    valid_sorts = ["order_date", "-order_date", "id", "-id", "quantity", "-quantity", "status", "-status",
+                   "item__name", "-item__name", "order_type", "-order_type"]
+    if sort in valid_sorts:
+        orders = orders.order_by(sort)
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="orders.csv"'
+    writer = csv.writer(response)
+    writer.writerow(["Order #", "Type", "Item", "Party", "Date", "Qty", "Total", "Status", "Shipping location", "Receiving location"])
+    for o in orders:
+        writer.writerow([
+            f"ORD-{o.id}",
+            o.get_order_type_display(),
+            o.item.name if o.item else "",
+            o.party_name,
+            o.order_date,
+            o.quantity,
+            o.total,
+            o.get_status_display(),
+            o.shipping_location.name if o.shipping_location else "",
+            o.receiving_location.name if o.receiving_location else "",
+        ])
+    return response
 
 
 @login_required
@@ -1429,6 +1914,29 @@ def contacts_list(request):
         contacts = [c for c in contacts if c["type"] == "customer"]
 
     # ----------------------------
+    # 4b. Sorting
+    # ----------------------------
+    sort = request.GET.get("sort", "name")
+    if sort == "name":
+        contacts = sorted(contacts, key=lambda c: (c["name"] or "").lower())
+    elif sort == "-name":
+        contacts = sorted(contacts, key=lambda c: (c["name"] or "").lower(), reverse=True)
+    elif sort == "type":
+        contacts = sorted(contacts, key=lambda c: c["type"])
+    elif sort == "-type":
+        contacts = sorted(contacts, key=lambda c: c["type"], reverse=True)
+    elif sort == "orders":
+        contacts = sorted(contacts, key=lambda c: c["orders"])
+    elif sort == "-orders":
+        contacts = sorted(contacts, key=lambda c: c["orders"], reverse=True)
+    elif sort == "total_value":
+        contacts = sorted(contacts, key=lambda c: float(c["total_value"] or 0))
+    elif sort == "-total_value":
+        contacts = sorted(contacts, key=lambda c: float(c["total_value"] or 0), reverse=True)
+    else:
+        contacts = sorted(contacts, key=lambda c: (c["name"] or "").lower())
+
+    # ----------------------------
     # 5. Analytics (Top contact insights)
     # ----------------------------
     top_supplier = None
@@ -1447,7 +1955,8 @@ def contacts_list(request):
     # ----------------------------
     # 6. PAGINATION
     # ----------------------------
-    paginator = Paginator(contacts, 10)  # 10 per page
+    per_page = get_per_page(request)
+    paginator = Paginator(contacts, per_page)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
@@ -1465,7 +1974,8 @@ def contacts_list(request):
         "contacts": page_obj,
         "page_obj": page_obj,
         "pagination": True,
-
+        "per_page": per_page,
+        "per_page_choices": PER_PAGE_CHOICES,
         "type_filter": type_filter,
         "total_suppliers": total_suppliers,
         "total_customers": total_customers,
@@ -1477,7 +1987,73 @@ def contacts_list(request):
 
         # keep search value in form
         "search_query": q,
+        "sort": sort,
     })
+
+
+@login_required
+@permission_required("inventory.view_supplier", raise_exception=True)
+@permission_required("inventory.view_client", raise_exception=True)
+def contact_export_csv(request):
+    """Export contacts to CSV, respecting current filters."""
+    type_filter = request.GET.get("type", "all")
+    q = request.GET.get("q", "").strip()
+    suppliers = Supplier.objects.all()
+    clients = Client.objects.all()
+    contacts = []
+    for s in suppliers:
+        supplier_orders = Order.objects.filter(supplier=s)
+        contacts.append({
+            "id": s.id, "name": s.name, "type": "supplier", "email": s.email, "phone": s.phone,
+            "address": s.address or "",
+            "orders": supplier_orders.count(),
+            "total_value": supplier_orders.aggregate(total=Sum("unit_price"))["total"] or 0,
+        })
+    for c in clients:
+        client_orders = Order.objects.filter(client=c)
+        contacts.append({
+            "id": c.id, "name": c.name, "type": "customer", "email": c.email, "phone": c.phone,
+            "address": c.address or "",
+            "orders": client_orders.count(),
+            "total_value": client_orders.aggregate(total=Sum("unit_price"))["total"] or 0,
+        })
+    if q:
+        contacts = [c for c in contacts if q.lower() in (c["name"] or "").lower()
+                   or q.lower() in (c["email"] or "").lower() or q.lower() in (c["phone"] or "").lower()]
+    if type_filter == "suppliers":
+        contacts = [c for c in contacts if c["type"] == "supplier"]
+    elif type_filter == "customers":
+        contacts = [c for c in contacts if c["type"] == "customer"]
+    sort = request.GET.get("sort", "name")
+    if sort == "name":
+        contacts = sorted(contacts, key=lambda c: (c["name"] or "").lower())
+    elif sort == "-name":
+        contacts = sorted(contacts, key=lambda c: (c["name"] or "").lower(), reverse=True)
+    elif sort == "type":
+        contacts = sorted(contacts, key=lambda c: c["type"])
+    elif sort == "-type":
+        contacts = sorted(contacts, key=lambda c: c["type"], reverse=True)
+    elif sort == "orders":
+        contacts = sorted(contacts, key=lambda c: c["orders"])
+    elif sort == "-orders":
+        contacts = sorted(contacts, key=lambda c: c["orders"], reverse=True)
+    elif sort == "total_value":
+        contacts = sorted(contacts, key=lambda c: float(c["total_value"] or 0))
+    elif sort == "-total_value":
+        contacts = sorted(contacts, key=lambda c: float(c["total_value"] or 0), reverse=True)
+    else:
+        contacts = sorted(contacts, key=lambda c: (c["name"] or "").lower())
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="contacts.csv"'
+    writer = csv.writer(response)
+    writer.writerow(["Name", "Type", "Email", "Phone", "Orders", "Total Value"])
+    for c in contacts:
+        writer.writerow([
+            c["name"], c["type"].title(), c["email"] or "", c["phone"] or "",
+            c["orders"], c["total_value"],
+        ])
+    return response
+
 
 @login_required
 @permission_required("inventory.add_supplier", raise_exception=True)
@@ -1586,7 +2162,9 @@ from .forms import (
 from .models import UserPreference, UserProfile
 
 @login_required
+@never_cache
 def profile_view(request):
+    """User profile page (always fresh - activity, etc.)."""
     user = request.user
     groups = list(user.groups.values_list("name", flat=True))
     valid_tabs = {"profile", "security", "activity", "permissions", "info"}

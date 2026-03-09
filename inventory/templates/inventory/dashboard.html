@@ -4,111 +4,160 @@
 {% block content %}
 
 <!-- HEADER -->
-<div class="pb-3">
-    <h1 class="fw-bold mb-1">Dashboard</h1>
-    <p class="text-muted">Your real-time warehouse overview and analytics.</p>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 pb-3">
+    <div>
+        <h1 class="fw-bold mb-1">Dashboard</h1>
+        <p class="text-muted mb-0">
+            {% now "H" as hour %}
+            {% if hour < "12" %}Good morning{% elif hour < "17" %}Good afternoon{% else %}Good evening{% endif %}, {{ request.user.username|default:"User" }}.
+            Your real-time warehouse overview and analytics.
+        </p>
+        <p class="text-muted small mt-1 mb-0">Data as of {% now "d M Y, H:i" %}</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2 quick-actions">
+        <a href="{% url 'order_create' %}" class="btn btn-primary btn-sm"><i class="bi bi-plus-circle me-1"></i>Create order</a>
+        <a href="{% url 'item_list' %}?filter=low_stock" class="btn btn-outline-danger btn-sm"><i class="bi bi-exclamation-triangle me-1"></i>View low stock</a>
+        {% if is_manager_or_admin %}
+        <a href="{% url 'run_anomaly_scan' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-search me-1"></i>Run anomaly scan</a>
+        {% endif %}
+    </div>
 </div>
 
 <!-- SUMMARY CARDS -->
-<div class="row g-3 mb-4">
-
-    <!-- Total Items -->
+<div class="row g-3 mb-4 align-items-start">
     <div class="col-md-3">
-        <a href="{% url 'item_list' %}" class="text-decoration-none text-dark">
-            <div class="card shadow-sm p-4 border-0 h-100 hover-card">
+        <div class="card shadow-sm border-0 dashboard-card">
+            <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseTotal" aria-expanded="true">
                 <div class="d-flex align-items-center">
-                    <span class="badge bg-primary p-3 rounded-circle me-3">📦</span>
-                    <div>
-                        <h6 class="text-muted mb-1">Total Stock Items</h6>
-                        <h2 class="fw-bold">{{ total_items }}</h2>
-                    </div>
+                    <span class="badge bg-primary p-3 rounded-circle me-3"><i class="bi bi-box-seam fs-5"></i></span>
+                    <h6 class="text-muted mb-0">Total Stock Items</h6>
                 </div>
+                <i class="bi bi-chevron-down dashboard-chevron"></i>
+            </button>
+            <div class="collapse show" id="collapseTotal" data-persist="dash_total">
+                <div class="card-body pt-0"><a href="{% url 'item_list' %}" class="text-decoration-none text-dark hover-card"><h2 class="fw-bold">{{ total_items }}</h2></a></div>
             </div>
-        </a>
+        </div>
     </div>
-
-    <!-- Low Stock Items -->
     <div class="col-md-3">
-        <a href="{% url 'item_list' %}?filter=low_stock" class="text-decoration-none text-dark">
-            <div class="card shadow-sm p-4 border-0 h-100 hover-card">
+        <div class="card shadow-sm border-0 dashboard-card">
+            <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseLow" aria-expanded="true">
                 <div class="d-flex align-items-center">
-                    <span class="badge bg-danger p-3 rounded-circle me-3">⚠️</span>
-                    <div>
-                        <h6 class="text-muted mb-1">Low Stock Items</h6>
-                        <h2 class="fw-bold text-danger">{{ low_stock_items }}</h2>
-                    </div>
+                    <span class="badge bg-danger p-3 rounded-circle me-3"><i class="bi bi-exclamation-triangle fs-5"></i></span>
+                    <h6 class="text-muted mb-0">Low Stock Items</h6>
                 </div>
+                <i class="bi bi-chevron-down dashboard-chevron"></i>
+            </button>
+            <div class="collapse show" id="collapseLow" data-persist="dash_low">
+                <div class="card-body pt-0"><a href="{% url 'item_list' %}?filter=low_stock" class="text-decoration-none text-dark hover-card"><h2 class="fw-bold text-danger">{{ low_stock_items }}</h2></a></div>
             </div>
-        </a>
+        </div>
     </div>
-
-    <!-- Suppliers -->
     <div class="col-md-3">
-        <a href="{% url 'contacts_list' %}?type=suppliers" class="text-decoration-none text-dark">
-            <div class="card shadow-sm p-4 border-0 h-100 hover-card">
+        <div class="card shadow-sm border-0 dashboard-card">
+            <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseSupp" aria-expanded="true">
                 <div class="d-flex align-items-center">
-                    <span class="badge bg-info p-3 rounded-circle me-3">🏭</span>
-                    <div>
-                        <h6 class="text-muted mb-1">Total Suppliers</h6>
-                        <h2 class="fw-bold">{{ supplier_count }}</h2>
-                    </div>
+                    <span class="badge bg-info p-3 rounded-circle me-3"><i class="bi bi-truck fs-5"></i></span>
+                    <h6 class="text-muted mb-0">Total Suppliers</h6>
                 </div>
+                <i class="bi bi-chevron-down dashboard-chevron"></i>
+            </button>
+            <div class="collapse show" id="collapseSupp" data-persist="dash_supp">
+                <div class="card-body pt-0"><a href="{% url 'contacts_list' %}?type=suppliers" class="text-decoration-none text-dark hover-card"><h2 class="fw-bold">{{ supplier_count }}</h2></a></div>
             </div>
-        </a>
+        </div>
     </div>
-
-    <!-- Customers -->
     <div class="col-md-3">
-        <a href="{% url 'contacts_list' %}?type=customers" class="text-decoration-none text-dark">
-            <div class="card shadow-sm p-4 border-0 h-100 hover-card">
+        <div class="card shadow-sm border-0 dashboard-card">
+            <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseCust" aria-expanded="true">
                 <div class="d-flex align-items-center">
-                    <span class="badge bg-success p-3 rounded-circle me-3">🧑‍💼</span>
-                    <div>
-                        <h6 class="text-muted mb-1">Total Customers</h6>
-                        <h2 class="fw-bold">{{ client_count }}</h2>
-                    </div>
+                    <span class="badge bg-success p-3 rounded-circle me-3"><i class="bi bi-people fs-5"></i></span>
+                    <h6 class="text-muted mb-0">Total Customers</h6>
                 </div>
+                <i class="bi bi-chevron-down dashboard-chevron"></i>
+            </button>
+            <div class="collapse show" id="collapseCust">
+                <div class="card-body pt-0"><a href="{% url 'contacts_list' %}?type=customers" class="text-decoration-none text-dark hover-card"><h2 class="fw-bold">{{ client_count }}</h2></a></div>
             </div>
-        </a>
+        </div>
     </div>
-
 </div>
 
 <hr class="my-4">
 
 <!-- INVENTORY TREND + FORECAST -->
-<div class="row g-4 mb-4">
+<div class="row g-4 mb-4 align-items-start">
 
     <!-- Inventory Trend -->
     <div class="col-md-6">
-        <div class="card shadow-sm p-4 border-0 h-100">
-            <h5 class="fw-bold mb-3">
-                <i class="bi bi-box-seam me-2"></i>Inventory Trend (Last 30 Days)
-            </h5>
-
-            {% if stock_dates %}
-                <div class="chart-container">
-                    <canvas id="inventoryChart"></canvas>
+        <div class="card shadow-sm border-0 dashboard-card inventory-trend-card">
+            <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseTrend" aria-expanded="true" aria-label="Toggle inventory trend chart">
+                <h5 class="fw-bold mb-0"><i class="bi bi-box-seam me-2"></i>Inventory Trend (Last {{ trend_days }} Days)</h5>
+                <i class="bi bi-chevron-down dashboard-chevron"></i>
+            </button>
+            <div class="collapse show" id="collapseTrend" data-persist="dash_trend">
+                <div class="card-body pt-0">
+                    {% if stock_dates %}
+                        <div class="chart-top-spacer" aria-hidden="true"></div>
+                        <div class="chart-container">
+                            <canvas id="inventoryChart"></canvas>
+                        </div>
+                        <div class="chart-footer d-flex flex-wrap gap-2 align-items-center">
+                            <a href="{% url 'item_list' %}" class="btn btn-sm btn-outline-primary">View full stock report</a>
+                            <span class="text-muted small">Range:</span>
+                            <a href="?trend_days=7" class="btn btn-sm btn-outline-secondary {% if trend_days == 7 %}active{% endif %}">7d</a>
+                            <a href="?trend_days=14" class="btn btn-sm btn-outline-secondary {% if trend_days == 14 %}active{% endif %}">14d</a>
+                            <a href="?trend_days=30" class="btn btn-sm btn-outline-secondary {% if trend_days == 30 %}active{% endif %}">30d</a>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="bi bi-graph-up text-muted" style="font-size: 2rem;"></i>
+                            <p class="text-muted mb-0 mt-2">Not enough data yet to display a trend.</p>
+                            <p class="text-muted small mb-0">Add stock history or wait for more data points.</p>
+                        </div>
+                    {% endif %}
                 </div>
-            {% else %}
-                <p class="text-muted fst-italic">Not enough data yet to display a trend.</p>
-            {% endif %}
+            </div>
         </div>
     </div>
 
     <!-- Forecasting -->
     <div class="col-md-6">
-        <div class="card shadow-sm p-4 border-0 h-100">
-            <h5 class="fw-bold mb-3">
-                <i class="bi bi-graph-up-arrow me-2"></i>Forecast (Simple Moving Average)
-            </h5>
-
-            {% if forecast %}
-                <p class="text-muted mb-1">Predicted Inventory Level (Next 7 Days):</p>
-                <h3 class="fw-bold text-primary">{{ forecast }}</h3>
-            {% else %}
-                <p class="text-muted fst-italic">Not enough data to generate a forecast.</p>
-            {% endif %}
+        <div class="card shadow-sm border-0 dashboard-card">
+            <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseForecast" aria-expanded="true" aria-label="Toggle forecast chart">
+                <h5 class="fw-bold mb-0"><i class="bi bi-graph-up-arrow me-2"></i>Forecast (Simple Moving Average)</h5>
+                <i class="bi bi-chevron-down dashboard-chevron"></i>
+            </button>
+            <div class="collapse show" id="collapseForecast" data-persist="dash_forecast">
+                <div class="card-body pt-0">
+                    {% if forecast %}
+                        <div class="chart-top-block d-flex flex-wrap align-items-center gap-2 mb-2">
+                            <h3 class="fw-bold text-primary mb-0">{{ forecast }}</h3>
+                            {% if sma_trend == "up" %}
+                                <span class="badge bg-success-subtle text-success"><i class="bi bi-arrow-up-short"></i> Rising</span>
+                            {% elif sma_trend == "down" %}
+                                <span class="badge bg-danger-subtle text-danger"><i class="bi bi-arrow-down-short"></i> Falling</span>
+                            {% else %}
+                                <span class="badge bg-secondary-subtle text-secondary"><i class="bi bi-dash"></i> Stable</span>
+                            {% endif %}
+                        </div>
+                        {% if sma_values %}
+                            <div class="sma-sparkline-box mb-2">
+                                <canvas id="smaChart"></canvas>
+                            </div>
+                        {% endif %}
+                        <div class="chart-footer">
+                            <p class="text-muted small mb-0">7-day average of recent total inventory (includes today). Expected level based on last {{ sma_values|length }} data points.</p>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="bi bi-calculator text-muted" style="font-size: 2rem;"></i>
+                            <p class="text-muted mb-0 mt-2">Not enough data to generate a forecast.</p>
+                            <p class="text-muted small mb-0">Need at least 2 data points for SMA.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
         </div>
     </div>
 
@@ -117,51 +166,103 @@
 <hr class="my-4">
 
 <!-- ORDERS ANALYTICS + TOP ITEM -->
-<div class="row g-4 mb-4">
+<div class="row g-4 mb-4 align-items-start">
 
     <!-- Weekly Orders -->
     <div class="col-md-6">
-        <div class="card shadow-sm p-4 border-0 h-100">
-            <h5 class="fw-bold mb-3">🛒 Weekly Orders Activity</h5>
-
-            {% if weekly_order_labels %}
-                <div class="chart-box">
-                    <canvas id="ordersChart"></canvas>
+        <div class="card shadow-sm border-0 dashboard-card">
+            <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseOrders" aria-expanded="true" aria-label="Toggle weekly orders chart">
+                <h5 class="fw-bold mb-0"><i class="bi bi-cart-check me-2"></i>Weekly Orders Activity</h5>
+                <i class="bi bi-chevron-down dashboard-chevron"></i>
+            </button>
+            <div class="collapse show" id="collapseOrders" data-persist="dash_orders">
+                <div class="card-body pt-0">
+                    {% if weekly_order_labels %}
+                        <div class="chart-top-block d-flex flex-wrap align-items-center gap-2 mb-2">
+                            <h3 class="fw-bold text-primary mb-0">{{ this_week_orders }}</h3>
+                            <span class="text-muted small">orders this week</span>
+                            {% if last_week_orders is not None %}
+                                <span class="text-muted small">
+                                    {% if this_week_orders > last_week_orders %}
+                                        <i class="bi bi-arrow-up-short text-success"></i> up from {{ last_week_orders }} last week
+                                    {% elif this_week_orders < last_week_orders %}
+                                        <i class="bi bi-arrow-down-short text-secondary"></i> down from {{ last_week_orders }} last week
+                                    {% else %}
+                                        <i class="bi bi-dash text-secondary"></i> same as last week
+                                    {% endif %}
+                                </span>
+                            {% endif %}
+                        </div>
+                        <div class="chart-box mb-2">
+                            <canvas id="ordersChart"></canvas>
+                        </div>
+                        <div class="chart-footer">
+                            <p class="text-muted small mb-0">Tip: click the chart to view all orders.</p>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="bi bi-cart-x text-muted" style="font-size: 2rem;"></i>
+                            <p class="text-muted mb-0 mt-2">No recent order data available.</p>
+                            <p class="text-muted small mb-0"><a href="{% url 'order_create' %}" class="text-decoration-none">Create your first order</a> to get started.</p>
+                        </div>
+                    {% endif %}
                 </div>
-                <p class="text-muted small mt-2 mb-0">
-                    Tip: click the chart to view all orders.
-                </p>
-            {% else %}
-                <p class="text-muted fst-italic">No recent order data available.</p>
-            {% endif %}
+            </div>
         </div>
     </div>
 
     <!-- Highest Demand Item -->
     <div class="col-md-6">
-        <div class="card shadow-sm p-4 border-0 h-100">
-            <h5 class="fw-bold mb-3">🏷️ Item With Highest Demand</h5>
-
-            {% if top_item %}
-                <p class="mb-1">Most Ordered Item:</p>
-                <h4 class="fw-bold">{{ top_item.name }}</h4>
-                <p class="text-muted">{{ top_item.total_orders }} orders</p>
-            {% else %}
-                <p class="text-muted fst-italic">Not enough data to calculate demand ranking.</p>
-            {% endif %}
+        <div class="card shadow-sm border-0 dashboard-card">
+            <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseTopItem" aria-expanded="true">
+                <h5 class="fw-bold mb-0"><i class="bi bi-tag me-2"></i>Item With Highest Demand</h5>
+                <i class="bi bi-chevron-down dashboard-chevron"></i>
+            </button>
+            <div class="collapse show" id="collapseTopItem">
+                <div class="card-body pt-0">
+                    {% if top_item %}
+                        <div class="chart-top-block d-flex flex-wrap align-items-center gap-2 mb-2">
+                            <p class="mb-0 me-2">Most Ordered Item:</p>
+                            <h3 class="fw-bold text-primary mb-0">
+                                <a href="{% url 'item_forecast' top_item.pk %}" class="text-decoration-none text-primary hover-card">{{ top_item.name }}</a>
+                            </h3>
+                            <span class="text-muted small">{{ top_item.total_orders }} orders</span>
+                            <a href="{% url 'order_list' %}" class="text-decoration-none small">View all orders</a>
+                        </div>
+                        {% if top_items_labels %}
+                            <div class="chart-box mb-2">
+                                <canvas id="topDemandChart"></canvas>
+                            </div>
+                        {% endif %}
+                        <div class="chart-footer">
+                            <p class="text-muted small mb-0">Tip: click the chart to view all orders.</p>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="bi bi-bar-chart text-muted" style="font-size: 2rem;"></i>
+                            <p class="text-muted mb-0 mt-2">Not enough data to calculate demand ranking.</p>
+                            <p class="text-muted small mb-0">Orders are needed to determine top-selling items.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
         </div>
     </div>
 
 </div>
 
-<!-- RECENT ACTIVITY + PIE CHART -->
-<div class="row g-4 mb-4">
+<!-- RECENT ACTIVITY + ANOMALIES -->
+<div class="row g-4 mb-4 align-items-start">
 
     <!-- Recent Activity -->
     <div class="col-md-6">
-    <div class="card shadow-sm p-4 border-0 h-100">
-        <h5 class="fw-bold mb-3"><i class="bi bi-clock-history me-2"></i> Recent Activity</h5>
-
+        <div class="card shadow-sm border-0 dashboard-card activity-anomalies-card">
+            <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseActivity" aria-expanded="true">
+                <h5 class="fw-bold mb-0"><i class="bi bi-clock-history me-2"></i>Recent Activity</h5>
+                <i class="bi bi-chevron-down dashboard-chevron"></i>
+            </button>
+            <div class="collapse show" id="collapseActivity" data-persist="dash_activity">
+                <div class="card-body pt-0">
         {% if recent_activity %}
         {% for act in recent_activity %}
             <div class="d-flex align-items-start mb-3">
@@ -189,30 +290,32 @@
             {% endif %}
         {% endfor %}
         {% else %}
-        <p class="text-muted fst-italic mb-0">No recent activity yet.</p>
+        <div class="text-center py-4">
+            <i class="bi bi-activity text-muted" style="font-size: 2rem;"></i>
+            <p class="text-muted mb-0 mt-2">No recent activity yet.</p>
+            <p class="text-muted small mb-0">Deliveries and stock adjustments will appear here.</p>
+        </div>
         {% endif %}
-    </div>
-    </div>
-
-
-    <div class="col-md-6">
-        <div class="card shadow-sm p-4 border-0 h-100">
-
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="fw-bold mb-0">⚠️ Recent Demand Anomalies</h5>
-
-                {% if is_manager_or_admin %}
-                    <div class="d-flex gap-2">
-                    <a href="{% url 'anomaly_list' %}" class="btn btn-sm btn-outline-secondary">
-                        View all
-                    </a>
-                    <a href="{% url 'run_anomaly_scan' %}" class="btn btn-sm btn-outline-primary">
-                        Run anomaly scan
-                    </a>
-                    </div>
-                {% endif %}
+                </div>
             </div>
+        </div>
+    </div>
 
+    <!-- Recent Demand Anomalies -->
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 dashboard-card activity-anomalies-card">
+            <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseAnomalies" aria-expanded="true">
+                <h5 class="fw-bold mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Recent Demand Anomalies</h5>
+                <div class="d-flex align-items-center gap-2">
+                    {% if is_manager_or_admin %}
+                    <a href="{% url 'anomaly_list' %}" class="btn btn-sm btn-outline-secondary" onclick="event.stopPropagation()">View all</a>
+                    <a href="{% url 'run_anomaly_scan' %}" class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation()">Run scan</a>
+                    {% endif %}
+                    <i class="bi bi-chevron-down dashboard-chevron"></i>
+                </div>
+            </button>
+            <div class="collapse show" id="collapseAnomalies" data-persist="dash_anomalies">
+                <div class="card-body pt-0">
             <div class="table-responsive">
             <table class="table table-sm table-hover mb-0">
                 <thead class="table-light">
@@ -246,46 +349,88 @@
                     </td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="5" class="text-muted">No anomalies detected.</td></tr>
+                    <tr><td colspan="5" class="text-center py-4">
+                        <i class="bi bi-check-circle text-success" style="font-size: 1.5rem;"></i>
+                        <p class="text-muted mb-0 mt-2">No demand anomalies detected.</p>
+                        <p class="text-muted small mb-0">Stock levels appear stable. Run a scan to check.</p>
+                    </td></tr>
                 {% endfor %}
                 </tbody>
             </table>
             </div>
 
-            <div class="text-muted small mt-2">
+            <div class="text-muted small mt-2 mb-0">
             Generated via robust anomaly detection on daily sales demand.
             </div>
-        </div>
-    </div>
-
-    <!-- Inventory by Category Pie -->
-    <div class="row g-4 mb-4">
-        <div class="col-md-6">
-            <div class="card shadow-sm p-4 border-0 h-100">
-            <h5 class="fw-bold mb-3">📊 Inventory by Category</h5>
-
-            {% if pie_labels %}
-                <div class="chart-box">
-                <canvas id="pieChart"></canvas>
                 </div>
-            {% else %}
-                <p class="text-muted fst-italic">No category data available.</p>
-            {% endif %}
             </div>
         </div>
     </div>
 
 </div>
 
+<!-- INVENTORY BY CATEGORY + LOCATION -->
+<div class="row g-4 mb-4 align-items-start">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 dashboard-card">
+            <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapsePie" aria-expanded="true" aria-label="Toggle inventory by category chart">
+                <h5 class="fw-bold mb-0"><i class="bi bi-pie-chart me-2"></i>Inventory by Category</h5>
+                <i class="bi bi-chevron-down dashboard-chevron"></i>
+            </button>
+            <div class="collapse show" id="collapsePie" data-persist="dash_pie">
+                <div class="card-body pt-0">
+            {% if pie_labels %}
+                <div class="chart-box chart-box-pie">
+                <canvas id="pieChart"></canvas>
+                </div>
+                <p class="text-muted small mb-0 mt-2"><a href="{% url 'item_list' %}" class="text-decoration-none">View all items by category</a></p>
+            {% else %}
+                <div class="text-center py-4">
+                    <i class="bi bi-pie-chart text-muted" style="font-size: 2rem;"></i>
+                    <p class="text-muted mb-0 mt-2">No category data available.</p>
+                    <p class="text-muted small mb-0">Assign categories to items to see distribution.</p>
+                </div>
+            {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 dashboard-card">
+            <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseLocation" aria-label="Toggle inventory by location chart" aria-expanded="true">
+                <h5 class="fw-bold mb-0"><i class="bi bi-geo-alt me-2"></i>Inventory by Location</h5>
+                <i class="bi bi-chevron-down dashboard-chevron"></i>
+            </button>
+            <div class="collapse show" id="collapseLocation" data-persist="dash_location">
+                <div class="card-body pt-0">
+            {% if location_labels %}
+                <div class="chart-box chart-box-pie">
+                <canvas id="locationChart"></canvas>
+                </div>
+                <p class="text-muted small mb-0 mt-2">Top locations by total quantity held. <a href="{% url 'item_list' %}" class="text-decoration-none">View all items</a></p>
+            {% else %}
+                <div class="text-center py-4">
+                    <i class="bi bi-geo-alt text-muted" style="font-size: 2rem;"></i>
+                    <p class="text-muted mb-0 mt-2">No location data available.</p>
+                    <p class="text-muted small mb-0">Assign locations to items to see distribution.</p>
+                </div>
+            {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- CHART.JS -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
+let topDemandChartInstance = null;
+let locationChartInstance = null;
 /* INVENTORY TREND */
 {% if stock_dates %}
 const inventoryCtx = document.getElementById('inventoryChart').getContext('2d');
-
-new Chart(inventoryCtx, {
+const inventoryChart = new Chart(inventoryCtx, {
     type: 'line',
     data: {
         labels: {{ stock_dates|safe }},
@@ -331,43 +476,57 @@ document.getElementById('inventoryChart').onclick = () => {
 };
 {% endif %}
 
-/* WEEKLY ORDERS */
+/* WEEKLY ORDERS (stacked: purchase + sale) */
 {% if weekly_order_labels %}
 const ordersCtx = document.getElementById('ordersChart').getContext('2d');
-
-new Chart(ordersCtx, {
+const ordersChart = new Chart(ordersCtx, {
     type: 'bar',
     data: {
         labels: {{ weekly_order_labels|safe }},
-        datasets: [{
-            label: 'Orders',
-            data: {{ weekly_order_counts|safe }},
-            backgroundColor: 'rgba(54, 162, 235, 0.75)',
-            borderRadius: 6,
-            maxBarThickness: 40
-        }]
+        datasets: [
+            {
+                label: 'Purchase',
+                data: {{ weekly_purchase_counts|safe }},
+                backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                borderRadius: { topLeft: 0, topRight: 0 },
+                maxBarThickness: 40
+            },
+            {
+                label: 'Sale',
+                data: {{ weekly_sale_counts|safe }},
+                backgroundColor: 'rgba(34, 197, 94, 0.8)',
+                borderRadius: 6,
+                maxBarThickness: 40
+            }
+        ]
     },
     options: {
         responsive: true,
         maintainAspectRatio: false,
-        animation: {
-            duration: 1000,
-            easing: 'easeOutBounce'
-        },
-        plugins: {
-            legend: { display: false },
-            tooltip: {
-                callbacks: {
-                    label: (ctx) => " Orders: " + ctx.parsed.y
-                }
-            }
-        },
+        animation: { duration: 1000, easing: 'easeOutBounce' },
         scales: {
-            x: { grid: { display: false } },
+            x: { stacked: true, grid: { display: false } },
             y: {
+                stacked: true,
                 beginAtZero: true,
                 grid: { color: "rgba(0,0,0,0.05)" },
                 ticks: { precision: 0 }
+            }
+        },
+        plugins: {
+            legend: {
+                display: true,
+                position: 'top',
+                labels: { boxWidth: 12, padding: 8 }
+            },
+            tooltip: {
+                callbacks: {
+                    label: (ctx) => " " + ctx.dataset.label + ": " + ctx.parsed.y,
+                    afterBody: (items) => {
+                        const total = items.reduce((s, i) => s + i.parsed.y, 0);
+                        return "Total: " + total;
+                    }
+                }
             }
         }
     }
@@ -379,11 +538,61 @@ document.getElementById('ordersChart').onclick = () => {
 };
 {% endif %}
 
+/* TOP DEMAND (horizontal bar) */
+{% if top_items_labels %}
+const topDemandCtx = document.getElementById('topDemandChart');
+if (topDemandCtx) {
+    topDemandChartInstance = new Chart(topDemandCtx.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: {{ top_items_labels|safe }},
+            datasets: [{
+                label: 'Orders',
+                data: {{ top_items_counts|safe }},
+                backgroundColor: [
+                    'rgba(34, 197, 94, 0.75)',
+                    'rgba(34, 197, 94, 0.6)',
+                    'rgba(34, 197, 94, 0.45)',
+                    'rgba(34, 197, 94, 0.3)',
+                    'rgba(34, 197, 94, 0.2)'
+                ],
+                borderRadius: 4,
+                maxBarThickness: 28
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 800 },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => " " + ctx.parsed.x + " orders"
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    grid: { color: "rgba(0,0,0,0.05)" },
+                    ticks: { precision: 0 }
+                },
+                y: { grid: { display: false } }
+            }
+        }
+    });
+    document.getElementById('topDemandChart').onclick = () => {
+        window.location.href = "{% url 'order_list' %}";
+    };
+}
+{% endif %}
+
 /* PIE CHART */
 {% if pie_labels %}
 const pieCtx = document.getElementById('pieChart').getContext('2d');
-
-new Chart(pieCtx, {
+const pieChart = new Chart(pieCtx, {
     type: 'pie',
     data: {
         labels: {{ pie_labels|safe }},
@@ -405,6 +614,122 @@ new Chart(pieCtx, {
     }
 });
 {% endif %}
+
+/* INVENTORY BY LOCATION (horizontal bar) */
+{% if location_labels %}
+const locationCtx = document.getElementById('locationChart');
+if (locationCtx) {
+    locationChartInstance = new Chart(locationCtx.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: {{ location_labels|safe }},
+            datasets: [{
+                label: 'Quantity',
+                data: {{ location_values|safe }},
+                backgroundColor: 'rgba(99, 102, 241, 0.7)',
+                borderRadius: 4,
+                maxBarThickness: 32
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 600 },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => " " + ctx.parsed.x + " units"
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    grid: { color: "rgba(0,0,0,0.05)" },
+                    ticks: { precision: 0 }
+                },
+                y: { grid: { display: false } }
+            }
+        }
+    });
+}
+{% endif %}
+
+/* SMA SPARKLINE */
+let smaChartInstance = null;
+{% if sma_values %}
+const smaCtx = document.getElementById('smaChart');
+if (smaCtx) {
+    smaChartInstance = new Chart(smaCtx.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: {{ sma_dates|safe }},
+            datasets: [
+                {
+                    label: 'Daily total',
+                    data: {{ sma_values|safe }},
+                    borderColor: 'rgba(59, 130, 246, 0.9)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.35,
+                    pointRadius: 4,
+                    pointBackgroundColor: 'rgba(59, 130, 246, 1)'
+                },
+                {
+                    label: '7-day avg',
+                    data: Array({{ sma_values|length }}).fill({{ forecast }}),
+                    borderColor: 'rgba(107, 114, 128, 0.6)',
+                    borderWidth: 1.5,
+                    borderDash: [4, 4],
+                    fill: false,
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 600 },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => ctx.datasetIndex === 0 ? " Qty: " + ctx.parsed.y : " SMA: " + ctx.parsed.y
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { display: false }, ticks: { maxRotation: 0 } },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: "rgba(0,0,0,0.05)" },
+                    ticks: { precision: 0 }
+                }
+            }
+        }
+    });
+}
+{% endif %}
+
+// Resize charts when collapse is shown (so charts render correctly after expand)
+document.addEventListener('shown.bs.collapse', function(e) {
+    if (e.target.id === 'collapseTrend' && typeof inventoryChart !== 'undefined') inventoryChart.resize();
+    if (e.target.id === 'collapseOrders' && typeof ordersChart !== 'undefined') ordersChart.resize();
+    if (e.target.id === 'collapseTopItem' && typeof topDemandChartInstance !== 'undefined' && topDemandChartInstance) topDemandChartInstance.resize();
+    if (e.target.id === 'collapsePie' && typeof pieChart !== 'undefined') pieChart.resize();
+    if (e.target.id === 'collapseLocation' && typeof locationChartInstance !== 'undefined' && locationChartInstance) locationChartInstance.resize();
+    if (e.target.id === 'collapseForecast' && smaChartInstance) smaChartInstance.resize();
+});
+// Resize charts when window is resized
+window.addEventListener('resize', function() {
+    var charts = [inventoryChart, ordersChart, topDemandChartInstance, pieChart, locationChartInstance, smaChartInstance];
+    charts.forEach(function(c) {
+        if (typeof c !== 'undefined' && c) try { c.resize(); } catch(e) {}
+    });
+});
 </script>
 
 <style>
@@ -417,6 +742,49 @@ new Chart(pieCtx, {
     box-shadow: 0 6px 20px rgba(0,0,0,0.15);
 }
 
+.cursor-pointer { cursor: pointer; }
+/* Toggle button: full-width header, no button look */
+.dashboard-card .card-header.btn-toggle {
+    width: 100%;
+    text-align: left;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+}
+.dashboard-card .card-header.btn-toggle:focus {
+    box-shadow: none;
+}
+.dashboard-chevron {
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+}
+.dashboard-card .card-header.btn-toggle[aria-expanded="false"] .dashboard-chevron {
+    transform: rotate(-90deg);
+}
+
+.chart-top-spacer {
+    height: 52px;
+    min-height: 52px;
+    margin-bottom: 0.5rem;
+}
+.chart-top-block {
+    min-height: 52px;
+}
+
+.chart-footer {
+    min-height: 48px;
+}
+
+/* Activity + Anomalies: similar height when expanded, but collapse independently */
+.activity-anomalies-card .collapse .card-body {
+    min-height: 340px;
+}
+
+.chart-container,
+.sma-sparkline-box {
+    flex-shrink: 0;
+}
+
 .chart-container {
     height: 280px;
     position: relative;
@@ -427,6 +795,24 @@ new Chart(pieCtx, {
     height: 280px !important;
     max-height: 280px !important;
     min-height: 280px !important;
+    width: 100%;
+}
+.chart-box-pie {
+    height: 320px !important;
+    max-height: 320px !important;
+    min-height: 320px !important;
+}
+
+/* Mobile: quick actions full width */
+@media (max-width: 767px) {
+    .quick-actions { width: 100%; justify-content: flex-start; }
+}
+
+.sma-sparkline-box {
+    height: 280px !important;
+    max-height: 280px !important;
+    min-height: 280px !important;
+    position: relative;
     width: 100%;
 }
 

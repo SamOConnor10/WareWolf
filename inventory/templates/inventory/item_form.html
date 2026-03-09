@@ -2,200 +2,472 @@
 {% load django_bootstrap5 %}
 
 {% block content %}
-<div class="container mt-4">
-    <h1 class="fw-bold mb-4">
-        {% if form.instance.pk %}Edit Item{% else %}New Item{% endif %}
-    </h1>
+<div class="container py-4">
+    <div class="d-flex align-items-center gap-3 mb-4">
+        <a href="{% url 'item_list' %}" class="btn btn-outline-secondary btn-sm" title="Back to stock items">
+            <i class="bi bi-arrow-left"></i>
+        </a>
+        <h1 class="fw-bold mb-0">
+            {% if form.instance.pk %}<i class="bi bi-pencil-square me-2"></i>Edit Item{% else %}<i class="bi bi-plus-circle me-2"></i>New Item{% endif %}
+        </h1>
+    </div>
 
-    <form method="POST" id="itemForm">
+    {% if form.errors %}
+        <div class="alert alert-danger d-flex align-items-start gap-2">
+            <i class="bi bi-exclamation-triangle-fill fs-5 mt-1"></i>
+            <div>
+                <strong>Please fix the errors below.</strong>
+                {{ form.non_field_errors }}
+                <ul class="mb-0 mt-2 small">
+                    {% for field in form %}
+                        {% for error in field.errors %}
+                            <li>{{ field.label }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    {% endif %}
+
+    <form method="POST" id="itemForm" enctype="multipart/form-data">
         {% csrf_token %}
 
-        {% if form.errors %}
-            <div class="alert alert-danger">
-                <strong>Could not save. Please fix the errors below.</strong>
-                {{ form.non_field_errors }}
-                {{ form.errors }}
-            </div>
-        {% endif %}
-
-        <!-- NAME -->
-        <div class="mb-3">
-            <label class="form-label">Name</label>
-            {{ form.name }}
-        </div>
-
-        <!-- SKU -->
-        <div class="mb-3">
-            <label class="form-label">SKU</label>
-            {{ form.sku }}
-        </div>
-
-        <!-- DESCRIPTION -->
-        <div class="mb-3">
-            <label class="form-label">Description</label>
-            {{ form.description }}
-        </div>
-
-        <!-- QUANTITY -->
-        <div class="mb-3">
-            <label class="form-label">Quantity</label>
-            {{ form.quantity }}
-        </div>
-
-        <!-- CATEGORY + CREATE BUTTON -->
-        <div class="mb-3">
-            <label class="form-label">Category</label>
-
-            <div class="d-flex gap-2">
-                <div class="flex-grow-1">
-                    {{ form.category }}
-                </div>
-
-                {% if perms.inventory.add_category %}
-                    <!-- Button triggers modal -->
-                    <button type="button" class="btn btn-outline-primary"
-                            data-bs-toggle="modal" data-bs-target="#addCategoryModal">
-                        + New
-                    </button>
-                {% endif %}
-            </div>
-        </div>
-
-        <!-- REORDER LEVEL -->
-        <div class="mb-3">
-            <label class="form-label">Reorder Level</label>
-            {{ form.reorder_level }}
-        </div>
-
-        <!-- COST -->
-        <div class="mb-3">
-            <label class="form-label">Unit Cost</label>
-            {{ form.unit_cost }}
-        </div>
-
-        <!-- SUPPLIER -->
-        <div class="mb-3">
-            <label class="form-label">Supplier</label>
-            {{ form.supplier }}
-        </div>
-
-        <!-- LOCATION -->
-        <div class="mb-4">
-            <label class="form-label">Location</label>
-            {{ form.location }}
-        </div>
-
-        <button class="btn btn-outline-secondary mb-3" type="button"
-                data-bs-toggle="collapse" data-bs-target="#advancedFields">
-            Advanced planning settings
-        </button>
-
-        <div class="collapse" id="advancedFields">
-            <div class="card card-body mb-3">
-                <div class="mb-3">
-                    <label class="form-label">Lead Time (days)</label>
-                    {{ form.lead_time_days }}
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Safety Stock</label>
-                    {{ form.safety_stock }}
+        <div class="row g-4">
+            <!-- BASIC INFO -->
+            <div class="col-lg-8">
+                <div class="card shadow-sm border-0 mb-0">
+                    <div class="card-header bg-white border-bottom py-3">
+                        <h5 class="mb-0 fw-semibold">
+                            <i class="bi bi-box-seam text-primary me-2"></i>Basic Information
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label fw-medium">Image</label>
+                                {{ form.image }}
+                                {% if form.instance.image %}
+                                    <div class="mt-2">
+                                        <img src="{{ form.instance.image.url }}" alt="Current" style="max-height: 100px;" class="rounded">
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label fw-medium">Name</label>
+                                {{ form.name }}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-medium">Unit of measure</label>
+                                {{ form.unit_of_measure }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-medium">SKU</label>
+                                {{ form.sku }}
+                                <small class="text-muted">Unique product code</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-medium">Barcode</label>
+                                <div class="input-group">
+                                    {{ form.barcode }}
+                                    <button type="button" class="btn btn-outline-primary" id="scanBarcodeBtn" title="Scan barcode with camera">
+                                        <i class="bi bi-upc-scan"></i> Scan
+                                    </button>
+                                </div>
+                                <small class="text-muted">Optional — use your phone or laptop camera</small>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-medium">Description</label>
+                                {{ form.description }}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
+
+            <!-- STOCK LEVELS -->
+            <div class="col-lg-4">
+                <div class="card shadow-sm border-0 mb-0">
+                    <div class="card-header bg-white border-bottom py-3">
+                        <h5 class="mb-0 fw-semibold">
+                            <i class="bi bi-bar-chart-steps text-primary me-2"></i>Stock Levels
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-medium">Quantity</label>
+                            {{ form.quantity }}
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-medium">Reorder level</label>
+                            {{ form.reorder_level }}
+                            <small class="text-muted d-block">Alert when stock falls below this</small>
+                        </div>
+                        <div class="mb-0">
+                            <label class="form-label fw-medium">Category</label>
+                            <div class="d-flex gap-2">
+                                <div class="flex-grow-1">{{ form.category }}</div>
+                                {% if perms.inventory.add_category %}
+                                    <button type="button" class="btn btn-outline-primary flex-shrink-0" data-bs-toggle="modal" data-bs-target="#addCategoryModal" title="Create new category">
+                                        <i class="bi bi-plus-lg"></i>
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- COSTS & SUPPLY -->
+            <div class="col-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white border-bottom py-3">
+                        <h5 class="mb-0 fw-semibold">
+                            <i class="bi bi-currency-dollar text-primary me-2"></i>Costs & Supply
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label fw-medium">Unit cost</label>
+                                {{ form.unit_cost }}
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-medium">Currency</label>
+                                {{ form.currency }}
+                                <small class="text-muted">Price currency</small>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-medium">Supplier</label>
+                                {{ form.supplier }}
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-medium">Location</label>
+                                {{ form.location }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-medium">Packaging</label>
+                                {{ form.packaging }}
+                                <small class="text-muted">e.g. box, pallet</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-medium">External link</label>
+                                {{ form.external_link }}
+                                <small class="text-muted">Datasheet, product page</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BATCH & TRACKING -->
+            <div class="col-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white border-bottom py-3">
+                        <h5 class="mb-0 fw-semibold">
+                            <i class="bi bi-upc-scan text-primary me-2"></i>Batch & Tracking
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label fw-medium">Batch code</label>
+                                {{ form.batch_code }}
+                                <small class="text-muted">Lot number for tracking</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-medium">Stock status</label>
+                                {{ form.stock_status }}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-medium">Expiry date</label>
+                                {{ form.expiry_date }}
+                                <small class="text-muted">For perishable items</small>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-medium">Serial numbers</label>
+                                {{ form.serial_numbers }}
+                                <small class="text-muted">One per line</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ADVANCED PLANNING -->
+            <div class="col-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 fw-semibold">
+                            <i class="bi bi-gear text-primary me-2"></i>Advanced planning
+                        </h5>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#advancedFields" aria-expanded="false">
+                            <i class="bi bi-chevron-down me-1"></i> Show
+                        </button>
+                    </div>
+                    <div class="collapse" id="advancedFields" data-persist="item_advanced">
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-medium">Lead time (days)</label>
+                                    {{ form.lead_time_days }}
+                                    <small class="text-muted d-block">Average days to restock</small>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-medium">Safety stock</label>
+                                    {{ form.safety_stock }}
+                                    <small class="text-muted d-block">Buffer above reorder level</small>
+                                </div>
+                                <div class="col-12">
+                                    <div class="form-check">
+                                        {{ form.delete_on_deplete }}
+                                        <label class="form-check-label fw-medium" for="{{ form.delete_on_deplete.id_for_label }}">
+                                            Delete on deplete
+                                        </label>
+                                        <small class="text-muted d-block">Archive this item when stock reaches zero</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NOTES -->
+            <div class="col-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white border-bottom py-3">
+                        <h5 class="mb-0 fw-semibold">
+                            <i class="bi bi-sticky text-primary me-2"></i>Internal notes
+                            <small class="fw-normal text-muted ms-2">(not shown externally)</small>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        {{ form.notes }}
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <!-- BUTTONS -->
-        {% if form.instance.pk %}
-            {% if perms.inventory.change_item %}
-                <button type="submit" class="btn btn-success me-2">Save</button>
+        <!-- ACTIONS -->
+        <div class="d-flex flex-wrap gap-2 mt-4 pt-3 border-top">
+            {% if form.instance.pk and perms.inventory.change_item %}
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-check-lg me-1"></i>Save changes
+                </button>
+            {% elif not form.instance.pk and perms.inventory.add_item %}
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-plus-lg me-1"></i>Create item
+                </button>
             {% endif %}
-        {% else %}
-            {% if perms.inventory.add_item %}
-                <button type="submit" class="btn btn-success me-2">Save</button>
-            {% endif %}
-        {% endif %}
-        <a href="{% url 'item_list' %}" class="btn btn-secondary">Cancel</a>
+            <a href="{% url 'item_list' %}" class="btn btn-secondary">
+                <i class="bi bi-x-lg me-1"></i>Cancel
+            </a>
+        </div>
     </form>
 </div>
 
-
-
-<!-- =================================================================== -->
-<!-- CATEGORY CREATION MODAL (Inline new-category creation UI) -->
-<!-- =================================================================== -->
-
-{% if perms.inventory.add_category %}
-<div class="modal fade" id="addCategoryModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-
-      <div class="modal-header">
-        <h5 class="modal-title fw-bold">Create Category</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-
-      <div class="modal-body">
-        <form id="categoryForm">
-
-          <div class="mb-3">
-            <label class="form-label">Category Name</label>
-            <input type="text" name="name" class="form-control" required>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Parent Category (optional)</label>
-            <select name="parent" class="form-select">
-                <option value="">None</option>
-                {% for c in all_categories %}
-                    <option value="{{ c.id }}">{{ c.full_path }}</option>
-                {% endfor %}
-            </select>
-          </div>
-
-        </form>
-      </div>
-
-      <div class="modal-footer">
-        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button id="saveCategoryBtn" class="btn btn-primary">Create</button>
-      </div>
-
+<!-- BARCODE SCANNER MODAL -->
+<div class="modal fade" id="barcodeScannerModal" tabindex="-1" aria-labelledby="barcodeScannerLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="barcodeScannerLabel">
+                    <i class="bi bi-upc-scan me-2"></i>Scan barcode
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" id="barcodeScannerClose"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">Point your camera at a barcode or QR code. If live scan fails, use <strong>Upload photo</strong> (works reliably).</p>
+                <div class="mb-2">
+                    <label class="btn btn-outline-secondary btn-sm mb-0" for="barcode-file-input">
+                        <i class="bi bi-image me-1"></i>Or upload photo
+                    </label>
+                    <input type="file" id="barcode-file-input" accept="image/*" capture="environment" class="d-none">
+                </div>
+                <div id="barcode-reader" class="rounded overflow-hidden bg-dark" style="min-height: 200px;"></div>
+                <div id="barcode-scan-result" class="alert alert-success mt-2 d-none" role="alert">
+                    <i class="bi bi-check-circle me-2"></i><span id="barcode-scan-value"></span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="barcodeScannerStop">Stop camera</button>
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal" id="barcodeScannerDone">Done</button>
+            </div>
+        </div>
     </div>
-  </div>
 </div>
 
-
-
-<!-- =================================================================== -->
-<!-- AJAX SCRIPT TO SAVE CATEGORY + REFRESH CATEGORY DROPDOWN -->
-<!-- =================================================================== -->
+<!-- CATEGORY CREATION MODAL -->
+{% if perms.inventory.add_category %}
+<div class="modal fade" id="addCategoryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold"><i class="bi bi-folder-plus me-2"></i>Create Category</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="categoryForm">
+                    <div class="mb-3">
+                        <label class="form-label">Category name</label>
+                        <input type="text" name="name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Parent category (optional)</label>
+                        <select name="parent" class="form-select">
+                            <option value="">None</option>
+                            {% for c in all_categories %}
+                                <option value="{{ c.id }}">{{ c.full_path }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button id="saveCategoryBtn" class="btn btn-primary">
+                    <i class="bi bi-plus-lg me-1"></i>Create
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <script>
-document.getElementById("saveCategoryBtn").onclick = function () {
-    const form = document.getElementById("categoryForm");
-    const formData = new FormData(form);
+document.addEventListener("DOMContentLoaded", function() {
+    var advBtn = document.querySelector('[data-bs-target="#advancedFields"]');
+    if (advBtn) {
+        document.getElementById("advancedFields").addEventListener("show.bs.collapse", function() {
+            advBtn.innerHTML = '<i class="bi bi-chevron-up me-1"></i> Hide';
+        });
+        document.getElementById("advancedFields").addEventListener("hide.bs.collapse", function() {
+            advBtn.innerHTML = '<i class="bi bi-chevron-down me-1"></i> Show';
+        });
+    }
+});
+</script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+(function() {
+    var html5QrScanner = null;
+    var barcodeScannerModal = document.getElementById("barcodeScannerModal");
+    var barcodeInput = document.getElementById("id_barcode");
+    var skuInput = document.getElementById("id_sku");
+
+    function stopScanner() {
+        if (html5QrScanner && html5QrScanner.isScanning) {
+            html5QrScanner.stop().then(function() { html5QrScanner = null; }).catch(function() {});
+        }
+    }
+
+    function onBarcodeDetected(decodedText) {
+        if (!barcodeInput) return;
+        barcodeInput.value = decodedText;
+        if (skuInput && !skuInput.value) skuInput.value = decodedText;
+        var el = document.getElementById("barcode-scan-value");
+        if (el) el.textContent = decodedText;
+        var res = document.getElementById("barcode-scan-result");
+        if (res) res.classList.remove("d-none");
+        stopScanner();
+        setTimeout(function() {
+            var modal = bootstrap.Modal.getInstance(barcodeScannerModal);
+            if (modal) modal.hide();
+            if (res) res.classList.add("d-none");
+        }, 600);
+    }
+
+    function startScanner() {
+        if (!barcodeInput) return;
+        var readerDiv = document.getElementById("barcode-reader");
+        if (!readerDiv) return;
+        readerDiv.innerHTML = "";
+
+        html5QrScanner = new Html5Qrcode("barcode-reader");
+        html5QrScanner.start(
+            { facingMode: "environment" },
+            { fps: 12, qrbox: { width: 280, height: 140 } },
+            function(decodedText) { onBarcodeDetected(decodedText); },
+            function() {}
+        ).catch(function(err) {
+            console.error("Camera error:", err);
+            alert("Could not access camera. Check permissions and try again.");
+        });
+    }
+
+    function openScanner() {
+        var modal = new bootstrap.Modal(barcodeScannerModal);
+        modal.show();
+        barcodeScannerModal.addEventListener("shown.bs.modal", function onShown() {
+            barcodeScannerModal.removeEventListener("shown.bs.modal", onShown);
+            startScanner();
+        }, { once: true });
+    }
+
+    barcodeScannerModal.addEventListener("hidden.bs.modal", function() {
+        stopScanner();
+    });
+
+    var scanBtn = document.getElementById("scanBarcodeBtn");
+    if (scanBtn) scanBtn.addEventListener("click", openScanner);
+
+    document.getElementById("barcodeScannerClose").addEventListener("click", stopScanner);
+    document.getElementById("barcodeScannerStop").addEventListener("click", stopScanner);
+    document.getElementById("barcodeScannerDone").addEventListener("click", stopScanner);
+
+    var fileInput = document.getElementById("barcode-file-input");
+    if (fileInput && barcodeInput) {
+        fileInput.addEventListener("change", function(e) {
+            var file = e.target.files && e.target.files[0];
+            if (!file) return;
+            stopScanner();
+            var readerDiv = document.getElementById("barcode-reader");
+            if (readerDiv) readerDiv.innerHTML = '<div class="d-flex align-items-center justify-content-center text-white p-4"><span class="spinner-border me-2"></span>Scanning...</div>';
+            var tempScanner = new Html5Qrcode("barcode-reader", { experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
+            tempScanner.scanFile(file, false).then(function(decodedText) {
+                barcodeInput.value = decodedText;
+                if (skuInput && !skuInput.value) skuInput.value = decodedText;
+                document.getElementById("barcode-scan-value").textContent = decodedText;
+                document.getElementById("barcode-scan-result").classList.remove("d-none");
+                fileInput.value = "";
+                setTimeout(function() {
+                    bootstrap.Modal.getInstance(barcodeScannerModal).hide();
+                    document.getElementById("barcode-scan-result").classList.add("d-none");
+                }, 600);
+            }).catch(function() {
+                alert("Could not read barcode from image. Try a clearer photo.");
+                fileInput.value = "";
+            });
+        });
+    }
+
+    {% if auto_scan %}
+    if (barcodeInput) setTimeout(openScanner, 500);
+    {% endif %}
+})();
+</script>
+{% if perms.inventory.add_category %}
+<script>
+document.getElementById("saveCategoryBtn").onclick = function() {
+    var form = document.getElementById("categoryForm");
+    var formData = new FormData(form);
 
     fetch("{% url 'category_create_ajax' %}", {
         method: "POST",
         headers: { "X-CSRFToken": "{{ csrf_token }}" },
         body: formData,
     })
-    .then(response => response.json())
-    .then(data => {
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
         if (data.success) {
-
-            // 1. Add new category to dropdown
-            const select = document.getElementById("id_category");
-            const option = document.createElement("option");
+            var select = document.getElementById("id_category");
+            var option = document.createElement("option");
             option.value = data.id;
             option.textContent = data.name;
             option.selected = true;
             select.appendChild(option);
 
-            // 2. Close modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById("addCategoryModal"));
-            modal.hide();
-
-            // 3. Reset form
+            bootstrap.Modal.getInstance(document.getElementById("addCategoryModal")).hide();
             form.reset();
         } else {
             alert("Error creating category");

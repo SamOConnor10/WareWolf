@@ -1,138 +1,166 @@
 {% extends "inventory/base.html" %}
+{% load querystring %}
 
 {% block content %}
-<h1 class="fw-bold">Orders</h1>
-<p class="text-muted">Track and manage purchase and sale orders</p>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <h1 class="fw-bold mb-1"><i class="bi bi-cart-check text-primary me-2"></i>Orders</h1>
+        <p class="text-muted mb-0">Track and manage purchase and sale orders</p>
+    </div>
+    {% if perms.inventory.view_order %}
+        <a href="{% url 'order_export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-outline-success" title="Export filtered orders">
+            <i class="bi bi-download me-1"></i>Export CSV
+        </a>
+    {% endif %}
+</div>
 
 <!-- Summary cards -->
 <div class="row mb-4">
     <div class="col-md-3 mb-3">
         <div class="card shadow-sm border-0">
-            <div class="card-body">
-                <h6 class="text-muted mb-1">Purchase Orders</h6>
-                <div class="fs-3 fw-bold">{{ purchase_count }}</div>
-            </div>
+            <div class="card-body"><h6 class="text-muted mb-1">Purchase Orders</h6><div class="fs-3 fw-bold">{{ purchase_count }}</div></div>
         </div>
     </div>
     <div class="col-md-3 mb-3">
         <div class="card shadow-sm border-0">
-            <div class="card-body">
-                <h6 class="text-muted mb-1">Sale Orders</h6>
-                <div class="fs-3 fw-bold">{{ sale_count }}</div>
-            </div>
+            <div class="card-body"><h6 class="text-muted mb-1">Sale Orders</h6><div class="fs-3 fw-bold">{{ sale_count }}</div></div>
         </div>
     </div>
     <div class="col-md-3 mb-3">
         <div class="card shadow-sm border-0">
-            <div class="card-body">
-                <h6 class="text-muted mb-1">Pending</h6>
-                <div class="fs-3 fw-bold">{{ pending_count }}</div>
-            </div>
+            <div class="card-body"><h6 class="text-muted mb-1">Pending</h6><div class="fs-3 fw-bold">{{ pending_count }}</div></div>
         </div>
     </div>
     <div class="col-md-3 mb-3">
         <div class="card shadow-sm border-0">
-            <div class="card-body">
-                <h6 class="text-muted mb-1">Delivered</h6>
-                <div class="fs-3 fw-bold">{{ delivered_count }}</div>
-            </div>
+            <div class="card-body"><h6 class="text-muted mb-1">Delivered</h6><div class="fs-3 fw-bold">{{ delivered_count }}</div></div>
         </div>
     </div>
 </div>
 
-<!-- Search + filters row -->
-<form method="get" class="row g-2 align-items-center mb-3">
+<!-- Search + filters (auto-submit) -->
+<form method="get" id="order-filter-form" class="row g-3 align-items-end mb-3">
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <input type="hidden" name="type" value="{{ type_filter }}">
+    <input type="hidden" name="per_page" value="{{ per_page }}">
     <div class="col-md-5">
-        <input type="text"
-               name="q"
-               class="form-control"
-               placeholder="Search orders or parties..."
-               value="{{ search_query }}">
+        <label class="form-label small text-muted mb-1">Search</label>
+        <div class="input-group">
+            <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+            <input type="text" name="q" id="order-search" class="form-control" placeholder="Search orders or parties..."
+                   value="{{ search_query }}" autocomplete="off">
+        </div>
     </div>
-
     <div class="col-md-3">
-        <select name="status" class="form-select">
+        <label class="form-label small text-muted mb-1">Status</label>
+        <select name="status" id="order-status" class="form-select">
             <option value="all">All Statuses</option>
             {% for code, label in status_choices %}
-                <option value="{{ code }}"
-                    {% if status_filter == code %}selected{% endif %}>
-                    {{ label }}
-                </option>
+                <option value="{{ code }}" {% if status_filter == code %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
-    </div>
-
-    <div class="col-md-2 d-grid">
-        <button class="btn btn-secondary">Apply</button>
-    </div>
-
-    <div class="col-md-2 text-md-end mt-2 mt-md-0">
-        {% if perms.inventory.add_order %}
-            {% if context_type == "purchase" %}
-                <a href="{% url 'order_create' %}?type=purchase" class="btn btn-primary">+ Create PO</a>
-            {% elif context_type == "sale" %}
-                <a href="{% url 'order_create' %}?type=sale" class="btn btn-primary">+ Create SO</a>
-            {% else %}
-                <a href="{% url 'order_create' %}" class="btn btn-primary">+ Create Order</a>
-            {% endif %}
-        {% endif %}
     </div>
 </form>
 
 <!-- Type tabs -->
 <div class="btn-group mb-3" role="group">
-    <a href="{% url 'order_list' %}?type=all"
-       class="btn btn-sm {% if type_filter == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
-        All Orders
-    </a>
-
-    <a href="{% url 'order_list' %}?type=purchase"
-       class="btn btn-sm {% if type_filter == 'purchase' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
-        Purchase Orders
-    </a>
-
-    <a href="{% url 'order_list' %}?type=sale"
-       class="btn btn-sm {% if type_filter == 'sale' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
-        Sale Orders
-    </a>
+    <a href="?{% querystring request type='all' %}" class="btn btn-sm {% if type_filter == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">All Orders</a>
+    <a href="?{% querystring request type='purchase' %}" class="btn btn-sm {% if type_filter == 'purchase' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Purchase Orders</a>
+    <a href="?{% querystring request type='sale' %}" class="btn btn-sm {% if type_filter == 'sale' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Sale Orders</a>
 </div>
 
-<table class="table table-hover bg-white shadow-sm">
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2">
+    <p class="text-muted small mb-0">
+        {% if orders.paginator %}
+            Showing {{ orders.start_index }}-{{ orders.end_index }} of {{ orders.paginator.count }} order{{ orders.paginator.count|pluralize }}
+        {% else %}
+            {{ orders|length }} order{{ orders|length|pluralize }}
+        {% endif %}
+    </p>
+    <div class="dropdown">
+        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Select columns">
+            <i class="bi bi-layout-three-columns me-1"></i>Columns
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end shadow-sm p-2" style="min-width: 200px;">
+            <li class="dropdown-header small">Show columns</li>
+            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="ordernum" checked> Order #</label></li>
+            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="type" checked> Type</label></li>
+            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="item" checked> Item</label></li>
+            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="party" checked> Party</label></li>
+            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="location" checked> Location</label></li>
+            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="date" checked> Date</label></li>
+            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="qty" checked> Qty</label></li>
+            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="total" checked> Total</label></li>
+            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="status" checked> Status</label></li>
+        </ul>
+    </div>
+    <div class="d-flex gap-2 align-items-center" id="order-actions-bar"
+         data-edit-url="{% url 'order_edit' 0 %}" data-delete-url="{% url 'order_delete' 0 %}" data-delivered-url="{% url 'order_mark_delivered' 0 %}">
+        <span class="text-muted small" id="order-selected-count"></span>
+        {% if perms.inventory.change_order %}
+            <a href="#" id="btn-order-delivered" class="btn btn-sm btn-outline-success disabled" title="Mark selected as delivered">Mark Delivered</a>
+            <a href="#" id="btn-order-edit" class="btn btn-sm btn-outline-secondary disabled" title="Edit selected">Edit</a>
+        {% endif %}
+        {% if perms.inventory.delete_order %}
+            <a href="#" id="btn-order-delete" class="btn btn-sm btn-outline-danger disabled" title="Delete selected">Delete</a>
+        {% endif %}
+        {% if perms.inventory.add_order %}
+            {% if context_type == "purchase" %}
+                <a href="{% url 'order_create' %}?type=purchase" class="btn btn-primary btn-sm">+ Create PO</a>
+            {% elif context_type == "sale" %}
+                <a href="{% url 'order_create' %}?type=sale" class="btn btn-primary btn-sm">+ Create SO</a>
+            {% else %}
+                <a href="{% url 'order_create' %}" class="btn btn-primary btn-sm">+ Create Order</a>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 overflow-hidden">
+<div class="table-responsive">
+<table class="table table-hover align-middle mb-0" id="orders-table">
     <thead class="table-light">
         <tr>
-            <th>Order #</th>
-            <th>Type</th>
-            <th>Item</th>
-            <th>Party</th>
-            <th>Date</th>
-            <th class="text-end">Qty</th>
-            <th class="text-end">Total</th>
-            <th>Status</th>
-            <th style="width: 220px;">Actions</th>
+            <th style="width:40px;"><input type="checkbox" class="form-check-input" id="order-select-all" title="Select all"></th>
+            <th data-col="ordernum">Order #</th>
+            <th data-col="type"><a href="?{% querystring request sort=sort|toggle_sort:'order_type' %}" class="sort-link">Type</a></th>
+            <th data-col="item"><a href="?{% querystring request sort=sort|toggle_sort:'item__name' %}" class="sort-link">Item</a></th>
+            <th data-col="party">Party</th>
+            <th data-col="location">Location</th>
+            <th data-col="date"><a href="?{% querystring request sort=sort|toggle_sort:'order_date' %}" class="sort-link">Date</a></th>
+            <th data-col="qty" class="text-end"><a href="?{% querystring request sort=sort|toggle_sort:'quantity' %}" class="sort-link">Qty</a></th>
+            <th data-col="total" class="text-end">Total</th>
+            <th data-col="status"><a href="?{% querystring request sort=sort|toggle_sort:'status' %}" class="sort-link">Status</a></th>
         </tr>
     </thead>
-
     <tbody>
         {% for order in orders %}
-        <tr>
-            <td>ORD-{{ order.id }}</td>
-
-            <td>
+        <tr class="order-row" data-order-id="{{ order.id }}" data-order-status="{{ order.status }}">
+            <td><input type="checkbox" class="form-check-input order-checkbox" value="{{ order.id }}"></td>
+            <td data-col="ordernum"><a href="{% url 'order_edit' order.id %}" class="fw-medium text-decoration-none text-dark">ORD-{{ order.id }}</a></td>
+            <td data-col="type">
                 {% if order.order_type == 'PURCHASE' %}
                     <span class="badge bg-info-subtle text-info">Purchase</span>
                 {% else %}
                     <span class="badge bg-success-subtle text-success">Sale</span>
                 {% endif %}
             </td>
-
-            <td>{{ order.item.name }}</td>
-            <td>{{ order.party_name }}</td>
-            <td>{{ order.order_date }}</td>
-
-            <td class="text-end">{{ order.quantity }}</td>
-            <td class="text-end">€{{ order.total }}</td>
-
-            <td>
+            <td data-col="item"><a href="{% url 'item_detail' order.item.id %}">{{ order.item.name }}</a></td>
+            <td data-col="party">{{ order.party_name }}</td>
+            <td data-col="location">
+                {% if order.order_type == 'SALE' and order.shipping_location %}
+                    <a href="{% url 'location_view' order.shipping_location.id %}">{{ order.shipping_location.name }}</a>
+                {% elif order.order_type == 'PURCHASE' and order.receiving_location %}
+                    <a href="{% url 'location_view' order.receiving_location.id %}">{{ order.receiving_location.name }}</a>
+                {% else %}
+                    <span class="text-muted">—</span>
+                {% endif %}
+            </td>
+            <td data-col="date">{{ order.order_date }}</td>
+            <td data-col="qty" class="text-end">{{ order.quantity }}</td>
+            <td data-col="total" class="text-end">€{{ order.total }}</td>
+            <td data-col="status">
                 {% if order.status == 'DELIVERED' %}
                     <span class="badge bg-success-subtle text-success">Delivered</span>
                 {% elif order.status == 'PENDING' %}
@@ -145,35 +173,112 @@
                     <span class="badge bg-secondary-subtle text-secondary">Cancelled</span>
                 {% endif %}
             </td>
-
-            <td>
-                {% if perms.inventory.change_order %}
-                    {% if order.status != 'DELIVERED' %}
-                        <form method="post" action="{% url 'order_mark_delivered' order.id %}" class="d-inline">
-                            {% csrf_token %}
-                            <button class="btn btn-sm btn-success">Mark Delivered</button>
-                        </form>
-                    {% endif %}
-
-                    <a href="{% url 'order_edit' order.id %}" class="btn btn-sm btn-outline-secondary">Edit</a>
-                {% endif %}
-
-                {% if perms.inventory.delete_order %}
-                    <a href="{% url 'order_delete' order.id %}"
-                       class="btn btn-sm btn-outline-danger">
-                        Delete
-                    </a>
-                {% endif %}
-            </td>
         </tr>
         {% empty %}
-        <tr>
-            <td colspan="9" class="text-center text-muted py-4">
-                No orders found.
-            </td>
-        </tr>
+        <tr><td colspan="10" class="text-center text-muted py-4">No orders found.</td></tr>
         {% endfor %}
     </tbody>
 </table>
+</div>
+</div>
+
+<!-- PAGINATION -->
+{% include "inventory/includes/pagination.html" with page_obj=orders per_page=per_page per_page_choices=per_page_choices %}
+
+<style>
+.sort-link { color: inherit; text-decoration: none; }
+.sort-link:hover { color: var(--bs-primary); }
+</style>
+
+<script>
+(function() {
+    var form = document.getElementById('order-filter-form');
+    if (!form) return;
+    function submitForm() { form.submit(); }
+    var statusEl = document.getElementById('order-status');
+    if (statusEl) statusEl.addEventListener('change', submitForm);
+    var searchEl = document.getElementById('order-search');
+    var searchTimeout;
+    if (searchEl) {
+        searchEl.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(submitForm, 300);
+        });
+    }
+    var selectAll = document.getElementById('order-select-all');
+    var checkboxes = document.querySelectorAll('.order-checkbox');
+    var btnDelivered = document.getElementById('btn-order-delivered');
+    var btnEdit = document.getElementById('btn-order-edit');
+    var btnDelete = document.getElementById('btn-order-delete');
+    var selectedCount = document.getElementById('order-selected-count');
+    var bar = document.getElementById('order-actions-bar');
+    function getSelectedIds() { return Array.from(checkboxes).filter(function(cb) { return cb.checked; }).map(function(cb) { return cb.value; }); }
+    function getSelectedRows() { return Array.from(checkboxes).filter(function(cb) { return cb.checked; }).map(function(cb) { return cb.closest('.order-row'); }); }
+    function updateActions() {
+        var ids = getSelectedIds();
+        var rows = getSelectedRows();
+        var n = ids.length;
+        selectedCount.textContent = n > 0 ? n + ' selected' : '';
+        var allDelivered = rows.every(function(r) { return r.dataset.orderStatus === 'DELIVERED'; });
+        [btnDelivered, btnEdit, btnDelete].forEach(function(btn) {
+            if (btn) {
+                var disable = n === 0;
+                if (btn === btnDelivered) disable = n === 0 || n !== 1 || allDelivered;
+                btn.classList.toggle('disabled', disable);
+                btn.style.pointerEvents = disable ? 'none' : '';
+            }
+        });
+        if (selectAll) selectAll.checked = n > 0 && n === checkboxes.length;
+    }
+    if (selectAll) selectAll.addEventListener('change', function() { checkboxes.forEach(function(cb) { cb.checked = selectAll.checked; }); updateActions(); });
+    checkboxes.forEach(function(cb) { cb.addEventListener('change', updateActions); });
+    function urlFor(name, id) { var u = bar.getAttribute('data-' + name + '-url'); return u ? u.replace('/0/', '/' + id + '/') : ''; }
+    if (btnEdit) btnEdit.addEventListener('click', function(e) { e.preventDefault(); if (this.classList.contains('disabled')) return; var id = getSelectedIds()[0]; if (id) window.location.href = urlFor('edit', id); });
+    if (btnDelete) btnDelete.addEventListener('click', function(e) { e.preventDefault(); if (btnDelete.classList.contains('disabled')) return; var id = getSelectedIds()[0]; if (id && confirm('Delete this order?')) window.location.href = urlFor('delete', id); });
+    if (btnDelivered) btnDelivered.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (btnDelivered.classList.contains('disabled')) return;
+        var id = getSelectedIds()[0];
+        if (!id) return;
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = urlFor('delivered', id);
+        var csrfInput = document.getElementById('order-csrf');
+        if (csrfInput) {
+            var csrf = document.createElement('input');
+            csrf.type = 'hidden';
+            csrf.name = 'csrfmiddlewaretoken';
+            csrf.value = csrfInput.value;
+            form.appendChild(csrf);
+        }
+        document.body.appendChild(form);
+        form.submit();
+    });
+    var STORAGE_KEY = 'warewolf_order_list_columns';
+    function loadColumnPrefs() { try { var s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+    function saveColumnPrefs(obj) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(obj)); } catch (e) {} }
+    function applyColumnVisibility() {
+        var prefs = loadColumnPrefs();
+        document.querySelectorAll('.col-toggle').forEach(function(cb) {
+            var col = cb.dataset.col;
+            if (prefs && prefs[col] !== undefined) cb.checked = prefs[col];
+            var visible = cb.checked;
+            document.querySelectorAll('[data-col="' + col + '"]').forEach(function(el) { el.style.display = visible ? '' : 'none'; });
+        });
+    }
+    document.querySelectorAll('.col-toggle').forEach(function(cb) {
+        cb.addEventListener('change', function() {
+            var prefs = loadColumnPrefs() || {};
+            prefs[cb.dataset.col] = cb.checked;
+            saveColumnPrefs(prefs);
+            applyColumnVisibility();
+        });
+    });
+    document.addEventListener('DOMContentLoaded', applyColumnVisibility);
+    applyColumnVisibility();
+})();
+</script>
+
+<input type="hidden" id="order-csrf" value="{{ csrf_token }}">
 
 {% endblock %}

@@ -25,8 +25,8 @@
             <label class="form-label">Order Type</label>
 
             {% if forced_type %}
-                <select class="form-select" disabled>
-                    <option>{{ forced_type|capfirst }}</option>
+                <select class="form-select" id="id_order_type" disabled data-forced-type="{{ forced_type }}">
+                    <option value="{{ forced_type|upper }}">{{ forced_type|capfirst }}</option>
                 </select>
                 <input type="hidden" name="order_type" value="{{ forced_type|upper }}">
             {% else %}
@@ -77,6 +77,18 @@
         <div class="col-md-6" id="customer_box">
             <label class="form-label">Customer (for Sale)</label>
             {{ form.client }}
+        </div>
+
+        <!-- SHIPPING LOCATION (Sale orders) -->
+        <div class="col-md-6" id="shipping_location_box">
+            <label class="form-label">Shipping location (for Sale)</label>
+            {{ form.shipping_location }}
+        </div>
+
+        <!-- RECEIVING LOCATION (Purchase orders) -->
+        <div class="col-md-6" id="receiving_location_box">
+            <label class="form-label">Receiving location (for Purchase)</label>
+            {{ form.receiving_location }}
         </div>
 
         <div class="col-12">
@@ -151,27 +163,37 @@ document.addEventListener("DOMContentLoaded", function () {
     // HANDLE SHOW/HIDE FIELDS
     // -------------------------
     const typeSelect = document.querySelector("#id_order_type");
-    const supplierField = document.querySelector("#field_supplier");
-    const customerField = document.querySelector("#field_client");
+    const supplierBox = document.querySelector("#supplier_box");
+    const customerBox = document.querySelector("#customer_box");
+    const shippingLocBox = document.querySelector("#shipping_location_box");
+    const receivingLocBox = document.querySelector("#receiving_location_box");
 
-    function updatePartyFields() {
-        const type = typeSelect.value;
-
+    function updatePartyAndLocationFields() {
+        let type = typeSelect ? typeSelect.value : "";
+        if (!type && typeSelect && typeSelect.dataset.forcedType) {
+            type = (typeSelect.dataset.forcedType + "").toUpperCase();
+        }
         if (type === "PURCHASE") {
-            supplierField.style.display = "block";
-            customerField.style.display = "none";
+            if (supplierBox) supplierBox.style.display = "block";
+            if (customerBox) customerBox.style.display = "none";
+            if (shippingLocBox) shippingLocBox.style.display = "none";
+            if (receivingLocBox) receivingLocBox.style.display = "block";
         } else if (type === "SALE") {
-            supplierField.style.display = "none";
-            customerField.style.display = "block";
+            if (supplierBox) supplierBox.style.display = "none";
+            if (customerBox) customerBox.style.display = "block";
+            if (shippingLocBox) shippingLocBox.style.display = "block";
+            if (receivingLocBox) receivingLocBox.style.display = "none";
         } else {
-            supplierField.style.display = "block";
-            customerField.style.display = "block";
+            if (supplierBox) supplierBox.style.display = "block";
+            if (customerBox) customerBox.style.display = "block";
+            if (shippingLocBox) shippingLocBox.style.display = "block";
+            if (receivingLocBox) receivingLocBox.style.display = "block";
         }
     }
 
     if (typeSelect) {
-        typeSelect.addEventListener("change", updatePartyFields);
-        updatePartyFields();  // run on page load
+        typeSelect.addEventListener("change", updatePartyAndLocationFields);
+        updatePartyAndLocationFields();
     }
 
 });

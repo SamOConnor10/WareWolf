@@ -3,6 +3,7 @@ from django.db import models
 from decimal import Decimal
 from datetime import date
 from django.conf import settings
+from django.utils import timezone
 
 class ManagerRequest(models.Model):
     STATUS_CHOICES = [
@@ -49,13 +50,34 @@ class Client(models.Model):
 
 
 class Location(models.Model):
-    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL)
+    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="children")
 
     name = models.CharField(max_length=255)
+    code = models.CharField(max_length=50, blank=True, help_text="Short code e.g. A-01, B-12")
     description = models.TextField(blank=True)
+    image = models.ImageField(upload_to="locations/", blank=True, null=True, help_text="Location photo or diagram")
+    address = models.TextField(blank=True, help_text="Physical address (for external locations)")
+    latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True,
+        help_text="GPS latitude (e.g. 53.349805)",
+    )
+    longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True,
+        help_text="GPS longitude (e.g. -6.260310)",
+    )
+    barcode = models.CharField(max_length=100, blank=True, help_text="Barcode for scanning")
+    notes = models.TextField(blank=True, help_text="Internal notes (not shown externally)")
 
     structural = models.BooleanField(default=False)
     external = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+
+    # Capacity (optional) - max units this location can hold; used for utilisation %
+    capacity = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Maximum units this location can hold (for utilisation tracking)",
+    )
 
     LOCATION_TYPES = [
         ("warehouse", "Warehouse"),
@@ -78,6 +100,14 @@ class Location(models.Model):
     def stock_count(self):
         return self.inventory_items.count()
 
+    def get_map_url(self):
+        """Return Google Maps URL for this location (coords or address)."""
+        from urllib.parse import quote
+        if self.latitude is not None and self.longitude is not None:
+            return f"https://www.google.com/maps?q={self.latitude},{self.longitude}&z=17"
+        if self.address and self.address.strip():
+            return f"https://www.google.com/maps/search/?api=1&query={quote(self.address.strip())}"
+        return None
 
     def __str__(self):
         return self.name
@@ -121,6 +151,8 @@ class Item(models.Model):
         related_name="items"
     )
     sku = models.CharField(max_length=100, unique=True)
+    barcode = models.CharField(max_length=100, blank=True)
+    unit_of_measure = models.CharField(max_length=20, default="pcs", blank=True)
     description = models.TextField(blank=True)
     quantity = models.IntegerField(default=0)
     reorder_level = models.IntegerField(default=0)
@@ -138,11 +170,45 @@ class Item(models.Model):
 
     lead_time_days = models.PositiveIntegerField(default=7)
     safety_stock = models.PositiveIntegerField(default=0)
+    notes = models.TextField(blank=True, help_text="Internal notes (not shown to customers)")
+
+    # Inventree-inspired fields
+    batch_code = models.CharField(max_length=100, blank=True, help_text="Batch or lot number for tracking")
+    STOCK_STATUS_CHOICES = [
+        ("OK", "OK"),
+        ("damaged", "Damaged"),
+        ("quarantine", "Quarantine"),
+        ("returned", "Returned"),
+        ("on_hold", "On Hold"),
+    ]
+    stock_status = models.CharField(max_length=20, choices=STOCK_STATUS_CHOICES, default="OK", blank=True)
+    expiry_date = models.DateField(null=True, blank=True, help_text="Stock considered expired after this date")
+    CURRENCY_CHOICES = [
+        ("EUR", "EUR - Euro"),
+        ("USD", "USD - US Dollar"),
+        ("GBP", "GBP - British Pound"),
+    ]
+    currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default="EUR", blank=True)
+    packaging = models.CharField(max_length=100, blank=True, help_text="How this item is packaged (e.g. box, pallet)")
+    external_link = models.URLField(max_length=500, blank=True, help_text="Link to datasheet, product page, etc.")
+    serial_numbers = models.TextField(blank=True, help_text="Serial numbers (one per line)")
+    delete_on_deplete = models.BooleanField(
+        default=False,
+        help_text="Archive this item when stock reaches zero"
+    )
+
+    image = models.ImageField(upload_to="items/", blank=True, null=True, help_text="Product image")
 
     is_active = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.name} ({self.sku})"
+
+    def maybe_archive_on_deplete(self):
+        """If delete_on_deplete is True and quantity <= 0, archive the item."""
+        if self.delete_on_deplete and self.quantity <= 0:
+            self.is_active = False
+            self.save(update_fields=["is_active"])
 
 
 class Order(models.Model):
@@ -206,6 +272,24 @@ class Order(models.Model):
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING
     )
+
+    # Location fields (sale = shipping from, purchase = receiving to)
+    shipping_location = models.ForeignKey(
+        "Location",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="orders_shipped_from",
+        help_text="Location goods are shipped from (for sale orders)",
+    )
+    receiving_location = models.ForeignKey(
+        "Location",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="orders_received_at",
+        help_text="Location goods are received at (for purchase orders)",
+    )
     priority = models.CharField(
         max_length=10, choices=PRIORITY_CHOICES, default=PRIORITY_MEDIUM
     )
@@ -250,20 +334,31 @@ class Order(models.Model):
         # Update stock based on order type
         if self.order_type == self.TYPE_PURCHASE:
             self.item.quantity = F("quantity") + self.quantity
+            # When goods are received at a location, store the item there
+            if self.receiving_location_id:
+                self.item.location_id = self.receiving_location_id
         else:  # SALE
             self.item.quantity = F("quantity") - self.quantity
 
-        # Save updated item quantity
-        self.item.save(update_fields=["quantity"])
+        # Save updated item (quantity and location if changed)
+        update_fields = ["quantity"]
+        if self.order_type == self.TYPE_PURCHASE and self.receiving_location_id:
+            update_fields.append("location_id")
+        self.item.save(update_fields=update_fields)
 
         # Refresh so item.quantity becomes the REAL number, not an F-expression
         self.item.refresh_from_db(fields=["quantity"])
 
-        # Log stock history
-        StockHistory.objects.create(
+        # Archive item if delete_on_deplete and stock is zero
+        self.item.maybe_archive_on_deplete()
+
+        # Log stock history (use delivery date, not order date, to avoid backdating)
+        # update_or_create prevents duplicate rows when multiple deliveries same item/day
+        delivery_date = timezone.now().date()
+        StockHistory.objects.update_or_create(
             item=self.item,
-            date=self.order_date,
-            quantity=self.item.quantity
+            date=delivery_date,
+            defaults={"quantity": self.item.quantity},
         )
 
          # Log activity (safe lazy import)

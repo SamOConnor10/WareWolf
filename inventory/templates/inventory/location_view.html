@@ -1,39 +1,344 @@
 {% extends "inventory/base.html" %}
+
 {% block content %}
 
-<h2>{{ location.name }}</h2>
+<div class="location-detail-page">
+    <!-- HEADER -->
+    <div class="d-flex flex-wrap gap-4 mb-4">
+        <div class="flex-shrink-0">
+            {% if location.image %}
+                <img src="{{ location.image.url }}" alt="{{ location.name }}" class="rounded-3 shadow-sm" style="width: 80px; height: 80px; object-fit: cover;">
+            {% else %}
+                <span class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+                    <i class="bi bi-geo-alt text-primary" style="font-size: 2rem;"></i>
+                </span>
+            {% endif %}
+        </div>
+        <div class="flex-grow-1 min-width-0">
+            <nav aria-label="breadcrumb" class="mb-2">
+                <ol class="breadcrumb mb-0 small">
+                    <li class="breadcrumb-item"><a href="{% url 'location_list' %}" class="text-decoration-none">Locations</a></li>
+                    <li class="breadcrumb-item active">{{ location.name }}</li>
+                </ol>
+            </nav>
+            <h1 class="fw-bold mb-1">{{ location.name }}{% if location.code %} <code class="fs-6 fw-normal ms-2">{{ location.code }}</code>{% endif %}</h1>
+            <p class="text-muted mb-2">
+                <span class="badge bg-light text-dark me-1">{{ location.get_location_type_display }}</span>
+                {% if location.get_breadcrumb != location.name %}
+                    <span class="ms-1">{{ location.get_breadcrumb }}</span>
+                {% endif %}
+            </p>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                {% if location.structural %}
+                    <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Structural</span>
+                {% endif %}
+                {% if location.external %}
+                    <span class="badge bg-warning text-dark"><i class="bi bi-box-arrow-up-right me-1"></i>External</span>
+                {% endif %}
+                {% if not location.is_active %}
+                    <span class="badge bg-secondary"><i class="bi bi-pause-circle me-1"></i>Inactive</span>
+                {% endif %}
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                {% if perms.inventory.change_location %}
+                    <a href="{% url 'location_edit' location.id %}" class="btn btn-primary">
+                        <i class="bi bi-pencil me-1"></i>Edit
+                    </a>
+                {% endif %}
+                <a href="{% url 'location_tree' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-diagram-3 me-1"></i>Tree view
+                </a>
+                {% if location.get_map_url %}
+                <a href="{{ location.get_map_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary" title="Open in Google Maps">
+                    <i class="bi bi-geo-alt-fill me-1"></i>Open in map
+                </a>
+                {% endif %}
+                <div class="btn-group ms-1">
+                    <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">More</button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        {% if perms.inventory.delete_location %}
+                            <li><a class="dropdown-item text-danger" href="{% url 'location_delete' location.id %}"><i class="bi bi-trash me-2"></i>Delete</a></li>
+                        {% endif %}
+                    </ul>
+                </div>
+                <a href="{% url 'location_list' %}" class="btn btn-outline-secondary ms-auto">
+                    <i class="bi bi-arrow-left me-1"></i>Back to list
+                </a>
+            </div>
+        </div>
+    </div>
 
-<p><strong>Breadcrumb:</strong> {{ location.get_breadcrumb }}</p>
-<p><strong>Type:</strong> {{ location.get_location_type_display }}</p>
-<p><strong>Structural:</strong> {{ location.structural }}</p>
-<p><strong>External:</strong> {{ location.external }}</p>
-<p><strong>Description:</strong> {{ location.description|default:"-" }}</p>
+    <!-- Stats row: equal-width cards, no lone gaps -->
+    <div class="row row-cols-2 row-cols-md-3 row-cols-lg-5 g-3 mb-4">
+        <div class="col">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-2 px-3 text-center">
+                    <span class="text-muted small d-block">Items stored</span>
+                    <span class="fw-bold text-primary">{{ item_count }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-2 px-3 text-center">
+                    <span class="text-muted small d-block">Total quantity</span>
+                    <span class="fw-bold text-success">{{ total_qty }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-2 px-3 text-center">
+                    <span class="text-muted small d-block">Sales shipped from here</span>
+                    <span class="fw-bold text-success">{{ sales_shipped_count }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-2 px-3 text-center">
+                    <span class="text-muted small d-block">Purchases received here</span>
+                    <span class="fw-bold text-primary">{{ purchases_received_count }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-2 px-3 text-center">
+                    <span class="text-muted small d-block">Sub-locations</span>
+                    <span class="fw-bold text-info">{{ children|length }}</span>
+                </div>
+            </div>
+        </div>
+        {% if utilisation_pct is not None %}
+        <div class="col">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-2 px-3 text-center">
+                    <span class="text-muted small d-block">Utilisation</span>
+                    <span class="fw-bold {% if utilisation_pct >= 90 %}text-danger{% elif utilisation_pct >= 70 %}text-warning{% else %}text-success{% endif %}">{{ utilisation_pct }}%</span>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
 
-<h4 class="mt-4">Items Stored Here ({{ items.count }})</h4>
+    <div class="row g-3 location-detail-grid">
+        <!-- Left column: Details + Sub-locations (sizes to content, no stretch) -->
+        <div class="col-xl-4 col-lg-5">
+            {% if location.image %}
+            <div class="card shadow-sm border-0 mb-3 overflow-hidden">
+                <a href="{{ location.image.url }}" target="_blank" rel="noopener" class="d-block">
+                    <img src="{{ location.image.url }}" alt="{{ location.name }}" class="w-100" style="max-height: 180px; object-fit: cover;">
+                </a>
+                <div class="card-footer bg-white border-0 py-1 small text-muted text-center">Click to view full size</div>
+            </div>
+            {% endif %}
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0 fw-semibold"><i class="bi bi-info-circle text-primary me-2"></i>Details</h5>
+                </div>
+                <div class="card-body">
+                    <div class="location-detail-section">
+                        <dl class="row mb-0 small">
+                        <dt class="col-sm-5 text-muted">Code</dt>
+                        <dd class="col-sm-7">{% if location.code %}<code>{{ location.code }}</code>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+                        <dt class="col-sm-5 text-muted">Status</dt>
+                        <dd class="col-sm-7">{% if location.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Inactive</span>{% endif %}</dd>
+                        <dt class="col-sm-5 text-muted">Parent</dt>
+                        <dd class="col-sm-7">
+                            {% if location.parent %}
+                                <a href="{% url 'location_view' location.parent.id %}">{{ location.parent.name }}</a>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                        <dt class="col-sm-5 text-muted">Type</dt>
+                        <dd class="col-sm-7">{{ location.get_location_type_display }}</dd>
+                        <dt class="col-sm-5 text-muted">Structural</dt>
+                        <dd class="col-sm-7">{% if location.structural %}<i class="bi bi-check text-success"></i> Yes{% else %}No{% endif %}</dd>
+                        <dt class="col-sm-5 text-muted">External</dt>
+                        <dd class="col-sm-7">{% if location.external %}<i class="bi bi-check text-warning"></i> Yes{% else %}No{% endif %}</dd>
+                        {% if location.latitude is not None and location.longitude is not None %}
+                        <dt class="col-sm-5 text-muted">Coordinates</dt>
+                        <dd class="col-sm-7">{{ location.latitude }}, {{ location.longitude }}</dd>
+                        {% endif %}
+                        {% if location.capacity %}
+                        <dt class="col-sm-5 text-muted">Capacity</dt>
+                        <dd class="col-sm-7">{{ location.capacity }} units</dd>
+                        {% endif %}
+                        <dt class="col-sm-5 text-muted">Description</dt>
+                        <dd class="col-sm-7">{{ location.description|default:"—" }}</dd>
+                        </dl>
+                    </div>
+                    {% if location.address or location.barcode %}
+                    <div class="location-detail-section">
+                        <h6 class="text-uppercase text-muted small fw-semibold mb-2">Address & tracking</h6>
+                        <dl class="row mb-0 small">
+                        <dt class="col-sm-5 text-muted">Address</dt>
+                        <dd class="col-sm-7">{% if location.address %}{{ location.address|linebreaks }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+                        <dt class="col-sm-5 text-muted">Barcode</dt>
+                        <dd class="col-sm-7">{% if location.barcode %}<code>{{ location.barcode }}</code> <i class="bi bi-upc-scan text-muted small ms-1" title="Barcode for scanning"></i>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+                        </dl>
+                    </div>
+                    {% endif %}
+                    {% if location.notes %}
+                    <div class="location-detail-section">
+                        <h6 class="text-uppercase text-muted small fw-semibold mb-2">Internal notes</h6>
+                        <p class="small mb-0">{{ location.notes|linebreaks }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% if children %}
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white border-0 py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-semibold"><i class="bi bi-diagram-3 text-primary me-2"></i>Sub-locations</h6>
+                    <a href="{% url 'location_tree' %}" class="btn btn-sm btn-outline-primary py-0">Tree</a>
+                </div>
+                <div class="card-body py-2 location-detail-sublocations">
+                    <ul class="list-unstyled mb-0 small">
+                        {% for child in children %}
+                        <li class="py-1 d-flex justify-content-between align-items-center">
+                            <a href="{% url 'location_view' child.id %}">{{ child.name }}</a>
+                            <span class="badge bg-light text-dark">{{ child.inventory_items.count }} items</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+        </div>
 
-<table class="table table-sm table-striped">
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>SKU</th>
-            <th>Qty</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for item in items %}
-            <tr>
-                <td>{{ item.name }}</td>
-                <td>{{ item.sku }}</td>
-                <td>{{ item.quantity }}</td>
-            </tr>
-        {% empty %}
-            <tr><td colspan="3">No items in this location.</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
+        <!-- Right column: Items + Orders -->
+        <div class="col-xl-8 col-lg-7">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="bi bi-box-seam text-primary me-2"></i>Items stored here
+                        <span class="badge bg-light text-dark ms-2">{{ item_count }}</span>
+                    </h6>
+                    <a href="{% url 'item_list' %}?location={{ location.id }}" class="btn btn-sm btn-outline-primary py-0">View all</a>
+                </div>
+                <div class="card-body p-0">
+                    {% if items %}
+                        <div class="location-detail-items-table">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>SKU</th>
+                                        <th>Category</th>
+                                        <th class="text-end">Quantity</th>
+                                        <th class="text-end">Reorder</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in items %}
+                                    <tr>
+                                        <td>
+                                            <a href="{% url 'item_detail' item.id %}" class="fw-medium text-decoration-none text-dark d-flex align-items-center gap-2">
+                                                {% if item.image %}
+                                                    <img src="{{ item.image.url }}" alt="" class="rounded" style="width: 28px; height: 28px; object-fit: cover;">
+                                                {% else %}
+                                                    <span class="rounded bg-light d-inline-flex align-items-center justify-content-center" style="width: 28px; height: 28px;"><i class="bi bi-box-seam text-muted"></i></span>
+                                                {% endif %}
+                                                {{ item.name }}
+                                            </a>
+                                        </td>
+                                        <td><code class="small">{{ item.sku }}</code></td>
+                                        <td><span class="small text-muted">{% if item.category %}{{ item.category.full_path }}{% else %}—{% endif %}</span></td>
+                                        <td class="text-end fw-medium">{{ item.quantity }} {% if item.unit_of_measure %}{{ item.unit_of_measure }}{% endif %}</td>
+                                        <td class="text-end">{{ item.reorder_level }}</td>
+                                        <td class="text-end">
+                                            <a href="{% url 'item_detail' item.id %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-right"></i></a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox display-6 d-block mb-2 opacity-50"></i>
+                            <p class="mb-1 small">No items in this location</p>
+                            <a href="{% url 'item_list' %}" class="btn btn-sm btn-outline-primary">Assign items</a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
 
-{% if perms.inventory.change_location %}
-    <a href="{% url 'location_edit' location.id %}" class="btn btn-secondary">Edit</a>
-{% endif %}
+            <!-- Recent sales shipped from here -->
+            {% if sales_shipped %}
+            <div class="card border-0 shadow-sm mt-3">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-semibold"><i class="bi bi-truck text-success me-2"></i>Recent sales (shipped from here)</h6>
+                    <a href="{% url 'order_list' %}?type=sale&shipping_location={{ location.id }}" class="btn btn-sm btn-outline-primary py-0">View all</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive location-detail-orders-table">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light"><tr><th>Date</th><th>Item</th><th class="text-end">Qty</th><th>Status</th><th></th></tr></thead>
+                            <tbody>
+                                {% for o in sales_shipped %}
+                                <tr>
+                                    <td>{{ o.order_date|date:"d M Y" }}</td>
+                                    <td><a href="{% url 'item_detail' o.item.id %}">{{ o.item.name|truncatechars:30 }}</a></td>
+                                    <td class="text-end">{{ o.quantity }}</td>
+                                    <td>{{ o.get_status_display }}</td>
+                                    <td><a href="{% url 'order_edit' o.id %}" class="btn btn-sm btn-outline-secondary">Edit</a></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
 
-{% endblock %}
+            <!-- Recent purchases received here -->
+            {% if purchases_received %}
+            <div class="card border-0 shadow-sm mt-3">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-semibold"><i class="bi bi-box-arrow-in-down text-primary me-2"></i>Recent purchases (received here)</h6>
+                    <a href="{% url 'order_list' %}?type=purchase&receiving_location={{ location.id }}" class="btn btn-sm btn-outline-primary py-0">View all</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive location-detail-orders-table">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light"><tr><th>Date</th><th>Item</th><th class="text-end">Qty</th><th>Status</th><th></th></tr></thead>
+                            <tbody>
+                                {% for o in purchases_received %}
+                                <tr>
+                                    <td>{{ o.order_date|date:"d M Y" }}</td>
+                                    <td><a href="{% url 'item_detail' o.item.id %}">{{ o.item.name|truncatechars:30 }}</a></td>
+                                    <td class="text-end">{{ o.quantity }}</td>
+                                    <td>{{ o.get_status_display }}</td>
+                                    <td><a href="{% url 'order_edit' o.id %}" class="btn btn-sm btn-outline-secondary">Edit</a></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+/* Section separators (match item detail) */
+.location-detail-section + .location-detail-section { border-top: 1px solid #eee; padding-top: 0.75rem; }
+.location-detail-sublocations { max-height: 180px; overflow-y: auto; }
+/* Items table: scroll only when needed, compact when few rows */
+.location-detail-items-table { max-height: 280px; overflow-y: auto; }
+.location-detail-items-table .table { font-size: 0.875rem; margin-bottom: 0; }
+.location-detail-items-table .table td, .location-detail-items-table .table th { padding: 0.4rem 0.75rem; }
+/* Orders tables */
+.location-detail-orders-table { max-height: 180px; overflow-y: auto; }
+.location-detail-orders-table .table { font-size: 0.875rem; margin-bottom: 0; }
+.location-detail-orders-table .table td, .location-detail-orders-table .table th { padding: 0.4rem 0.75rem; }
+</style>
+
+{% endblock content %}

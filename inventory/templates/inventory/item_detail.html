@@ -1,0 +1,342 @@
+{% extends "inventory/base_stock.html" %}
+{% load static %}
+
+{% block stock_content %}
+
+<div class="item-detail-page">
+    <!-- HEADER: Image + Info + Actions -->
+    <div class="d-flex flex-wrap gap-4 mb-4">
+        <div class="item-detail-image-wrap flex-shrink-0 position-relative">
+            {% if item.image %}
+                <img src="{{ item.image.url }}" alt="{{ item.name }}" class="item-detail-image rounded-3 shadow-sm">
+            {% else %}
+                {% if perms.inventory.change_item %}
+                <a href="{% url 'item_edit' item.id %}" class="item-detail-placeholder rounded-3 bg-light d-flex align-items-center justify-content-center text-decoration-none" title="Add image">
+                    <div class="text-center">
+                        <i class="bi bi-box-seam display-4 text-muted d-block"></i>
+                        <small class="text-muted">Add image</small>
+                    </div>
+                </a>
+                {% else %}
+                <div class="item-detail-placeholder rounded-3 bg-light d-flex align-items-center justify-content-center">
+                    <i class="bi bi-box-seam display-4 text-muted"></i>
+                </div>
+                {% endif %}
+            {% endif %}
+        </div>
+        <div class="flex-grow-1 min-width-0">
+            <nav aria-label="breadcrumb" class="mb-2">
+                <ol class="breadcrumb mb-0 small">
+                    <li class="breadcrumb-item"><a href="{% url 'item_list' %}">Stock Items</a></li>
+                    <li class="breadcrumb-item active">{{ item.name|truncatechars:40 }}</li>
+                </ol>
+            </nav>
+            <h1 class="fw-bold mb-1">{{ item.name }}</h1>
+            <p class="text-muted mb-2">
+                <code>{{ item.sku }}</code>
+                {% if item.barcode %}<span class="ms-2">Barcode: {{ item.barcode }}</span>{% endif %}
+            </p>
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                {% if not item.is_active %}
+                    <span class="badge bg-secondary">Archived</span>
+                {% elif item.quantity <= 0 %}
+                    <span class="badge bg-danger">Out of stock</span>
+                {% elif item.quantity <= item.reorder_level %}
+                    <span class="badge bg-warning text-dark">Low stock</span>
+                {% else %}
+                    <span class="badge bg-success">In stock</span>
+                {% endif %}
+                {% if item.stock_status and item.stock_status != "OK" %}
+                    <span class="badge bg-warning text-dark">{{ item.get_stock_status_display|default:item.stock_status }}</span>
+                {% endif %}
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                {% if perms.inventory.change_item %}
+                    <a href="{% url 'item_edit' item.id %}" class="btn btn-primary">
+                        <i class="bi bi-pencil me-1"></i>Edit
+                    </a>
+                {% endif %}
+                {% if perms.inventory.change_item %}
+                    <a href="{% url 'item_adjust' item.id %}" class="btn btn-outline-primary">
+                        <i class="bi bi-plus-slash-minus me-1"></i>Adjust
+                    </a>
+                {% endif %}
+                {% if perms.inventory.view_item %}
+                    <a href="{% url 'item_forecast' item.id %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-graph-up-arrow me-1"></i>Forecast
+                    </a>
+                {% endif %}
+                {% if perms.inventory.add_order and rec and rec.reorder_qty > 0 %}
+                    <a href="{% url 'order_create' %}?item={{ item.id }}&qty={{ rec.reorder_qty }}&type=purchase" class="btn btn-success">
+                        <i class="bi bi-cart-plus me-1"></i>Create order ({{ rec.reorder_qty }})
+                    </a>
+                {% endif %}
+                <div class="btn-group ms-1">
+                    <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">More</button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        {% if perms.inventory.change_item %}
+                        <li><a class="dropdown-item" href="{% url 'item_toggle_archive' item.id %}"><i class="bi bi-archive me-2"></i>{% if item.is_active %}Archive{% else %}Unarchive{% endif %}</a></li>
+                        {% endif %}
+                        {% if perms.inventory.delete_item %}
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item text-danger" href="{% url 'item_delete' item.id %}"><i class="bi bi-trash me-2"></i>Delete</a></li>
+                        {% endif %}
+                    </ul>
+                </div>
+                <a href="{% url 'item_list' %}" class="btn btn-outline-secondary ms-auto">
+                    <i class="bi bi-arrow-left me-1"></i>Back to list
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 item-detail-grid">
+        <!-- COL 1: Details + Clients + Related -->
+        <div class="col-xl-4 col-lg-5">
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0 fw-semibold"><i class="bi bi-info-circle text-primary me-2"></i>Details</h5>
+                </div>
+                <div class="card-body">
+                    {% if item.description %}
+                    <p class="text-muted small mb-3">{{ item.description }}</p>
+                    {% endif %}
+                    <div class="item-detail-section mb-3">
+                        <h6 class="text-uppercase text-muted small fw-semibold mb-2">Stock & pricing</h6>
+                        <dl class="row mb-0 small">
+                            <dt class="col-sm-4 text-muted">Quantity</dt>
+                            <dd class="col-sm-8">{{ item.quantity }} {{ item.unit_of_measure|default:"pcs" }}</dd>
+                            <dt class="col-sm-4 text-muted">Reorder level</dt>
+                            <dd class="col-sm-8">{{ item.reorder_level }}</dd>
+                            <dt class="col-sm-4 text-muted">Unit cost</dt>
+                            <dd class="col-sm-8">{{ item.currency }} {{ item.unit_cost }}</dd>
+                            <dt class="col-sm-4 text-muted">Safety stock</dt>
+                            <dd class="col-sm-8">{{ item.safety_stock }}</dd>
+                        </dl>
+                    </div>
+                    <div class="item-detail-section mb-3">
+                        <h6 class="text-uppercase text-muted small fw-semibold mb-2">Supply chain</h6>
+                        <dl class="row mb-0 small">
+                            <dt class="col-sm-4 text-muted">Category</dt>
+                            <dd class="col-sm-8">
+                                {% if item.category %}
+                                    <a href="{% url 'item_list' %}?category={{ item.category.id }}">{{ item.category.full_path }}</a>
+                                {% else %}—{% endif %}
+                            </dd>
+                            <dt class="col-sm-4 text-muted">Supplier</dt>
+                            <dd class="col-sm-8">
+                                {% if item.supplier %}
+                                    <a href="{% url 'supplier_edit' item.supplier.id %}">{{ item.supplier.name }}</a>
+                                {% else %}—{% endif %}
+                            </dd>
+                            <dt class="col-sm-4 text-muted">Location</dt>
+                            <dd class="col-sm-8">
+                                {% if item.location %}
+                                    <a href="{% url 'location_view' item.location.id %}">{{ item.location.name }}</a>
+                                {% else %}—{% endif %}
+                            </dd>
+                            <dt class="col-sm-4 text-muted">Lead time</dt>
+                            <dd class="col-sm-8">{{ item.lead_time_days }} days</dd>
+                        </dl>
+                    </div>
+                    {% if item.batch_code or item.expiry_date or item.external_link or item.notes %}
+                    <div class="item-detail-section">
+                        <h6 class="text-uppercase text-muted small fw-semibold mb-2">Other</h6>
+                        <dl class="row mb-0 small">
+                            {% if item.batch_code %}
+                            <dt class="col-sm-4 text-muted">Batch</dt>
+                            <dd class="col-sm-8">{{ item.batch_code }}</dd>
+                            {% endif %}
+                            {% if item.expiry_date %}
+                            <dt class="col-sm-4 text-muted">Expiry</dt>
+                            <dd class="col-sm-8 {% if item.expiry_date < today %}text-danger fw-semibold{% endif %}">{{ item.expiry_date|date:"d M Y" }}</dd>
+                            {% endif %}
+                            {% if item.external_link %}
+                            <dt class="col-sm-4 text-muted">External link</dt>
+                            <dd class="col-sm-8"><a href="{{ item.external_link }}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> Link</a></dd>
+                            {% endif %}
+                            {% if item.notes %}
+                            <dt class="col-sm-4 text-muted">Notes</dt>
+                            <dd class="col-sm-8">{{ item.notes }}</dd>
+                            {% endif %}
+                        </dl>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% if clients %}
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-header bg-white py-2">
+                    <h6 class="mb-0 fw-semibold"><i class="bi bi-people text-primary me-2"></i>Clients (purchased)</h6>
+                </div>
+                <div class="card-body py-2">
+                    <ul class="list-unstyled mb-0 small">
+                        {% for c in clients %}
+                        <li class="py-1"><a href="{% url 'client_edit' c.id %}">{{ c.name }}</a></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+            {% if related_items %}
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-semibold"><i class="bi bi-boxes text-primary me-2"></i>Related items</h6>
+                    {% if item.category %}
+                    <a href="{% url 'item_list' %}?category={{ item.category.id }}" class="btn btn-sm btn-outline-primary py-0">View all</a>
+                    {% endif %}
+                </div>
+                <div class="card-body py-2">
+                    <ul class="list-unstyled mb-0 small">
+                        {% for r in related_items %}
+                        <li class="py-1 d-flex justify-content-between align-items-center">
+                            <a href="{% url 'item_detail' r.id %}">{{ r.name|truncatechars:30 }}</a>
+                            <span class="badge bg-light text-dark ms-2">{{ r.quantity }} {{ r.unit_of_measure|default:"pcs" }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- COL 2: Forecast + Anomalies + Orders -->
+        <div class="col-xl-8 col-lg-7 d-flex flex-column">
+            <div class="row g-3">
+                {% if order_stats %}
+                <div class="col-sm-6 col-md-4">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body py-2 px-3 text-center">
+                            <span class="text-muted small d-block">Purchase orders</span>
+                            <span class="fw-bold text-primary">{{ order_stats.total_purchased|default:0 }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-md-4">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body py-2 px-3 text-center">
+                            <span class="text-muted small d-block">Sales orders</span>
+                            <span class="fw-bold text-success">{{ order_stats.total_sold|default:0 }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                {% if rec and has_forecast %}
+                <div class="col-sm-6 col-md-4">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                            <span class="fw-semibold small"><i class="bi bi-graph-up-arrow text-primary me-1"></i>Forecast</span>
+                            <a href="{% url 'item_forecast' item.id %}" class="btn btn-sm btn-outline-primary py-0">View</a>
+                        </div>
+                        <div class="card-body py-2">
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span class="text-muted">Risk</span>
+                                <span class="badge {% if rec.risk == 'High' %}bg-danger{% elif rec.risk == 'Medium' %}bg-warning text-dark{% else %}bg-success{% endif %}">{{ rec.risk }}</span>
+                            </div>
+                            {% if rec.reorder_qty > 0 %}
+                            <div class="small"><strong class="text-primary">{{ rec.reorder_qty }}</strong> units by {{ rec.reorder_by }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% if anomalies %}
+            <div class="card border-0 shadow-sm mt-3">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-semibold"><i class="bi bi-exclamation-triangle text-warning me-2"></i>Demand anomalies</h6>
+                    <a href="{% url 'anomaly_list' %}?item={{ item.id }}" class="btn btn-sm btn-outline-secondary py-0">View all</a>
+                </div>
+                <div class="card-body py-2">
+                    <ul class="list-unstyled mb-0 small">
+                        {% for a in anomalies %}
+                        <li class="d-flex justify-content-between py-1">
+                            <span>{{ a.date|date:"d M Y" }} – {{ a.severity }}</span>
+                            <a href="{% url 'item_forecast' item.id %}">Forecast</a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Orders -->
+            <div class="card border-0 shadow-sm mt-3 flex-grow-1 d-flex flex-column min-h-0">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center flex-shrink-0">
+                    <h6 class="mb-0 fw-semibold"><i class="bi bi-cart text-primary me-2"></i>Recent orders</h6>
+                    <a href="{% url 'order_list' %}?item={{ item.id }}" class="btn btn-sm btn-outline-primary py-0">View all</a>
+                </div>
+                <div class="card-body p-0 d-flex flex-column min-h-0 flex-grow-1">
+                    {% if orders %}
+                    <div class="table-responsive item-detail-orders-table flex-grow-1">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th class="text-end">Qty</th>
+                                    <th>Status</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for o in orders %}
+                                <tr>
+                                    <td>{{ o.order_date|date:"d M Y" }}</td>
+                                    <td><span class="badge {% if o.order_type == 'PURCHASE' %}bg-info{% else %}bg-success{% endif %}">{{ o.get_order_type_display }}</span></td>
+                                    <td class="text-end">{{ o.quantity }}</td>
+                                    <td>{{ o.get_status_display }}</td>
+                                    <td><a href="{% url 'order_edit' o.id %}" class="btn btn-sm btn-outline-secondary">Edit</a></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4 text-muted">
+                        <i class="bi bi-cart-x display-5"></i>
+                        <p class="mb-0 mt-2">No orders yet</p>
+                        <a href="{% url 'order_create' %}?item={{ item.id }}&type=purchase" class="btn btn-sm btn-outline-primary mt-2">Create order</a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stock history -->
+    {% if recent_history %}
+    <div class="card border-0 shadow-sm mt-3">
+        <div class="card-header bg-white py-2">
+            <h6 class="mb-0 fw-semibold"><i class="bi bi-clock-history text-primary me-2"></i>Recent stock history</h6>
+        </div>
+        <div class="card-body py-2">
+            <div class="table-responsive item-detail-history-table">
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>Date</th><th class="text-end">Quantity</th></tr></thead>
+                    <tbody>
+                        {% for h in recent_history %}
+                        <tr><td>{{ h.date|date:"d M Y" }}</td><td class="text-end">{{ h.quantity }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.item-detail-image-wrap { width: 220px; height: 220px; }
+.item-detail-image { width: 100%; height: 100%; object-fit: cover; }
+.item-detail-placeholder { width: 100%; height: 100%; min-width: 220px; min-height: 220px; transition: background-color 0.2s; }
+.item-detail-placeholder:hover { background-color: #e9ecef !important; }
+.item-detail-section + .item-detail-section { border-top: 1px solid #eee; padding-top: 0.75rem; }
+.item-detail-orders-table { min-height: 200px; overflow-y: auto; flex: 1 1 0; }
+.item-detail-orders-table .table { font-size: 0.875rem; }
+.item-detail-orders-table .table td, .item-detail-orders-table .table th { padding: 0.4rem 0.75rem; }
+.item-detail-history-table { max-height: 200px; overflow-y: auto; }
+.item-detail-history-table .table { font-size: 0.875rem; }
+</style>
+
+{% endblock %}

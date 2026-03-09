@@ -3,7 +3,7 @@
 {% block content %}
 
 <div class="d-flex mt-4">
-
+    {% if not hide_stock_sidebar %}
     <!-- ========================= -->
     <!-- SIDEBAR                   -->
     <!-- ========================= -->
@@ -11,28 +11,31 @@
 
         <!-- Header with toggle -->
         <div class="sidebar-header">
-            <button id="sidebarToggle" class="toggle-btn">
-                <span id="sidebarArrow">❮</span>
+            <span class="sidebar-title">Stock</span>
+            <button id="sidebarToggle" class="toggle-btn" type="button" title="Collapse sidebar" aria-label="Toggle sidebar">
+                <i class="bi bi-chevron-left" id="sidebarArrow"></i>
             </button>
         </div>
 
         <!-- NAV LINKS -->
-        <a href="{% url 'item_list' %}" class="nav-link {% if view == 'items' %}active{% endif %}">
-            <span class="icon">📦</span>
-            <span class="label">Stock Items</span>
-        </a>
-
-        <a href="{% url 'category_list' %}" class="nav-link {% if view == 'categories' %}active{% endif %}">
-            <span class="icon">🗂</span>
-            <span class="label">Categories</span>
-        </a>
+        <nav class="sidebar-nav">
+            <a href="{% url 'item_list' %}" class="sidebar-link {% if view == 'items' %}active{% endif %}">
+                <i class="bi bi-box-seam"></i>
+                <span class="label">Stock Items</span>
+            </a>
+            <a href="{% url 'category_list' %}" class="sidebar-link {% if view == 'categories' %}active{% endif %}">
+                <i class="bi bi-folder2"></i>
+                <span class="label">Categories</span>
+            </a>
+        </nav>
 
     </div>
+    {% endif %}
 
     <!-- ========================= -->
     <!-- MAIN CONTENT AREA         -->
     <!-- ========================= -->
-    <div id="mainContent" class="flex-grow-1 ms-3">
+    <div id="mainContent" class="flex-grow-1 {% if hide_stock_sidebar %}ms-0{% else %}ms-3{% endif %}">
         {% block stock_content %}{% endblock %}
     </div>
 
@@ -40,25 +43,30 @@
 
 <style>
 /* ============================= */
-/* SIDEBAR BASE (scoped to #sidebar only) */
+/* SIDEBAR BASE                  */
 /* ============================= */
 #sidebar {
-    width: 230px;
-    transition: width 0.25s ease;
-    background: #ffffff;
-    border-right: 1px solid #dcdcdc;
-    padding-top: 15px;
-    height: 100vh;
+    width: 220px;
+    min-width: 220px;
+    transition: width 0.25s ease, min-width 0.25s ease;
+    background: linear-gradient(180deg, #fafbfc 0%, #f5f6f8 100%);
+    border-right: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 16px 0;
+    height: fit-content;
+    min-height: 200px;
     position: sticky;
-    top: 0;
+    top: 24px;
 }
 
 /* Collapsed */
 #sidebar.collapsed {
-    width: 65px !important;
+    width: 56px !important;
+    min-width: 56px !important;
 }
 
-#sidebar.collapsed .label {
+#sidebar.collapsed .label,
+#sidebar.collapsed .sidebar-title {
     display: none !important;
 }
 
@@ -66,69 +74,161 @@
     transform: rotate(180deg);
 }
 
-/* Toggle button */
-#sidebar .toggle-btn {
-    background: none;
-    border: none;
-    font-size: 20px;
-    cursor: pointer;
-    margin-left: 12px;
-    color: #333;
-}
-
-/* ============================= */
-/* SIDEBAR NAV LINKS (scoped!!)  */
-/* ============================= */
-#sidebar .nav-link {
+/* Header */
+.sidebar-header {
     display: flex;
     align-items: center;
-    padding: 12px 14px;
-    text-decoration: none;
-    color: #333 !important;
-    font-size: 16px;
-    transition: background 0.2s ease, color 0.2s ease;
+    justify-content: space-between;
+    padding: 0 12px 12px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.sidebar-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6b7280;
+}
+
+.toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
     border-radius: 6px;
-    margin: 4px 8px;
+    color: #6b7280;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.toggle-btn:hover {
+    background: #f3f4f6;
+    color: #111827;
+}
+
+/* Nav */
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+#sidebar .sidebar-link {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    margin: 0 8px;
+    text-decoration: none;
+    color: #374151 !important;
+    font-size: 0.9375rem;
+    transition: background 0.2s ease, color 0.2s ease;
+    border-radius: 8px;
     font-weight: 500;
 }
 
-#sidebar .nav-link:hover {
-    background: #eef3ff;
-    color: #1a73e8 !important;
+#sidebar .sidebar-link i {
+    font-size: 1.125rem;
+    margin-right: 12px;
+    flex-shrink: 0;
+    opacity: 0.9;
 }
 
-#sidebar .nav-link.active {
-    background: #1a73e8;
+#sidebar .sidebar-link:hover {
+    background: #eff6ff;
+    color: #1d4ed8 !important;
+}
+
+#sidebar .sidebar-link:hover i {
+    opacity: 1;
+}
+
+#sidebar .sidebar-link.active {
+    background: #1d4ed8;
     color: #ffffff !important;
 }
 
-/* Icons */
-#sidebar .icon {
-    font-size: 22px;
-    margin-right: 12px;
+#sidebar .sidebar-link.active i {
+    opacity: 1;
 }
 
-#sidebar.collapsed .icon {
+#sidebar.collapsed .sidebar-link {
+    justify-content: center;
+    padding: 10px;
+}
+
+#sidebar.collapsed .sidebar-link i {
     margin-right: 0;
-    text-align: center;
-    width: 100%;
 }
 
-/* ============================= */
-/* MAIN CONTENT SPACING          */
-/* ============================= */
+/* Main content */
 #mainContent {
     padding-top: 15px;
 }
 
+/* Dark mode support */
+body.dark-mode #sidebar {
+    background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
+    border-color: #374151;
+}
+
+body.dark-mode .sidebar-header {
+    border-color: #374151;
+}
+
+body.dark-mode .sidebar-title {
+    color: #9ca3af;
+}
+
+body.dark-mode .toggle-btn {
+    background: #374151;
+    border-color: #4b5563;
+    color: #9ca3af;
+}
+
+body.dark-mode .toggle-btn:hover {
+    background: #4b5563;
+    color: #e5e7eb;
+}
+
+body.dark-mode #sidebar .sidebar-link {
+    color: #e5e7eb !important;
+}
+
+body.dark-mode #sidebar .sidebar-link:hover {
+    background: #374151;
+    color: #93c5fd !important;
+}
+
+body.dark-mode #sidebar .sidebar-link.active {
+    background: #2563eb;
+    color: #ffffff !important;
+}
 </style>
 
 
 <script>
-document.getElementById("sidebarToggle").onclick = function () {
-    const sidebar = document.getElementById("sidebar");
-    sidebar.classList.toggle("collapsed");
-};
+(function() {
+    var KEY = 'warewolf_sidebar_collapsed';
+    var sidebar = document.getElementById("sidebar");
+    var sidebarToggle = document.getElementById("sidebarToggle");
+    if (sidebar) {
+        try {
+            var saved = localStorage.getItem(KEY);
+            if (saved === 'true') sidebar.classList.add("collapsed");
+        } catch (e) {}
+    }
+    if (sidebarToggle && sidebar) {
+        sidebarToggle.onclick = function () {
+            sidebar.classList.toggle("collapsed");
+            try { localStorage.setItem(KEY, sidebar.classList.contains("collapsed")); } catch (e) {}
+        };
+    }
+})();
 </script>
 
 {% endblock %}

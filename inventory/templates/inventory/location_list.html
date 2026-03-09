@@ -1,161 +1,747 @@
 {% extends "inventory/base.html" %}
-{% load querystring %}
+{% load querystring humanize %}
 
 {% block content %}
-<h1 class="fw-bold">Locations</h1>
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <p class="text-muted">Manage warehouse storage locations</p>
-    {% if perms.inventory.add_location %}
-        <a href="{% url 'location_create' %}" class="btn btn-primary">+ Add Location</a>
+<div class="locations-page">
+    <!-- HEADER -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h1 class="fw-bold mb-1">
+                <i class="bi bi-geo-alt text-primary me-2"></i>Locations
+            </h1>
+            <p class="text-muted mb-0">Manage warehouse storage locations and hierarchy</p>
+        </div>
+        <div class="d-flex gap-2">
+            {% if perms.inventory.view_location %}
+                <a href="{% url 'location_export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-outline-success" title="Export filtered locations">
+                    <i class="bi bi-download me-1"></i>Export CSV
+                </a>
+            {% endif %}
+            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#locationMapModal" title="View all locations on map">
+                <i class="bi bi-map me-1"></i>Map
+            </button>
+            {% if view_mode == 'tree' %}
+                <a href="?{% querystring request view='' %}" class="btn btn-outline-secondary" title="List view">
+                    <i class="bi bi-list-ul me-1"></i>List view
+                </a>
+            {% else %}
+                <a href="?{% querystring request view='tree' %}" class="btn btn-outline-secondary" title="View location hierarchy">
+                    <i class="bi bi-diagram-3 me-1"></i>Tree view
+                </a>
+            {% endif %}
+            {% if perms.inventory.add_location %}
+                <a href="{% url 'location_create' %}" class="btn btn-primary">
+                    <i class="bi bi-plus-lg me-1"></i>Add Location
+                </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- SUMMARY CARDS (full-width, clickable to filter list) -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-4 col-lg-2">
+            <a href="?{% querystring request filter='' %}" class="text-decoration-none d-block h-100">
+                <div class="card border-0 shadow-sm h-100 location-stat-card {% if not active_filter %}border-primary border-2{% endif %}">
+                    <div class="card-body d-flex align-items-center gap-3 py-3">
+                        <div class="rounded-3 bg-primary bg-opacity-10 p-2">
+                            <i class="bi bi-geo-alt text-primary fs-4"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small">Total locations</div>
+                            <div class="fs-4 fw-bold">{{ total_locations }}</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+            <a href="?{% querystring request filter='warehouses' %}" class="text-decoration-none d-block h-100">
+                <div class="card border-0 shadow-sm h-100 location-stat-card {% if active_filter == 'warehouses' %}border-primary border-2{% endif %}">
+                    <div class="card-body d-flex align-items-center gap-3 py-3">
+                        <div class="rounded-3 bg-info bg-opacity-10 p-2">
+                            <i class="bi bi-building text-info fs-4"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small">Warehouses</div>
+                            <div class="fs-4 fw-bold">{{ warehouse_count }}</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+            <a href="?{% querystring request filter='with_stock' %}" class="text-decoration-none d-block h-100">
+                <div class="card border-0 shadow-sm h-100 location-stat-card {% if active_filter == 'with_stock' %}border-primary border-2{% endif %}">
+                    <div class="card-body d-flex align-items-center gap-3 py-3">
+                        <div class="rounded-3 bg-success bg-opacity-10 p-2">
+                            <i class="bi bi-box-seam text-success fs-4"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small">With stock</div>
+                            <div class="fs-4 fw-bold">{{ locations_with_stock }}</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+            <a href="?{% querystring request filter='empty' %}" class="text-decoration-none d-block h-100">
+                <div class="card border-0 shadow-sm h-100 location-stat-card {% if active_filter == 'empty' %}border-primary border-2{% endif %}">
+                    <div class="card-body d-flex align-items-center gap-3 py-3">
+                        <div class="rounded-3 bg-secondary bg-opacity-10 p-2">
+                            <i class="bi bi-inbox text-secondary fs-4"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small">Empty locations</div>
+                            <div class="fs-4 fw-bold">{{ empty_locations_count }}</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+            <a href="?{% querystring request filter='low_stock' %}" class="text-decoration-none d-block h-100">
+                <div class="card border-0 shadow-sm h-100 location-stat-card {% if active_filter == 'low_stock' %}border-primary border-2{% endif %}">
+                    <div class="card-body d-flex align-items-center gap-3 py-3">
+                        <div class="rounded-3 bg-danger bg-opacity-10 p-2">
+                            <i class="bi bi-exclamation-triangle text-danger fs-4"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small">Needing reorder</div>
+                            <div class="fs-4 fw-bold">{{ low_stock_locations_count }}</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+            <div class="card border-0 shadow-sm h-100 location-stat-card" title="Total stock across all locations">
+                <div class="card-body d-flex align-items-center gap-3 py-3">
+                    <div class="rounded-3 bg-warning bg-opacity-10 p-2">
+                        <i class="bi bi-boxes text-warning fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Total stock</div>
+                        <div class="fs-4 fw-bold">{{ total_stock_qty|intcomma }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- INSIGHT CARDS: Busiest / Top shipping / Top receiving -->
+    <div class="row g-3 mb-4">
+        {% if top_location %}
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-3">
+                    <h6 class="text-muted small text-uppercase fw-semibold mb-2">
+                        <i class="bi bi-trophy me-1"></i>Busiest location
+                    </h6>
+                    <a href="{% url 'location_view' top_location.id %}" class="fw-bold text-decoration-none text-dark">{{ top_location.name }}</a>
+                    <div class="small text-muted mt-1">{{ top_location.loc_stock|default:0|intcomma }} units · {{ top_location.loc_item_count|default:0 }} item types</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        {% if top_shipping_loc %}
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-3">
+                    <h6 class="text-muted small text-uppercase fw-semibold mb-2">
+                        <i class="bi bi-truck me-1"></i>Top shipping hub
+                    </h6>
+                    <a href="{% url 'location_view' top_shipping_loc.id %}" class="fw-bold text-decoration-none text-dark">{{ top_shipping_loc.name }}</a>
+                    <div class="small text-muted mt-1">{{ top_shipping_loc.sales_count }} sale{{ top_shipping_loc.sales_count|pluralize }} shipped</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        {% if top_receiving_loc %}
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-3">
+                    <h6 class="text-muted small text-uppercase fw-semibold mb-2">
+                        <i class="bi bi-box-arrow-in-down me-1"></i>Top receiving hub
+                    </h6>
+                    <a href="{% url 'location_view' top_receiving_loc.id %}" class="fw-bold text-decoration-none text-dark">{{ top_receiving_loc.name }}</a>
+                    <div class="small text-muted mt-1">{{ top_receiving_loc.purchases_count }} purchase{{ top_receiving_loc.purchases_count|pluralize }} received</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- STOCK DISTRIBUTION CHART (collapsible) -->
+    {% if stock_chart_labels %}
+    <div class="card shadow-sm border-0 mb-4">
+        <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-white border-0 w-100 text-start location-chart-toggle" data-bs-toggle="collapse" data-bs-target="#collapseLocationStockChart" aria-expanded="true" aria-label="Toggle stock distribution chart">
+            <h5 class="mb-0 fw-semibold"><i class="bi bi-pie-chart text-primary me-2"></i>Stock distribution by location</h5>
+            <i class="bi bi-chevron-down location-chart-chevron"></i>
+        </button>
+        <div class="collapse show" id="collapseLocationStockChart" data-persist="locations_chart">
+            <div class="card-body pt-0">
+                <div class="chart-box" style="height: 220px;">
+                    <canvas id="locationStockChart"></canvas>
+                </div>
+                <p class="text-muted small mb-0 mt-2">Top locations by total quantity held</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if active_filter and view_mode != 'tree' %}
+    <div class="alert alert-light border d-flex align-items-center justify-content-between gap-3 mb-4" role="alert">
+        <span class="d-flex align-items-center gap-2">
+            <i class="bi bi-funnel-fill text-primary"></i>
+            <span>Showing filtered locations{% if active_filter == 'warehouses' %} (Warehouses){% elif active_filter == 'with_stock' %} (With stock){% elif active_filter == 'empty' %} (Empty){% elif active_filter == 'low_stock' %} (Needing reorder){% endif %}.</span>
+        </span>
+        <a href="{% url 'location_list' %}" class="btn btn-outline-primary btn-sm flex-shrink-0">
+            <i class="bi bi-x-circle me-1"></i>View all
+        </a>
+    </div>
+    {% endif %}
+
+    {% if view_mode == 'tree' %}
+    <!-- TREE VIEW (replaces list) -->
+    <div class="card shadow-sm border-0 mb-4" id="location-controls-card">
+        <div class="card-body py-3 px-4">
+            <div class="d-flex flex-nowrap align-items-center gap-3">
+                <div style="min-width: 0; max-width: 280px;">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" id="location-tree-search" class="form-control border-start-0" placeholder="Search locations..." autocomplete="off">
+                    </div>
+                </div>
+                <div class="btn-group btn-group-sm flex-shrink-0">
+                    <button type="button" class="btn btn-outline-secondary" id="expand-all-tree" title="Expand all"><i class="bi bi-arrows-expand me-1"></i>Expand all</button>
+                    <button type="button" class="btn btn-outline-secondary" id="collapse-all-tree" title="Collapse all"><i class="bi bi-arrows-collapse me-1"></i>Collapse all</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white border-0 py-3">
+            <h5 class="mb-0 fw-semibold"><i class="bi bi-geo-alt me-2 text-muted"></i>Location tree</h5>
+        </div>
+        <div class="card-body p-0">
+            {% if roots %}
+                <ul class="location-tree list-unstyled mb-0">
+                    {% for loc in roots %}
+                        {% include "inventory/location_node.html" with node=loc %}
+                    {% endfor %}
+                </ul>
+                <div id="no-results-tree" class="text-center py-5 text-muted" style="display: none;">
+                    <i class="bi bi-search display-4 d-block mb-2 opacity-50"></i>
+                    <p class="mb-0">No locations match your search</p>
+                </div>
+            {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-geo-alt display-4 text-muted d-block mb-3 opacity-50"></i>
+                    <p class="text-muted mb-0">No locations yet</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <!-- LIST VIEW: SEARCH + FILTER (auto-submit on change) -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body py-3">
+            <form method="GET" id="location-filter-form" class="row g-3 align-items-end">
+                <input type="hidden" name="sort" value="{{ sort }}">
+                <input type="hidden" name="per_page" value="{{ per_page }}">
+                {% if active_filter %}<input type="hidden" name="filter" value="{{ active_filter }}">{% endif %}
+                <div class="col-md-4">
+                    <label class="form-label small text-muted mb-1">Search</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" name="q" id="location-search" class="form-control" placeholder="Search locations..."
+                               value="{{ request.GET.q }}" autocomplete="off">
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">Type</label>
+                    <select name="type" id="location-type" class="form-select">
+                        <option value="">All types</option>
+                        {% for code, label in location_types %}
+                            <option value="{{ code }}" {% if request.GET.type == code %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">Structural</label>
+                    <select name="structural" id="location-structural" class="form-select">
+                        <option value="">Any</option>
+                        <option value="yes" {% if request.GET.structural == 'yes' %}selected{% endif %}>Yes</option>
+                        <option value="no" {% if request.GET.structural == 'no' %}selected{% endif %}>No</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">External</label>
+                    <select name="external" id="location-external" class="form-select">
+                        <option value="">Any</option>
+                        <option value="yes" {% if request.GET.external == 'yes' %}selected{% endif %}>Yes</option>
+                        <option value="no" {% if request.GET.external == 'no' %}selected{% endif %}>No</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">Status</label>
+                    <select name="status" id="location-status" class="form-select">
+                        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option>
+                        <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Inactive</option>
+                        <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All</option>
+                    </select>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- TOOLBAR -->
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+        <p class="text-muted small mb-0">
+            {% if locations.paginator %}
+                Showing {{ locations.start_index }}-{{ locations.end_index }} of {{ locations.paginator.count }} location{{ locations.paginator.count|pluralize }}
+            {% else %}
+                {{ locations|length }} location{{ locations|length|pluralize }}
+            {% endif %}
+        </p>
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Select columns">
+                <i class="bi bi-layout-three-columns me-1"></i>Columns
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm p-2" style="min-width: 200px;">
+                <li class="dropdown-header small">Show columns</li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="name" checked> Name</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="code" checked> Code</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="parent" checked> Parent</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="type" checked> Type</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="structural" checked> Structural</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="external" checked> External</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="address" checked> Address</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="capacity"> Capacity</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="items" checked> Items</label></li>
+            </ul>
+        </div>
+        <div class="ms-auto d-flex gap-2 align-items-center" id="location-actions-bar"
+             data-edit-url="{% url 'location_edit' 0 %}" data-delete-url="{% url 'location_delete' 0 %}">
+            <span class="text-muted small" id="location-selected-count"></span>
+            {% if perms.inventory.change_location %}
+                <a href="#" id="btn-location-edit" class="btn btn-sm btn-outline-secondary disabled" title="Edit selected">Edit</a>
+            {% endif %}
+            {% if perms.inventory.delete_location %}
+                <a href="#" id="btn-location-delete" class="btn btn-sm btn-outline-danger disabled" title="Delete selected">Delete</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- LOCATIONS TABLE -->
+    <div class="card shadow-sm border-0 overflow-hidden">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" id="locations-table">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:40px;"><input type="checkbox" class="form-check-input" id="location-select-all" title="Select all"></th>
+                        <th data-col="name"><a href="?{% querystring request sort=sort|toggle_sort:'name' %}" class="sort-link">Name</a></th>
+                        <th data-col="code"><a href="?{% querystring request sort=sort|toggle_sort:'code' %}" class="sort-link">Code</a></th>
+                        <th data-col="parent"><a href="?{% querystring request sort=sort|toggle_sort:'parent__name' %}" class="sort-link">Parent</a></th>
+                        <th data-col="type"><a href="?{% querystring request sort=sort|toggle_sort:'location_type' %}" class="sort-link">Type</a></th>
+                        <th data-col="structural">Structural</th>
+                        <th data-col="external">External</th>
+                        <th data-col="address">Address</th>
+                        <th data-col="capacity">Capacity</th>
+                        <th data-col="items"><a href="?{% querystring request sort=sort|toggle_sort:'item_count' %}" class="sort-link">Items</a></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for location in locations %}
+                    <tr class="location-row" data-location-id="{{ location.id }}" data-location-name="{{ location.name|escapejs }}">
+                        <td style="width:40px;"><input type="checkbox" class="form-check-input location-checkbox" value="{{ location.id }}"></td>
+                        <td data-col="name">
+                            <a href="{% url 'location_view' location.id %}" class="fw-medium text-decoration-none text-dark d-flex align-items-center gap-2">
+                                {% if location.image %}
+                                    <img src="{{ location.image.url }}" alt="" class="rounded" style="width: 32px; height: 32px; object-fit: cover;">
+                                {% else %}
+                                    <span class="rounded bg-light d-inline-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                        <i class="bi bi-geo-alt text-muted"></i>
+                                    </span>
+                                {% endif %}
+                                <div>
+                                    <span>{{ location.name }}</span>
+                                    {% if location.get_breadcrumb != location.name %}
+                                        <br><small class="text-muted">{{ location.get_breadcrumb }}</small>
+                                    {% endif %}
+                                </div>
+                            </a>
+                        </td>
+                        <td data-col="code">
+                            {% if location.code %}
+                                <code class="small">{{ location.code }}</code>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td data-col="parent">
+                            {% if location.parent %}
+                                <a href="{% url 'location_view' location.parent.id %}" class="text-muted small text-decoration-none">{{ location.parent.name }}</a>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td data-col="type">
+                            <span class="badge bg-light text-dark">{{ location.get_location_type_display }}</span>
+                        </td>
+                        <td data-col="structural">
+                            {% if location.structural %}
+                                <i class="bi bi-check-circle-fill text-success" title="Structural"></i>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td data-col="external">
+                            {% if location.external %}
+                                <i class="bi bi-box-arrow-up-right text-warning" title="External"></i>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td data-col="address">
+                            {% if location.address %}
+                                <span class="small" title="{{ location.address }}">{{ location.address|truncatechars:40 }}</span>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td data-col="capacity">
+                            {% if location.capacity %}
+                                {{ location.capacity|intcomma }}
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td data-col="items">
+                            {% if location.item_count %}
+                                <a href="{% url 'item_list' %}?location={{ location.id }}" class="text-decoration-none">
+                                    <span class="badge bg-primary">{{ location.item_count }}</span>
+                                </a>
+                            {% else %}
+                                <span class="text-muted">0</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10" class="text-center py-5">
+                            <i class="bi bi-geo-alt display-4 text-muted d-block mb-2 opacity-50"></i>
+                            <p class="text-muted mb-2">No locations found</p>
+                            {% if request.GET.q or request.GET.type or request.GET.structural or request.GET.external or active_filter %}
+                                <a href="{% url 'location_list' %}" class="btn btn-sm btn-outline-primary">Clear filters</a>
+                            {% elif perms.inventory.add_location %}
+                                <a href="{% url 'location_create' %}" class="btn btn-primary">
+                                    <i class="bi bi-plus-lg me-1"></i>Add your first location
+                                </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- PAGINATION -->
+    {% include "inventory/includes/pagination.html" with page_obj=locations per_page=per_page per_page_choices=per_page_choices %}
     {% endif %}
 </div>
 
-<!-- SEARCH + FILTER BAR -->
-<form method="GET" class="row g-2 mb-4">
-
-    <!-- Search box -->
-    <div class="col-md-4">
-        <input type="text" name="q" class="form-control" placeholder="Search locations..."
-               value="{{ request.GET.q }}">
-    </div>
-
-    <!-- Type filter -->
-    <div class="col-md-3">
-        <select name="type" class="form-select">
-            <option value="">All Types</option>
-            {% for code, label in location_types %}
-            <option value="{{ code }}" {% if request.GET.type == code %}selected{% endif %}>
-                {{ label }}
-            </option>
-            {% endfor %}
-        </select>
-    </div>
-
-    <!-- Structural filter -->
-    <div class="col-md-2">
-        <select name="structural" class="form-select">
-            <option value="">Structural?</option>
-            <option value="yes" {% if request.GET.structural == 'yes' %}selected{% endif %}>Yes</option>
-            <option value="no" {% if request.GET.structural == 'no' %}selected{% endif %}>No</option>
-        </select>
-    </div>
-
-    <!-- External filter -->
-    <div class="col-md-2">
-        <select name="external" class="form-select">
-            <option value="">External?</option>
-            <option value="yes" {% if request.GET.external == 'yes' %}selected{% endif %}>Yes</option>
-            <option value="no" {% if request.GET.external == 'no' %}selected{% endif %}>No</option>
-        </select>
-    </div>
-
-    <!-- Filter Button -->
-    <div class="col-md-1 d-grid">
-        <button class="btn btn-secondary">Go</button>
-    </div>
-
-</form>
-
-
-<table class="table table-hover bg-white shadow-sm">
-    <thead class="table-light">
-        <tr>
-
-            <!-- SORTING LINKS -->
-            <th>
-                <a href="?{% querystring request sort='name' %}">Name</a>
-            </th>
-
-            <th>
-                <a href="?{% querystring request sort='parent__name' %}">Parent</a>
-            </th>
-
-            <th>
-                <a href="?{% querystring request sort='location_type' %}">Type</a>
-            </th>
-
-            <th>
-                <a href="?{% querystring request sort='structural' %}">Structural</a>
-            </th>
-
-            <th>
-                <a href="?{% querystring request sort='external' %}">External</a>
-            </th>
-
-            <th>
-                <a href="?{% querystring request sort='items' %}">Stock</a>
-            </th>
-
-            <th style="width:150px;">Actions</th>
-        </tr>
-    </thead>
-
-    <tbody>
-
-        {% for location in locations %}
-        <tr>
-
-            <!-- Name + Breadcrumb -->
-            <td>
-                <strong>{{ location.name }}</strong><br>
-                <small class="text-muted">{{ location.get_breadcrumb }}</small>
-            </td>
-
-            <!-- Parent -->
-            <td>
-                {% if location.parent %}
-                    {{ location.parent.name }}
-                {% else %}
-                    <span class="text-muted">—</span>
+<!-- MAP MODAL -->
+<div class="modal fade" id="locationMapModal" tabindex="-1" aria-labelledby="locationMapModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="locationMapModalLabel"><i class="bi bi-map me-2"></i>Location map</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0 position-relative" style="height: 70vh; min-height: 400px;">
+                <div id="location-map-container" class="w-100 h-100"></div>
+                {% if not locations_with_coords %}
+                <div id="location-map-empty" class="position-absolute top-50 start-50 translate-middle text-center text-muted p-4">
+                    <i class="bi bi-geo-alt display-4 d-block mb-2 opacity-50"></i>
+                    <p class="mb-0">No locations with coordinates. Add latitude/longitude to locations to see them on the map.</p>
+                </div>
                 {% endif %}
-            </td>
+            </div>
+        </div>
+    </div>
+</div>
 
-            <!-- Type -->
-            <td>{{ location.get_location_type_display }}</td>
+<style>
+.locations-page .sort-link { color: inherit; text-decoration: none; }
+.locations-page .sort-link:hover { color: var(--bs-primary); }
+.locations-page .location-chart-toggle { cursor: pointer; }
+.locations-page .location-chart-toggle:hover { background-color: rgba(0,0,0,.02) !important; }
+.locations-page .location-chart-chevron { transition: transform 0.2s; }
+.locations-page .location-chart-toggle[aria-expanded="false"] .location-chart-chevron { transform: rotate(-90deg); }
+.locations-page .table th { font-weight: 600; font-size: 0.8125rem; }
+.locations-page .table td { font-size: 0.9rem; }
+.locations-page .input-group-text { border-radius: 0.375rem 0 0 0.375rem; }
+.locations-page .location-tree { --tree-indent: 24px; }
+.locations-page .location-tree .location-node { border-bottom: 1px solid #eee; transition: background 0.15s ease; }
+.locations-page .location-tree .location-node:hover { background: #f8fafc; }
+.locations-page .location-tree .location-node.match-highlight { background: #eff6ff; }
+.locations-page .location-tree .location-row { display: flex; align-items: center; gap: 8px; padding: 10px 16px; min-height: 44px; }
+.locations-page .location-tree .location-row .toggle-btn { width: 24px; height: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: none; background: transparent; color: #64748b; border-radius: 6px; cursor: pointer; }
+.locations-page .location-tree .location-row .toggle-btn.has-children { cursor: pointer; }
+.locations-page .location-tree .location-row .toggle-btn.empty { cursor: default; visibility: hidden; }
+.locations-page .location-tree .location-row .toggle-btn.has-children:not(.expanded) i { transform: rotate(-90deg); }
+.locations-page .location-tree .location-row .location-name { flex: 1; font-weight: 500; color: #1e293b; }
+.locations-page .location-tree .location-row .location-type { font-size: 0.8rem; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 999px; }
+.locations-page .location-tree .location-children { list-style: none; padding-left: 0; margin: 0; margin-left: 20px; border-left: 1px solid #e2e8f0; }
+.locations-page .location-tree .location-children.collapsed { display: none; }
+#location-map-container { position: relative; }
+.leaflet-tooltip.location-marker-tooltip { font-weight: 600; font-size: 12px; background: rgba(13, 110, 253, 0.95); color: white; border: none; padding: 4px 8px; white-space: nowrap; }
+</style>
 
-            <!-- Structural -->
-            <td>
-                {% if location.structural %}
-                    <span class="text-success fw-bold">Yes</span>
-                {% else %}
-                    <span class="text-muted">No</span>
-                {% endif %}
-            </td>
+<script>
+(function() {
+    var form = document.getElementById('location-filter-form');
+    if (!form) return;
+    function submitForm() { form.submit(); }
+    // Auto-submit on filter change
+    ['location-type', 'location-structural', 'location-external', 'location-status'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('change', submitForm);
+    });
+    // Debounced search (300ms)
+    var searchEl = document.getElementById('location-search');
+    var searchTimeout;
+    if (searchEl) {
+        searchEl.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(submitForm, 300);
+        });
+    }
+    // Bulk selection
+    var selectAll = document.getElementById('location-select-all');
+    var checkboxes = document.querySelectorAll('.location-checkbox');
+    var btnEdit = document.getElementById('btn-location-edit');
+    var btnDelete = document.getElementById('btn-location-delete');
+    var selectedCount = document.getElementById('location-selected-count');
+    var bar = document.getElementById('location-actions-bar');
+    function getSelectedIds() {
+        return Array.from(checkboxes).filter(function(cb) { return cb.checked; }).map(function(cb) { return cb.value; });
+    }
+    function updateActions() {
+        var ids = getSelectedIds();
+        var n = ids.length;
+        selectedCount.textContent = n > 0 ? n + ' selected' : '';
+        [btnEdit, btnDelete].forEach(function(btn) {
+            if (btn) {
+                btn.classList.toggle('disabled', n === 0 || (btn === btnEdit && n !== 1));
+                btn.style.pointerEvents = (n === 0 || (btn === btnEdit && n !== 1)) ? 'none' : '';
+            }
+        });
+        if (selectAll) selectAll.checked = n > 0 && n === checkboxes.length;
+    }
+    if (selectAll) selectAll.addEventListener('change', function() {
+        checkboxes.forEach(function(cb) { cb.checked = selectAll.checked; });
+        updateActions();
+    });
+    checkboxes.forEach(function(cb) { cb.addEventListener('change', updateActions); });
+    function urlFor(name, id) {
+        if (!bar) return '';
+        var u = bar.getAttribute('data-' + name + '-url');
+        return u ? u.replace('/0/', '/' + id + '/') : '';
+    }
+    if (btnEdit) btnEdit.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (this.classList.contains('disabled')) return;
+        var id = getSelectedIds()[0];
+        if (id) window.location.href = urlFor('edit', id);
+    });
+    if (btnDelete) btnDelete.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (btnDelete.classList.contains('disabled')) return;
+        var id = getSelectedIds()[0];
+        if (id && confirm('Delete this location?')) window.location.href = urlFor('delete', id);
+    });
+    // Column visibility
+    var STORAGE_KEY = 'warewolf_location_list_columns';
+    function loadColumnPrefs() {
+        try { var s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; }
+    }
+    function saveColumnPrefs(obj) {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(obj)); } catch (e) {}
+    }
+    function applyColumnVisibility() {
+        var prefs = loadColumnPrefs();
+        document.querySelectorAll('.col-toggle').forEach(function(cb) {
+            var col = cb.dataset.col;
+            if (prefs && prefs[col] !== undefined) cb.checked = prefs[col];
+            var visible = cb.checked;
+            document.querySelectorAll('[data-col="' + col + '"]').forEach(function(el) { el.style.display = visible ? '' : 'none'; });
+        });
+    }
+    document.querySelectorAll('.col-toggle').forEach(function(cb) {
+        cb.addEventListener('change', function() {
+            var prefs = loadColumnPrefs() || {};
+            prefs[cb.dataset.col] = cb.checked;
+            saveColumnPrefs(prefs);
+            applyColumnVisibility();
+        });
+    });
+    document.addEventListener('DOMContentLoaded', applyColumnVisibility);
+    applyColumnVisibility();
+})();
+</script>
+{% if view_mode == 'tree' %}
+<script>
+(function() {
+    var searchEl = document.getElementById('location-tree-search');
+    var expandBtn = document.getElementById('expand-all-tree');
+    var collapseBtn = document.getElementById('collapse-all-tree');
+    var noResults = document.getElementById('no-results-tree');
+    var tree = document.querySelector('.location-tree');
+    if (!tree) return;
+    function allNodes() { return tree.querySelectorAll('.location-node'); }
+    function allToggles() { return tree.querySelectorAll('.toggle-btn.has-children'); }
+    function allChildren() { return tree.querySelectorAll('.location-children'); }
+    function updateNoResults(show) { if (noResults) noResults.style.display = show ? 'block' : 'none'; }
+    function filterTree(q) {
+        var query = (q || '').trim().toLowerCase();
+        var nodes = allNodes();
+        var anyVisible = false;
+        nodes.forEach(function(node) {
+            var row = node.querySelector('.location-row');
+            var name = (row && row.querySelector('.location-name')) ? row.querySelector('.location-name').textContent : '';
+            var children = node.querySelector('.location-children');
+            var childNodes = children ? children.querySelectorAll('.location-node') : [];
+            var childMatches = false;
+            childNodes.forEach(function(cn) {
+                var cr = cn.querySelector('.location-row');
+                var cnName = cr && cr.querySelector('.location-name') ? cr.querySelector('.location-name').textContent : '';
+                if (cnName.toLowerCase().indexOf(query) !== -1) childMatches = true;
+            });
+            var matches = !query || name.toLowerCase().indexOf(query) !== -1;
+            var show = matches || childMatches;
+            node.style.display = show ? '' : 'none';
+            if (show) anyVisible = true;
+            if (row) row.classList.toggle('match-highlight', !!query && matches);
+            if (children && (matches || childMatches)) {
+                children.classList.remove('collapsed');
+                var toggle = node.querySelector('.toggle-btn.has-children');
+                if (toggle) toggle.classList.add('expanded');
+            }
+        });
+        updateNoResults(!anyVisible);
+    }
+    if (searchEl) {
+        var debounce;
+        searchEl.addEventListener('input', function() {
+            clearTimeout(debounce);
+            debounce = setTimeout(function() { filterTree(searchEl.value); }, 200);
+        });
+    }
+    if (expandBtn) expandBtn.addEventListener('click', function() {
+        allChildren().forEach(function(el) { el.classList.remove('collapsed'); });
+        allToggles().forEach(function(t) { t.classList.add('expanded'); });
+    });
+    if (collapseBtn) collapseBtn.addEventListener('click', function() {
+        allChildren().forEach(function(el) { el.classList.add('collapsed'); });
+        allToggles().forEach(function(t) { t.classList.remove('expanded'); });
+    });
+    tree.addEventListener('click', function(e) {
+        var toggle = e.target.closest('.toggle-btn.has-children');
+        if (!toggle) return;
+        var node = toggle.closest('.location-node');
+        var children = node && node.querySelector('.location-children');
+        if (!children) return;
+        children.classList.toggle('collapsed');
+        toggle.classList.toggle('expanded');
+    });
+})();
+</script>
+{% endif %}
 
-            <!-- External -->
-            <td>
-                {% if location.external %}
-                    <span class="text-danger fw-bold">Yes</span>
-                {% else %}
-                    <span class="text-muted">No</span>
-                {% endif %}
-            </td>
+{% if locations_with_coords %}
+{{ locations_with_coords|json_script:"locationsMapData" }}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+(function() {
+    var modal = document.getElementById('locationMapModal');
+    var container = document.getElementById('location-map-container');
+    var dataEl = document.getElementById('locationsMapData');
+    if (!modal || !container || !dataEl) return;
+    var locations = JSON.parse(dataEl.textContent);
+        var map = null;
+        var allBounds = null;
+    modal.addEventListener('shown.bs.modal', function() {
+        if (map) return;
+        map = L.map('location-map-container').setView([53.3498, -6.2603], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+        allBounds = L.latLngBounds();
+        locations.forEach(function(loc) {
+            var m = L.marker([loc.latitude, loc.longitude]).addTo(map);
+            m.bindTooltip(loc.name || 'Location', { permanent: true, direction: 'top', className: 'location-marker-tooltip' });
+            var popup = '<div class="p-2"><strong>' + (loc.name || 'Location') + '</strong>';
+            if (loc.address) popup += '<br><small class="text-muted">' + (loc.address.substring ? loc.address.substring(0,100) : loc.address) + '</small>';
+            popup += '<br><a href="' + (loc.detail_url || '/locations/' + loc.id + '/view/') + '" class="btn btn-sm btn-outline-primary mt-1 me-1">View</a>';
+            if (loc.map_url) popup += '<a href="' + loc.map_url + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary mt-1">Open in Google Maps</a>';
+            popup += '</div>';
+            m.bindPopup(popup);
+            m.on('click', function() { map.setView([loc.latitude, loc.longitude], 17); });
+            m.on('popupclose', function() {
+                if (allBounds && locations.length > 0) map.fitBounds(allBounds, { padding: [30, 30] });
+            });
+            allBounds.extend([loc.latitude, loc.longitude]);
+        });
+        if (locations.length > 1) map.fitBounds(allBounds, { padding: [30, 30] });
+    });
+})();
+</script>
+{% endif %}
 
-            <!-- Description -->
-            <td>{{ location.description|default:"—" }}</td>
+{% if stock_chart_labels %}
+{{ stock_chart_labels|json_script:"locationStockLabels" }}
+{{ stock_chart_values|json_script:"locationStockValues" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+(function() {
+    var ctx = document.getElementById('locationStockChart');
+    var labelsEl = document.getElementById('locationStockLabels');
+    var valuesEl = document.getElementById('locationStockValues');
+    if (!ctx || !labelsEl || !valuesEl) return;
+    var labels = JSON.parse(labelsEl.textContent);
+    var values = JSON.parse(valuesEl.textContent);
+    new Chart(ctx.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Stock (units)',
+                data: values,
+                backgroundColor: 'rgba(13, 110, 253, 0.6)',
+                borderColor: 'rgba(13, 110, 253, 0.9)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: function(ctx) { return ctx.parsed.x + ' units'; } } }
+            },
+            scales: {
+                x: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
+                y: { grid: { display: false } }
+            }
+        }
+    });
+})();
+</script>
+{% endif %}
 
-            <!-- Stock Count -->
-            <td>{{ location.stock_count }}</td>
-
-            <!-- Actions -->
-            <td>
-                {% if perms.inventory.change_location %}
-                    <a href="{% url 'location_edit' location.id %}" class="btn btn-sm btn-outline-secondary">Edit</a>
-                {% endif %}
-                {% if perms.inventory.delete_location %}
-                    <a href="{% url 'location_delete' location.id %}" class="btn btn-sm btn-outline-danger">Delete</a>
-                {% endif %}
-            </td>
-
-        </tr>
-        {% empty %}
-        <tr>
-            <td colspan="8" class="text-center text-muted py-4">No locations found.</td>
-        </tr>
-        {% endfor %}
-
-    </tbody>
-</table>
-
-{% endblock %}
+{% endblock content %}

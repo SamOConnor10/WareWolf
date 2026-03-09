@@ -2,42 +2,69 @@
 
 {% block stock_content %}
 
-<h1 class="fw-bold mb-3">Delete Category</h1>
+<div class="category-delete-page">
+    <!-- HEADER -->
+    <div class="mb-4">
+        <nav aria-label="breadcrumb" class="mb-1">
+            <ol class="breadcrumb mb-0 small">
+                <li class="breadcrumb-item"><a href="{% url 'category_list' %}">Categories</a></li>
+                <li class="breadcrumb-item"><a href="{% url 'category_edit' category.id %}">{{ category.name }}</a></li>
+                <li class="breadcrumb-item active">Delete</li>
+            </ol>
+        </nav>
+        <h1 class="fw-bold mb-1">
+            <i class="bi bi-trash text-danger me-2"></i>Delete category
+        </h1>
+        <p class="text-muted mb-0">This action cannot be undone</p>
+    </div>
 
-<div class="card shadow-sm border-0 p-4">
+    <!-- CONFIRMATION CARD -->
+    <div class="card shadow-sm border-0 border-start border-4 border-danger">
+        <div class="card-body p-4">
+            <p class="mb-4">
+                Are you sure you want to delete the category
+                <strong class="text-danger">{{ category.name }}</strong>?
+            </p>
 
-    <p class="mb-4">
-        Are you sure you want to delete the category:
-        <strong>{{ category.name }}</strong>?
-    </p>
+            {% if category.children.exists %}
+                <div class="alert alert-warning d-flex align-items-start gap-2">
+                    <i class="bi bi-exclamation-triangle-fill mt-1"></i>
+                    <div>
+                        <strong>Sub-categories will be deleted</strong>
+                        <p class="mb-0 small">This category has {{ category.children.count }} sub-categor{{ category.children.count|pluralize:"y,ies" }}. They will also be removed.</p>
+                    </div>
+                </div>
+            {% endif %}
 
-    {% if category.children.exists %}
-        <div class="alert alert-warning">
-            <strong>Warning:</strong> This category has sub-categories.
-            They will also be deleted.
+            {% if category.items.exists %}
+                <div class="alert alert-info d-flex align-items-start gap-2">
+                    <i class="bi bi-info-circle-fill mt-1"></i>
+                    <div>
+                        <strong>Note</strong>
+                        <p class="mb-0 small">{{ category.items.count }} item{{ category.items.count|pluralize }} in this category will become uncategorized.</p>
+                    </div>
+                </div>
+            {% endif %}
+
+            {% if perms.inventory.delete_category %}
+                <form method="POST" class="mt-3">
+                    {% csrf_token %}
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-trash me-1"></i>Delete category
+                        </button>
+                        <a href="{% url 'category_list' %}" class="btn btn-outline-secondary">Cancel</a>
+                        <a href="{% url 'category_edit' category.id %}" class="btn btn-outline-primary ms-auto">Edit instead</a>
+                    </div>
+                </form>
+            {% else %}
+                <div class="alert alert-warning mb-0">
+                    You do not have permission to delete categories.
+                </div>
+                <a href="{% url 'category_list' %}" class="btn btn-secondary mt-3">Back to categories</a>
+            {% endif %}
         </div>
-    {% endif %}
-
-    {% if category.items.exists %}
-        <div class="alert alert-danger">
-            <strong>Important:</strong> There are stock items assigned to this
-            category. You should reassign or remove them before deleting.
-        </div>
-    {% endif %}
-
-    {% if perms.inventory.delete_category %}
-    <form method="POST" class="mt-3">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-danger">Delete</button>
-        <a href="{% url 'category_list' %}" class="btn btn-secondary ms-2">Cancel</a>
-    </form>
-    {% else %}
-        <div class="alert alert-warning">
-            You do not have permission to delete categories.
-        </div>
-        <a href="{% url 'category_list' %}" class="btn btn-secondary ms-2">Back</a>
-    {% endif %}
-
+    </div>
 </div>
 
 {% endblock %}

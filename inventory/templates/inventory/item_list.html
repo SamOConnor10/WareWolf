@@ -3,171 +3,551 @@
 
 {% block stock_content %}
 
-<div class="row">
-
-    <!-- RIGHT SIDE — STOCK ITEMS TABLE (default) -->
-    <div class="col-md-12">
-
-        <h1 class="fw-bold">Stock Items</h1>
-
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <p class="text-muted">Manage your warehouse stock levels</p>
-
+<div class="stock-items-page">
+    <!-- HEADER -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h1 class="fw-bold mb-1">
+                <i class="bi bi-box-seam text-primary me-2"></i>Stock Items
+            </h1>
+            <p class="text-muted mb-0">Manage your warehouse stock levels</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'item_export_csv' %}" class="btn btn-outline-success">
+                <i class="bi bi-download me-1"></i>Export CSV
+            </a>
             {% if perms.inventory.add_item %}
-                <a href="{% url 'item_create' %}" class="btn btn-primary">+ Add Item</a>
+                <a href="{% url 'item_create' %}?scan=1" class="btn btn-outline-primary" title="Add item by scanning barcode with camera">
+                    <i class="bi bi-upc-scan me-1"></i>Add by scan
+                </a>
+                <a href="{% url 'item_create' %}" class="btn btn-primary">
+                    <i class="bi bi-plus-lg me-1"></i>Add Item
+                </a>
             {% endif %}
         </div>
+    </div>
 
-        <!-- SEARCH + FILTER -->
-        <form method="GET" class="row g-2 mb-4">
-
-            <div class="col-md-4">
-                <input type="text" name="q" class="form-control"
-                       placeholder="Search items..."
-                       value="{{ request.GET.q }}">
-            </div>
-
-            <div class="col-md-3">
-                <select name="filter" class="form-select">
-                    <option value="">All Items</option>
-                    <option value="in_stock" {% if filter_option == 'in_stock' %}selected{% endif %}>In Stock</option>
-                    <option value="low_stock" {% if filter_option == 'low_stock' %}selected{% endif %}>Low Stock</option>
-                    <option value="out_of_stock" {% if filter_option == 'out_of_stock' %}selected{% endif %}>Out of Stock</option>
-                </select>
-            </div>
-
-            <div class="col-md-3">
-                <select name="status" class="form-select">
-                    <option value="active" {% if request.GET.status == "active" or not request.GET.status %}selected{% endif %}>Active</option>
-                    <option value="archived" {% if request.GET.status == "archived" %}selected{% endif %}>Archived</option>
-                    <option value="all" {% if request.GET.status == "all" %}selected{% endif %}>All</option>
-                </select>
-            </div>
-
-            <div class="col-md-2 d-grid">
-                <button class="btn btn-secondary">Apply</button>
-            </div>
-
-            <div class="col-md-3 d-grid">
-                <a href="{% url 'item_export_csv' %}" class="btn btn-outline-success">Export CSV</a>
-            </div>
-        </form>
-
-        <!-- STOCK TABLE -->
-        <table class="table table-hover bg-white shadow-sm">
-            <thead class="table-light">
-                <tr>
-                    <th><a href="?{% querystring request sort='name' %}">Name</a></th>
-                    <th><a href="?{% querystring request sort='sku' %}">SKU</a></th>
-                    <th><a href="?{% querystring request sort='quantity' %}">Qty</a></th>
-                    <th><a href="?{% querystring request sort='category__name' %}">Category</a></th>
-                    <th><a href="?{% querystring request sort='reorder_level' %}">Reorder</a></th>
-                    <th><a href="?{% querystring request sort='supplier__name' %}">Supplier</a></th>
-                    <th><a href="?{% querystring request sort='location__name' %}">Location</a></th>
-                    <th>Status</th>
-                    <th style="width:160px;">Actions</th>
-                </tr>
-            </thead>
-
-            <tbody>
-                {% for item in items %}
-                <tr
-                    {% if item.quantity <= 0 %}
-                        class="table-danger"
-                    {% elif item.quantity <= item.reorder_level %}
-                        class="table-warning"
-                    {% endif %}
-                >
-                    <td>{{ item.name }}</td>
-                    <td>{{ item.sku }}</td>
-                    <td>{{ item.quantity }}</td>
-
-                    <td>
-                        {% if item.category %}
-                            {{ item.category.full_path }}
-                        {% else %}
-                            —
-                        {% endif %}
-                    </td>
-
-                    <td>{{ item.reorder_level }}</td>
-                    <td>{{ item.supplier.name }}</td>
-                    <td>{{ item.location.name }}</td>
-
-                    <td>
-                        {% if item.quantity <= 0 %}
-                            <span class="text-danger fw-bold">Out</span>
-                        {% elif item.quantity <= item.reorder_level %}
-                            <span class="text-warning fw-bold">Low</span>
-                        {% else %}
-                            <span class="text-success fw-bold">In Stock</span>
-                        {% endif %}
-                    </td>
-
-                    <td>
-                        {% if perms.inventory.view_item %}
-                            <a href="{% url 'item_forecast' item.id %}" class="btn btn-sm btn-outline-dark">Forecast</a>
-                        {% endif %}
-
-                        {% if perms.inventory.change_item %}
-                            <a href="{% url 'item_adjust' item.id %}" class="btn btn-sm btn-outline-primary">Adjust</a>
-                            <a href="{% url 'item_edit' item.id %}" class="btn btn-sm btn-outline-secondary">Edit</a>
-                        {% endif %}
-
-                        {% if perms.inventory.change_item %}
-                            <a href="{% url 'item_toggle_archive' item.id %}"
-                                class="btn btn-sm {% if item.is_active %}btn-outline-warning{% else %}btn-outline-success{% endif %}">
-                                {% if item.is_active %}Archive{% else %}Unarchive{% endif %}
-                            </a>
-                        {% endif %}
-
-                        {% if perms.inventory.delete_item %}
-                            {% if item.order_count == 0 %}
-                                <a href="{% url 'item_delete' item.id %}" class="btn btn-sm btn-outline-danger">Delete</a>
-                            {% else %}
-                                <form method="post" action="{% url 'item_hard_delete' item.id %}" style="display:inline;"
-                                        onsubmit="return confirm('This will permanently delete the item AND all related orders/history. Continue?');">
-                                    {% csrf_token %}
-                                    <a href="{% url 'item_hard_delete' item.id %}" class="btn btn-sm btn-danger">Delete</a>
-                                </form>
-                            {% endif %}
-                        {% endif %}
-                    </td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="9" class="text-center text-muted py-4">No items found.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-
-        <!-- PAGINATION -->
-        <div class="d-flex justify-content-center mt-3">
-            {% if items.has_other_pages %}
-                <nav>
-                    <ul class="pagination">
-                        {% if items.has_previous %}
-                            <li class="page-item">
-                                <a class="page-link" href="?{% querystring request page=items.previous_page_number %}">Prev</a>
-                            </li>
-                        {% endif %}
-
-                        {% for num in items.paginator.page_range %}
-                            <li class="page-item {% if items.number == num %}active{% endif %}">
-                                <a class="page-link" href="?{% querystring request page=num %}">{{ num }}</a>
-                            </li>
+    <!-- SEARCH + FILTER -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body py-3">
+            <form method="GET" id="item-filter-form" class="row g-3 align-items-end">
+                <input type="hidden" name="sort" value="{{ sort }}">
+                <input type="hidden" name="per_page" value="{{ per_page }}">
+                <div class="col-md-4">
+                    <label class="form-label small text-muted mb-1">Search</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" name="q" id="item-search" class="form-control"
+                               placeholder="Search by name or SKU..."
+                               value="{{ request.GET.q }}"
+                               autocomplete="off">
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">Stock level</label>
+                    <select name="filter" id="item-filter" class="form-select">
+                        <option value="">All</option>
+                        <option value="in_stock" {% if filter_option == 'in_stock' %}selected{% endif %}>In Stock</option>
+                        <option value="low_stock" {% if filter_option == 'low_stock' %}selected{% endif %}>Low Stock</option>
+                        <option value="out_of_stock" {% if filter_option == 'out_of_stock' %}selected{% endif %}>Out of Stock</option>
+                        <option value="expired" {% if filter_option == 'expired' %}selected{% endif %}>Expired (past date)</option>
+                        <option value="expiring_soon" {% if filter_option == 'expiring_soon' %}selected{% endif %}>Expiring soon</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">Status</label>
+                    <select name="status" id="item-status" class="form-select">
+                        <option value="active" {% if request.GET.status == "active" or not request.GET.status %}selected{% endif %}>Active</option>
+                        <option value="archived" {% if request.GET.status == "archived" %}selected{% endif %}>Archived</option>
+                        <option value="all" {% if request.GET.status == "all" %}selected{% endif %}>All</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">Category</label>
+                    <select name="category" id="item-category" class="form-select">
+                        <option value="">All categories</option>
+                        {% for c in categories %}
+                            <option value="{{ c.id }}" {% if request.GET.category and request.GET.category == c.id|stringformat:"d" %}selected{% endif %}>{{ c.full_path }}</option>
                         {% endfor %}
+                    </select>
+                    {% if not categories %}
+                        <small class="text-muted d-block mt-1"><a href="{% url 'category_list' %}">Add categories</a></small>
+                    {% endif %}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">Condition</label>
+                    <select name="stock_status" id="item-stock-status" class="form-select">
+                        <option value="">All</option>
+                        <option value="OK" {% if stock_status_filter == 'OK' %}selected{% endif %}>OK</option>
+                        <option value="damaged" {% if stock_status_filter == 'damaged' %}selected{% endif %}>Damaged</option>
+                        <option value="quarantine" {% if stock_status_filter == 'quarantine' %}selected{% endif %}>Quarantine</option>
+                        <option value="returned" {% if stock_status_filter == 'returned' %}selected{% endif %}>Returned</option>
+                        <option value="on_hold" {% if stock_status_filter == 'on_hold' %}selected{% endif %}>On Hold</option>
+                    </select>
+                </div>
+            </form>
+        </div>
+    </div>
 
-                        {% if items.has_next %}
-                            <li class="page-item">
-                                <a class="page-link" href="?{% querystring request page=items.next_page_number %}">Next</a>
-                            </li>
-                        {% endif %}
-                    </ul>
-                </nav>
+    <!-- TOOLBAR: results count, columns, actions -->
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+        <p class="text-muted small mb-0">
+            {% if items.paginator %}
+                Showing {{ items.start_index }}-{{ items.end_index }} of {{ items.paginator.count }} item{{ items.paginator.count|pluralize }}
+            {% else %}
+                {{ items|length }} item{{ items|length|pluralize }}
+            {% endif %}
+        </p>
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Select columns">
+                <i class="bi bi-layout-three-columns me-1"></i>Columns
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm p-2" style="min-width: 200px;">
+                <li class="dropdown-header small">Show columns</li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="name" checked> Name</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="sku" checked> SKU</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="qty" checked> Qty</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="category" checked> Category</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="reorder" checked> Reorder</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="unit_cost" checked> Unit cost</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="batch" checked> Batch</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="expiry" checked> Expiry</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="condition" checked> Condition</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="supplier" checked> Supplier</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="location" checked> Location</label></li>
+                <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="stock_status" checked> Stock status</label></li>
+            </ul>
+        </div>
+        <div class="ms-auto d-flex gap-2 align-items-center" id="item-actions-bar"
+             data-forecast-url="{% url 'item_forecast' 0 %}"
+             data-adjust-url="{% url 'item_adjust' 0 %}"
+             data-edit-url="{% url 'item_edit' 0 %}"
+             data-archive-url="{% url 'item_toggle_archive' 0 %}"
+             data-delete-url="{% url 'item_delete' 0 %}"
+             data-hard-delete-url="{% url 'item_hard_delete' 0 %}">
+            <span class="text-muted small" id="selected-count"></span>
+            {% if perms.inventory.view_item %}
+                <a href="#" id="btn-forecast" class="btn btn-sm btn-outline-secondary disabled" title="Forecast selected item">Forecast</a>
+            {% endif %}
+            {% if perms.inventory.change_item %}
+                <a href="#" id="btn-adjust" class="btn btn-sm btn-outline-primary disabled" title="Adjust selected item">Adjust</a>
+                <a href="#" id="btn-edit" class="btn btn-sm btn-outline-secondary disabled" title="Edit selected item">Edit</a>
+                <a href="#" id="btn-archive" class="btn btn-sm btn-outline-warning disabled" title="{% if request.GET.status == 'archived' %}Unarchive selected item{% else %}Archive selected item{% endif %}">{% if request.GET.status == 'archived' %}Unarchive{% else %}Archive{% endif %}</a>
+            {% endif %}
+            {% if perms.inventory.delete_item %}
+                <a href="#" id="btn-delete" class="btn btn-sm btn-outline-danger disabled" title="Delete selected item">Delete</a>
             {% endif %}
         </div>
+    </div>
 
+    <!-- STOCK TABLE -->
+    <div class="card shadow-sm border-0 overflow-hidden">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" id="stock-items-table">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:40px;">
+                            <input type="checkbox" class="form-check-input" id="select-all" title="Select all">
+                        </th>
+                        <th data-col="name"><a href="?{% querystring request sort=sort|toggle_sort:'name' %}" class="sort-link">Name</a></th>
+                        <th data-col="sku"><a href="?{% querystring request sort=sort|toggle_sort:'sku' %}" class="sort-link">SKU</a></th>
+                        <th data-col="qty" class="text-end"><a href="?{% querystring request sort=sort|toggle_sort:'quantity' %}" class="sort-link">Qty</a></th>
+                        <th data-col="category"><a href="?{% querystring request sort=sort|toggle_sort:'category__name' %}" class="sort-link">Category</a></th>
+                        <th data-col="reorder" class="text-end"><a href="?{% querystring request sort=sort|toggle_sort:'reorder_level' %}" class="sort-link">Reorder</a></th>
+                        <th data-col="unit_cost" class="text-end"><a href="?{% querystring request sort=sort|toggle_sort:'unit_cost' %}" class="sort-link">Unit cost</a></th>
+                        <th data-col="batch">Batch</th>
+                        <th data-col="expiry"><a href="?{% querystring request sort=sort|toggle_sort:'expiry_date' %}" class="sort-link">Expiry</a></th>
+                        <th data-col="condition"><a href="?{% querystring request sort=sort|toggle_sort:'stock_status' %}" class="sort-link">Condition</a></th>
+                        <th data-col="supplier">Supplier</th>
+                        <th data-col="location">Location</th>
+                        <th data-col="stock_status">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr class="item-row {% if not item.is_active %}table-secondary{% elif item.quantity <= 0 %}table-danger{% elif item.quantity <= item.reorder_level %}table-warning{% endif %}" data-item-id="{{ item.id }}" data-item-name="{{ item.name|escapejs }}" data-item-sku="{{ item.sku }}" data-item-quantity="{{ item.quantity }}" data-order-count="{{ item.order_count }}" data-history-count="{{ item.history_count }}">
+                        <td style="width:40px;">
+                            <input type="checkbox" class="form-check-input item-checkbox" value="{{ item.id }}">
+                        </td>
+                        <td data-col="name">
+                            <a href="{% url 'item_detail' item.id %}" class="fw-medium text-decoration-none text-dark d-flex align-items-center gap-2">
+                                {% if item.image %}
+                                    <img src="{{ item.image.url }}" alt="" class="rounded" style="width: 32px; height: 32px; object-fit: cover;">
+                                {% else %}
+                                    <span class="rounded bg-light d-inline-flex align-items-center justify-content-center" style="width: 32px; height: 32px;"><i class="bi bi-box-seam text-muted"></i></span>
+                                {% endif %}
+                                {{ item.name }}
+                            </a>
+                        </td>
+                        <td data-col="sku"><code class="small">{{ item.sku }}</code></td>
+                        <td data-col="qty" class="text-end">
+                            <span class="fw-medium">{{ item.quantity }}</span>
+                            {% if item.unit_of_measure %}<span class="text-muted small"> {{ item.unit_of_measure }}</span>{% endif %}
+                        </td>
+                        <td data-col="category">
+                            {% if item.category %}
+                                <span class="text-muted small">{{ item.category.full_path }}</span>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td data-col="reorder" class="text-end">{{ item.reorder_level }}</td>
+                        <td data-col="unit_cost" class="text-end">
+                            {% if item.unit_cost %}
+                                <span class="small">{{ item.currency|default:"EUR" }} {{ item.unit_cost }}</span>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td data-col="batch">
+                            {% if item.batch_code %}
+                                <span class="badge bg-light text-dark">{{ item.batch_code }}</span>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td data-col="expiry">
+                            {% if item.expiry_date %}
+                                {% if item.expiry_date < today %}
+                                    <span class="text-danger small">{{ item.expiry_date|date:"d M Y" }}</span>
+                                {% else %}
+                                    <span class="small">{{ item.expiry_date|date:"d M Y" }}</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td data-col="condition">
+                            {% if item.stock_status and item.stock_status != "OK" %}
+                                <span class="badge bg-warning text-dark">{{ item.get_stock_status_display|default:item.stock_status }}</span>
+                            {% else %}
+                                <span class="text-muted small">OK</span>
+                            {% endif %}
+                        </td>
+                        <td data-col="supplier"><span class="small">{{ item.supplier.name }}</span></td>
+                        <td data-col="location"><span class="small">{{ item.location.name }}</span></td>
+                        <td data-col="stock_status">
+                            {% if item.quantity <= 0 %}
+                                <span class="badge bg-danger">Out</span>
+                            {% elif item.quantity <= item.reorder_level %}
+                                <span class="badge bg-warning text-dark">Low</span>
+                            {% else %}
+                                <span class="badge bg-success">In Stock</span>
+                            {% endif %}
+                            {% if item.expiry_date and item.expiry_date < today %}
+                                <span class="badge bg-secondary ms-1" title="Expired">Expired</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="13" class="text-center py-5">
+                            <i class="bi bi-inbox display-4 text-muted d-block mb-2"></i>
+                            <p class="text-muted mb-2">No items found</p>
+                            {% if request.GET.q or request.GET.filter or request.GET.status or request.GET.category or request.GET.stock_status %}
+                                <a href="{% url 'item_list' %}?clear=1" class="btn btn-sm btn-outline-primary" id="clear-filters-link">Clear filters</a>
+                            {% elif perms.inventory.add_item %}
+                                <div class="d-flex gap-2 justify-content-center flex-wrap">
+                                    <a href="{% url 'item_create' %}" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Add your first item</a>
+                                    <a href="{% url 'item_create' %}?scan=1" class="btn btn-outline-primary"><i class="bi bi-upc-scan me-1"></i>Add by scan</a>
+                                </div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- PAGINATION -->
+    {% include "inventory/includes/pagination.html" with page_obj=items per_page=per_page per_page_choices=per_page_choices %}
+</div>
+
+<!-- Adjust Quantity Modal -->
+{% if perms.inventory.change_item %}
+<div class="modal fade" id="adjustQuantityModal" tabindex="-1" aria-labelledby="adjustModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content shadow">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold" id="adjustModalLabel">
+                    <i class="bi bi-sliders text-primary me-2"></i>Adjust Quantity
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-2">
+                <p class="text-muted small mb-2" id="adjust-item-name"></p>
+                <p class="mb-3">
+                    <span class="badge bg-light text-dark fs-6" id="adjust-current-qty">0</span>
+                    <span class="text-muted small ms-2">current</span>
+                </p>
+                <form id="adjust-form" method="POST" action="">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Adjustment</label>
+                        <input type="number" name="adjustment" id="adjustment-input" class="form-control form-control-lg" required
+                               placeholder="+10 or -5" autofocus>
+                        <small class="text-muted">Positive to add, negative to remove</small>
+                    </div>
+                    <div class="d-flex gap-2 justify-content-end">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i>Apply
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
+{% endif %}
+
+<!-- Delete confirmation modal (single-step, no second page) -->
+{% if perms.inventory.delete_item %}
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow border-0 border-start border-danger border-4">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title d-flex align-items-center" id="deleteModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill text-danger me-2 fs-4"></i>
+                    <span id="delete-modal-title">Delete item?</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-2">
+                <p class="mb-2" id="delete-modal-item-desc"></p>
+                <div id="delete-modal-soft-msg" class="text-muted small mb-0" style="display:none;">
+                    You can undo from the list until it is permanently removed.
+                </div>
+                <div id="delete-modal-hard-warning" class="alert alert-warning d-flex align-items-start mb-0" style="display:none;">
+                    <i class="bi bi-shield-exclamation me-2 mt-1"></i>
+                    <div>
+                        <strong>This action cannot be undone.</strong>
+                        <ul class="mb-0 mt-2 ps-3" id="delete-modal-counts"></ul>
+                    </div>
+                </div>
+            </div>
+            <form id="delete-confirm-form" method="POST" action="">
+                {% csrf_token %}
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-1"></i><span id="delete-confirm-btn-text">Delete</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.stock-items-page .sort-link { color: inherit; text-decoration: none; }
+.stock-items-page .sort-link:hover { color: var(--bs-primary); }
+.stock-items-page .table th { font-weight: 600; font-size: 0.8125rem; }
+.stock-items-page .table td { font-size: 0.9rem; }
+.stock-items-page .input-group-text { border-radius: 0.375rem 0 0 0.375rem; }
+</style>
+
+<script>
+(function() {
+    var PARAMS_KEY = 'warewolf_item_list_params';
+    var STORAGE_KEY = 'warewolf_item_list_columns';
+    var baseUrl = '{% url "item_list" %}';
+    var search = window.location.search || '';
+    if (search.indexOf('clear=1') !== -1) {
+        try { localStorage.removeItem(PARAMS_KEY); } catch (e) {}
+        var clean = baseUrl + search.replace(/[?&]clear=1/g, '').replace(/^&/, '?').replace(/\?$/, '');
+        if (clean === baseUrl) window.location.replace(baseUrl);
+        else window.location.replace(clean.replace(/\?$/, '') ? clean : baseUrl);
+        return;
+    }
+    if (search && search !== '?') {
+        try { localStorage.setItem(PARAMS_KEY, search); } catch (e) {}
+    } else {
+        try {
+            var saved = localStorage.getItem(PARAMS_KEY);
+            if (saved && saved.length > 1) {
+                window.location.replace(baseUrl + (saved.startsWith('?') ? saved : '?' + saved));
+                return;
+            }
+        } catch (e) {}
+    }
+
+    var form = document.getElementById('item-filter-form');
+    var searchInput = document.getElementById('item-search');
+    var searchTimeout;
+
+    function submitForm() {
+        if (form) form.submit();
+    }
+
+    ['item-filter', 'item-status', 'item-category', 'item-stock-status'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('change', submitForm);
+    });
+
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(submitForm, 300);
+        });
+    }
+
+    // Column visibility
+    function loadColumnPrefs() {
+        try {
+            var s = localStorage.getItem(STORAGE_KEY);
+            return s ? JSON.parse(s) : null;
+        } catch (e) { return null; }
+    }
+    function saveColumnPrefs(obj) {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(obj)); } catch (e) {}
+    }
+    function applyColumnVisibility() {
+        var prefs = loadColumnPrefs();
+        document.querySelectorAll('.col-toggle').forEach(function(cb) {
+            var col = cb.dataset.col;
+            if (prefs && prefs[col] !== undefined) cb.checked = prefs[col];
+            var visible = cb.checked;
+            document.querySelectorAll('[data-col="' + col + '"]').forEach(function(el) {
+                el.style.display = visible ? '' : 'none';
+            });
+        });
+    }
+    document.querySelectorAll('.col-toggle').forEach(function(cb) {
+        cb.addEventListener('change', function() {
+            var prefs = loadColumnPrefs() || {};
+            prefs[cb.dataset.col] = cb.checked;
+            saveColumnPrefs(prefs);
+            applyColumnVisibility();
+        });
+    });
+    document.addEventListener('DOMContentLoaded', applyColumnVisibility);
+    applyColumnVisibility();
+
+    // Row selection & actions
+    var selectAll = document.getElementById('select-all');
+    var checkboxes = document.querySelectorAll('.item-checkbox');
+    var btnForecast = document.getElementById('btn-forecast');
+    var btnAdjust = document.getElementById('btn-adjust');
+    var btnEdit = document.getElementById('btn-edit');
+    var btnArchive = document.getElementById('btn-archive');
+    var btnDelete = document.getElementById('btn-delete');
+    var selectedCount = document.getElementById('selected-count');
+
+    function getSelectedIds() {
+        return Array.from(checkboxes).filter(function(cb) { return cb.checked; }).map(function(cb) { return cb.value; });
+    }
+    function getSelectedRow(index) {
+        var ids = getSelectedIds();
+        return ids[index] ? document.querySelector('.item-row[data-item-id="' + ids[index] + '"]') : null;
+    }
+    function updateActions() {
+        var ids = getSelectedIds();
+        var n = ids.length;
+        selectedCount.textContent = n > 0 ? n + ' selected' : '';
+        var disabled = n === 0;
+        [btnForecast, btnAdjust, btnEdit, btnArchive, btnDelete].forEach(function(btn) {
+            if (btn) {
+                btn.classList.toggle('disabled', disabled);
+                btn.style.pointerEvents = disabled ? 'none' : '';
+            }
+        });
+        if (selectAll) selectAll.checked = n > 0 && n === checkboxes.length;
+    }
+    if (selectAll) {
+        selectAll.addEventListener('change', function() {
+            checkboxes.forEach(function(cb) { cb.checked = selectAll.checked; });
+            updateActions();
+        });
+    }
+    checkboxes.forEach(function(cb) {
+        cb.addEventListener('change', updateActions);
+    });
+    function go(url) {
+        if (url) window.location.href = url;
+    }
+    var bar = document.getElementById('item-actions-bar');
+    function urlFor(name, id) {
+        if (!bar) return '';
+        var u = bar.getAttribute('data-' + name + '-url');
+        return u ? u.replace(/\/0\//, '/' + id + '/') : '';
+    }
+    if (btnForecast) btnForecast.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (this.classList.contains('disabled')) return;
+        var id = getSelectedIds()[0];
+        if (id) go(urlFor('forecast', id));
+    });
+    if (btnAdjust) btnAdjust.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (btnAdjust.classList.contains('disabled')) return;
+        var id = getSelectedIds()[0];
+        if (!id) return;
+        var row = document.querySelector('.item-row[data-item-id="' + id + '"]');
+        if (!row) return;
+        var modal = document.getElementById('adjustQuantityModal');
+        var form = document.getElementById('adjust-form');
+        if (modal && form) {
+            document.getElementById('adjust-item-name').textContent = row.dataset.itemName || '';
+            document.getElementById('adjust-current-qty').textContent = row.dataset.itemQuantity || '0';
+            form.action = urlFor('adjust', id);
+            document.getElementById('adjustment-input').value = '';
+            document.getElementById('adjustment-input').focus();
+            var m = new bootstrap.Modal(modal);
+            m.show();
+        } else {
+            go(urlFor('adjust', id));
+        }
+    });
+    if (btnEdit) btnEdit.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (btnEdit.classList.contains('disabled')) return;
+        var id = getSelectedIds()[0];
+        if (id) go(urlFor('edit', id));
+    });
+    if (btnArchive) btnArchive.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (btnArchive.classList.contains('disabled')) return;
+        var id = getSelectedIds()[0];
+        if (id) go(urlFor('archive', id));
+    });
+    if (btnDelete) btnDelete.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (btnDelete.classList.contains('disabled')) return;
+        var id = getSelectedIds()[0];
+        if (!id) return;
+        var row = document.querySelector('.item-row[data-item-id="' + id + '"]');
+        var orderCount = row ? parseInt(row.dataset.orderCount || '0', 10) : 0;
+        var historyCount = row ? parseInt(row.dataset.historyCount || '0', 10) : 0;
+        var itemName = row ? (row.dataset.itemName || '') : '';
+        var itemSku = row ? (row.dataset.itemSku || '') : '';
+        var targetUrl = orderCount > 0 ? urlFor('hard-delete', id) : urlFor('delete', id);
+        var deleteModal = document.getElementById('deleteConfirmModal');
+        var deleteForm = document.getElementById('delete-confirm-form');
+        if (deleteModal && deleteForm) {
+            document.getElementById('delete-modal-title').textContent = orderCount > 0 ? 'Permanently delete item' : 'Delete item?';
+            document.getElementById('delete-modal-item-desc').innerHTML = 'This will delete <strong>' + (itemName || 'this item') + '</strong>' + (itemSku ? ' <code class="text-muted">' + itemSku + '</code>' : '') + (orderCount > 0 ? ' and all related records.' : '.');
+            document.getElementById('delete-modal-soft-msg').style.display = orderCount > 0 ? 'none' : 'block';
+            var hardWarn = document.getElementById('delete-modal-hard-warning');
+            var countsEl = document.getElementById('delete-modal-counts');
+            if (orderCount > 0) {
+                hardWarn.style.display = 'flex';
+                countsEl.innerHTML = '<li>Orders to be deleted: <strong>' + orderCount + '</strong></li><li>Stock history records: <strong>' + historyCount + '</strong></li>';
+            } else {
+                hardWarn.style.display = 'none';
+            }
+            document.getElementById('delete-confirm-btn-text').textContent = orderCount > 0 ? 'Delete permanently' : 'Delete';
+            deleteForm.action = targetUrl;
+            new bootstrap.Modal(deleteModal).show();
+        } else {
+            if (confirm(orderCount > 0 ? 'Permanently delete this item and all related orders?' : 'Delete this item?')) {
+                go(targetUrl);
+            }
+        }
+    });
+})();
+</script>
 
 {% endblock stock_content %}

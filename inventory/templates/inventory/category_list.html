@@ -2,42 +2,595 @@
 
 {% block stock_content %}
 
-<h1 class="fw-bold mb-3">Categories</h1>
-<p class="text-muted">Manage your category hierarchy.</p>
-
-<div class="card shadow-sm border-0">
-    <div class="card-header bg-light fw-bold">
-        Category Tree
+<div class="categories-page">
+    <!-- HEADER -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h1 class="fw-bold mb-1">
+                <i class="bi bi-folder2 text-primary me-2"></i>Categories
+            </h1>
+            <p class="text-muted mb-0">Manage your category hierarchy</p>
+        </div>
+        {% if perms.inventory.add_category %}
+            <button type="button" class="btn btn-primary js-add-category-btn">
+                <i class="bi bi-plus-lg me-1"></i>Add Category
+            </button>
+        {% endif %}
     </div>
 
-    <div class="p-3">
-        {% if categories %}
-            <ul class="category-tree list-unstyled">
-                {% for cat in categories %}
-                    {% include "inventory/category_node.html" with node=cat %}
-                {% endfor %}
-            </ul>
-        {% else %}
-            <p class="text-muted fst-italic">No categories created yet.</p>
-        {% endif %}
+    <!-- SEARCH + TREE CONTROLS + TOOLBAR -->
+    <div class="card shadow-sm border-0 mb-4" id="category-controls-card">
+        <div class="card-body py-3 px-4">
+            <div class="d-flex flex-nowrap align-items-center gap-3" id="category-controls-row">
+                <div class="flex-grow-1 flex-md-grow-0" style="min-width: 0; max-width: 280px;">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" id="category-search" class="form-control border-start-0"
+                               placeholder="Search categories..." autocomplete="off">
+                    </div>
+                </div>
+                <div class="btn-group btn-group-sm flex-shrink-0">
+                    <button type="button" class="btn btn-outline-secondary" id="expand-all" title="Expand all">
+                        <i class="bi bi-arrows-expand me-1"></i>Expand all
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" id="collapse-all" title="Collapse all">
+                        <i class="bi bi-arrows-collapse me-1"></i>Collapse all
+                    </button>
+                </div>
+                {% if categories %}
+                <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                    <label class="form-check mb-0 small">
+                        <input type="checkbox" class="form-check-input" id="category-select-all" title="Select all">
+                        <span class="text-muted">Select all</span>
+                    </label>
+                    <span class="text-muted small" id="category-selected-count"></span>
+                </div>
+                <div class="flex-grow-1" style="min-width: 12px;"></div>
+                <div class="d-flex align-items-center gap-2 flex-shrink-0" id="category-actions-bar">
+                    {% if perms.inventory.add_category %}
+                        <a href="#" id="btn-add-subcategory" class="btn btn-sm btn-outline-primary disabled"
+                           title="Add subcategory under selected">
+                            <i class="bi bi-folder-plus me-1"></i>Add subcategory
+                        </a>
+                    {% endif %}
+                    {% if perms.inventory.change_category %}
+                        <a href="#" id="btn-category-edit" class="btn btn-sm btn-outline-secondary disabled"
+                           data-edit-url="{% url 'category_edit' 1 %}" title="Edit selected category">
+                            <i class="bi bi-pencil me-1"></i>Edit
+                        </a>
+                    {% endif %}
+                    {% if perms.inventory.delete_category %}
+                        <a href="#" id="btn-category-delete" class="btn btn-sm btn-outline-danger disabled"
+                           data-delete-url="{% url 'category_delete' 1 %}" title="Delete selected category">
+                            <i class="bi bi-trash me-1"></i>Delete
+                        </a>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
 
-        {% if perms.inventory.add_category %}
-            <a href="{% url 'category_create' %}" class="btn btn-primary btn-sm mt-3 w-100">
-                + Add Category
-            </a>
-        {% endif %}
+    <!-- CATEGORY TREE -->
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white border-0 py-3">
+            <h5 class="mb-0 fw-semibold">
+                <i class="bi bi-diagram-3 me-2 text-muted"></i>Category tree
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            {% if categories %}
+                <ul class="category-tree list-unstyled mb-0">
+                    {% for node in categories %}
+                        {% include "inventory/category_node.html" with node=node %}
+                    {% endfor %}
+                </ul>
+                <div id="no-results" class="text-center py-5 text-muted" style="display: none;">
+                    <i class="bi bi-search display-4 d-block mb-2 opacity-50"></i>
+                    <p class="mb-0">No categories match your search</p>
+                </div>
+            {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-folder2-open display-4 text-muted d-block mb-3 opacity-50"></i>
+                    <h5 class="text-muted mb-2">No categories yet</h5>
+                    <p class="text-muted mb-3">Create your first category to organise your stock</p>
+                    {% if perms.inventory.add_category %}
+                        <button type="button" class="btn btn-primary js-add-category-btn">
+                            <i class="bi bi-plus-lg me-1"></i>Add Category
+                        </button>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
     </div>
 </div>
 
-<style>
-.category-tree ul {
-    list-style: none;
-    padding-left: 20px;
-}
+<!-- Add Category Modal -->
+{% if perms.inventory.add_category and add_form %}
+<div class="modal fade" id="addCategoryModal" tabindex="-1" aria-labelledby="addCategoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addCategoryModalLabel">
+                    <i class="bi bi-folder-plus me-2"></i>Add Category
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{% url 'category_create' %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="{{ add_form.name.id_for_label }}" class="form-label">Category name</label>
+                        {{ add_form.name }}
+                    </div>
+                    <div class="mb-3">
+                        <label for="{{ add_form.parent.id_for_label }}" class="form-label">Parent category</label>
+                        {{ add_form.parent }}
+                        <small class="form-text text-muted">Leave empty for a top-level category</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-plus-lg me-1"></i>Create category
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
 
-.category-tree li {
-    margin: 4px 0;
+<!-- Edit Category Modal -->
+{% if perms.inventory.change_category and all_categories %}
+<div class="modal fade" id="editCategoryModal" tabindex="-1" aria-labelledby="editCategoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editCategoryModalLabel">
+                    <i class="bi bi-pencil me-2"></i>Edit Category
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="edit-category-form" method="POST" action="">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="edit-category-name" class="form-label">Category name</label>
+                        <input type="text" name="name" id="edit-category-name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-category-parent" class="form-label">Parent category</label>
+                        <select name="parent" id="edit-category-parent" class="form-select">
+                            <option value="">---------</option>
+                            {% for c in all_categories %}
+                                <option value="{{ c.id }}">{{ c.full_path }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted">Leave empty for a top-level category</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i>Save changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Delete Category Modal -->
+{% if perms.inventory.delete_category %}
+<div class="modal fade" id="deleteCategoryModal" tabindex="-1" aria-labelledby="deleteCategoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title text-danger" id="deleteCategoryModalLabel">
+                    <i class="bi bi-trash me-2"></i>Delete category
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="delete-category-form" method="POST" action="">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <p class="mb-3">Are you sure you want to delete <strong id="delete-category-name" class="text-danger"></strong>?</p>
+                    <div id="delete-warning-children" class="alert alert-warning d-none">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                        <strong>Sub-categories will be deleted</strong>
+                        <p id="delete-children-msg" class="mb-0 small"></p>
+                    </div>
+                    <div id="delete-info-items" class="alert alert-info d-none">
+                        <i class="bi bi-info-circle-fill me-1"></i>
+                        <strong>Note</strong>
+                        <p id="delete-items-msg" class="mb-0 small"></p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger" id="delete-category-submit">
+                        <i class="bi bi-trash me-1"></i>Delete category
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<style>
+#category-controls-row {
+    overflow-x: auto;
+    overflow-y: visible;
+}
+.category-tree {
+    --tree-indent: 24px;
+}
+.category-node {
+    border-bottom: 1px solid #eee;
+    transition: background 0.15s ease;
+}
+.category-node:hover {
+    background: #f8fafc;
+}
+.category-node.match-highlight {
+    background: #eff6ff;
+}
+.category-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    min-height: 44px;
+}
+.category-row .toggle-btn {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: #64748b;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: color 0.2s, background 0.2s;
+}
+.category-row .toggle-btn:hover {
+    background: #e2e8f0;
+    color: #334155;
+}
+.category-row .toggle-btn.has-children {
+    cursor: pointer;
+}
+.category-row .toggle-btn.empty {
+    cursor: default;
+    visibility: hidden;
+}
+.category-row .toggle-btn.has-children i {
+    transition: transform 0.2s ease;
+}
+.category-row .toggle-btn.has-children:not(.expanded) i {
+    transform: rotate(-90deg);
+}
+.category-row .category-icon {
+    color: #94a3b8;
+    font-size: 1.1rem;
+}
+.category-row .category-icon.folder-open {
+    color: #3b82f6;
+}
+.category-row .category-name {
+    flex: 1;
+    font-weight: 500;
+    color: #1e293b;
+}
+.category-row .category-count {
+    font-size: 0.8rem;
+    color: #64748b;
+    background: #f1f5f9;
+    padding: 2px 8px;
+    border-radius: 999px;
+}
+.category-row .category-checkbox {
+    flex-shrink: 0;
+    margin-top: 0;
+}
+.category-children {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+    margin-left: 20px;
+    border-left: 1px solid #e2e8f0;
+}
+.category-children.collapsed {
+    display: none;
+}
+#category-selected-count {
+    min-width: 5.5em;
+    display: inline-block;
+}
+#category-actions-bar .btn.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+#category-actions-bar .btn {
+    flex-shrink: 0;
+}
+body.dark-mode .category-node {
+    border-color: #374151;
+}
+body.dark-mode .category-node:hover {
+    background: #1f2937;
+}
+body.dark-mode .category-node.match-highlight {
+    background: #1e3a5f;
+}
+body.dark-mode .category-row .toggle-btn {
+    color: #9ca3af;
+}
+body.dark-mode .category-row .toggle-btn:hover {
+    background: #374151;
+    color: #e5e7eb;
+}
+body.dark-mode .category-row .category-icon {
+    color: #6b7280;
+}
+body.dark-mode .category-row .category-icon.folder-open {
+    color: #60a5fa;
+}
+body.dark-mode .category-row .category-name {
+    color: #f3f4f6;
+}
+body.dark-mode .category-row .category-count {
+    background: #374151;
+    color: #9ca3af;
+}
+body.dark-mode .category-children {
+    border-color: #4b5563;
 }
 </style>
+
+<script>
+(function() {
+    const searchEl = document.getElementById('category-search');
+    const expandBtn = document.getElementById('expand-all');
+    const collapseBtn = document.getElementById('collapse-all');
+    const noResults = document.getElementById('no-results');
+    const tree = document.querySelector('.category-tree');
+
+    if (!tree) return;
+
+    function allNodes() {
+        return tree.querySelectorAll('.category-node');
+    }
+
+    function allToggles() {
+        return tree.querySelectorAll('.toggle-btn.has-children');
+    }
+
+    function allChildren() {
+        return tree.querySelectorAll('.category-children');
+    }
+
+    function updateNoResults(show) {
+        if (noResults) noResults.style.display = show ? 'block' : 'none';
+    }
+
+    function filterTree(q) {
+        const query = (q || '').trim().toLowerCase();
+        const nodes = allNodes();
+        let anyVisible = false;
+
+        nodes.forEach(function(node) {
+            const row = node.querySelector('.category-row');
+            const name = (row.querySelector('.category-name') || {}).textContent || '';
+            const matches = !query || name.toLowerCase().includes(query);
+            const children = node.querySelector('.category-children');
+            const childNodes = children ? children.querySelectorAll('.category-node') : [];
+            let childMatches = false;
+            childNodes.forEach(function(cn) {
+                const cr = cn.querySelector('.category-row');
+                const cnName = (cr.querySelector('.category-name') || {}).textContent || '';
+                if (cnName.toLowerCase().includes(query)) childMatches = true;
+            });
+            const show = matches || childMatches;
+            node.style.display = show ? '' : 'none';
+            if (show) anyVisible = true;
+            if (row) {
+                row.classList.toggle('match-highlight', !!query && matches);
+            }
+            if (children && (matches || childMatches)) {
+                children.classList.remove('collapsed');
+                const parentRow = node.querySelector('.category-row');
+                const toggle = parentRow && parentRow.querySelector('.toggle-btn.has-children');
+                if (toggle) toggle.classList.add('expanded');
+            }
+        });
+
+        updateNoResults(!anyVisible);
+    }
+
+    if (searchEl) {
+        let debounce;
+        searchEl.addEventListener('input', function() {
+            clearTimeout(debounce);
+            debounce = setTimeout(function() {
+                filterTree(searchEl.value);
+            }, 200);
+        });
+    }
+
+    if (expandBtn) {
+        expandBtn.addEventListener('click', function() {
+            allChildren().forEach(function(el) { el.classList.remove('collapsed'); });
+            allToggles().forEach(function(t) { t.classList.add('expanded'); });
+        });
+    }
+
+    if (collapseBtn) {
+        collapseBtn.addEventListener('click', function() {
+            allChildren().forEach(function(el) { el.classList.add('collapsed'); });
+            allToggles().forEach(function(t) { t.classList.remove('expanded'); });
+        });
+    }
+
+    tree.addEventListener('click', function(e) {
+        const toggle = e.target.closest('.toggle-btn.has-children');
+        if (!toggle) return;
+        const node = toggle.closest('.category-node');
+        const children = node && node.querySelector('.category-children');
+        if (!children) return;
+        children.classList.toggle('collapsed');
+        toggle.classList.toggle('expanded');
+    });
+
+    // Category selection and toolbar actions
+    const selectAll = document.getElementById('category-select-all');
+    const addSubcategoryBtn = document.getElementById('btn-add-subcategory');
+    const editBtn = document.getElementById('btn-category-edit');
+    const deleteBtn = document.getElementById('btn-category-delete');
+    const selectedCountEl = document.getElementById('category-selected-count');
+
+    function updateCategoryActions() {
+        const checked = tree.querySelectorAll('.category-checkbox:checked');
+        const n = checked.length;
+        selectedCountEl.textContent = n ? n + ' selected' : '';
+        if (addSubcategoryBtn) {
+            addSubcategoryBtn.classList.toggle('disabled', n !== 1);
+            addSubcategoryBtn.style.pointerEvents = n !== 1 ? 'none' : '';
+        }
+        if (editBtn) {
+            editBtn.classList.toggle('disabled', n !== 1);
+            editBtn.style.pointerEvents = n !== 1 ? 'none' : '';
+        }
+        if (deleteBtn) {
+            deleteBtn.classList.toggle('disabled', n !== 1);
+            deleteBtn.style.pointerEvents = n !== 1 ? 'none' : '';
+        }
+    }
+
+    function getDescendantIds(node) {
+        const ids = [];
+        const descendants = node.querySelectorAll('.category-node');
+        descendants.forEach(function(desc) {
+            const id = desc.getAttribute('data-id') || desc.querySelector('.category-checkbox')?.value;
+            if (id) ids.push(id);
+        });
+        return ids;
+    }
+
+    document.querySelectorAll('.js-add-category-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const addModal = document.getElementById('addCategoryModal');
+            const parentSelect = addModal && addModal.querySelector('select[name="parent"]');
+            if (parentSelect) parentSelect.value = '';
+            if (addModal) new bootstrap.Modal(addModal).show();
+        });
+    });
+
+    if (addSubcategoryBtn) {
+        addSubcategoryBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (addSubcategoryBtn.classList.contains('disabled')) return;
+            const checked = tree.querySelector('.category-checkbox:checked');
+            if (!checked) return;
+            const addModal = document.getElementById('addCategoryModal');
+            const parentSelect = addModal && addModal.querySelector('select[name="parent"]');
+            if (parentSelect) parentSelect.value = checked.value;
+            if (addModal) new bootstrap.Modal(addModal).show();
+        });
+    }
+
+    if (tree) {
+        tree.addEventListener('change', function(e) {
+            if (e.target.classList.contains('category-checkbox')) {
+                updateCategoryActions();
+            }
+        });
+    }
+
+    if (selectAll) {
+        selectAll.addEventListener('change', function() {
+            const checkboxes = tree.querySelectorAll('.category-checkbox');
+            checkboxes.forEach(function(cb) {
+                if (cb.closest('.category-node').style.display !== 'none') {
+                    cb.checked = selectAll.checked;
+                }
+            });
+            updateCategoryActions();
+        });
+    }
+
+    if (editBtn) {
+        editBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (editBtn.classList.contains('disabled')) return;
+            const checked = tree.querySelector('.category-checkbox:checked');
+            if (!checked) return;
+            const node = checked.closest('.category-node');
+            const editModal = document.getElementById('editCategoryModal');
+            const editForm = document.getElementById('edit-category-form');
+            const editName = document.getElementById('edit-category-name');
+            const editParent = document.getElementById('edit-category-parent');
+            if (editModal && editForm && editName && editParent && node) {
+                const id = checked.value;
+                const displayName = node.getAttribute('data-display-name') || node.querySelector('.category-name')?.textContent || '';
+                const parentId = node.getAttribute('data-parent-id') || '';
+                editForm.action = editBtn.getAttribute('data-edit-url').replace(/\/1\//, '/' + id + '/');
+                editName.value = displayName;
+                editParent.value = parentId;
+                const excludeIds = [id].concat(getDescendantIds(node));
+                [].slice.call(editParent.options).forEach(function(opt) {
+                    opt.disabled = !!(opt.value && excludeIds.indexOf(opt.value) !== -1);
+                });
+                new bootstrap.Modal(editModal).show();
+            }
+        });
+    }
+
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (deleteBtn.classList.contains('disabled')) return;
+            const checked = tree.querySelector('.category-checkbox:checked');
+            if (!checked) return;
+            const node = checked.closest('.category-node');
+            const deleteModal = document.getElementById('deleteCategoryModal');
+            const deleteForm = document.getElementById('delete-category-form');
+            const deleteNameEl = document.getElementById('delete-category-name');
+            const warningChildren = document.getElementById('delete-warning-children');
+            const infoItems = document.getElementById('delete-info-items');
+            const childrenMsg = document.getElementById('delete-children-msg');
+            const itemsMsg = document.getElementById('delete-items-msg');
+            const deleteSubmit = document.getElementById('delete-category-submit');
+            if (deleteModal && deleteForm && deleteNameEl && node) {
+                const id = checked.value;
+                const displayName = node.getAttribute('data-display-name') || node.querySelector('.category-name')?.textContent || '';
+                const childrenCount = parseInt(node.getAttribute('data-children-count') || '0', 10);
+                const itemsCount = parseInt(node.getAttribute('data-items-count') || '0', 10);
+                deleteForm.action = deleteBtn.getAttribute('data-delete-url').replace(/\/1\//, '/' + id + '/');
+                deleteNameEl.textContent = displayName;
+                if (childrenCount > 0) {
+                    warningChildren.classList.remove('d-none');
+                    childrenMsg.textContent = 'This category has ' + childrenCount + ' sub-categor' + (childrenCount === 1 ? 'y' : 'ies') + '. They will also be removed.';
+                } else {
+                    warningChildren.classList.add('d-none');
+                }
+                if (itemsCount > 0) {
+                    infoItems.classList.remove('d-none');
+                    itemsMsg.textContent = itemsCount + ' item' + (itemsCount === 1 ? '' : 's') + ' in this category will become uncategorized.';
+                } else {
+                    infoItems.classList.add('d-none');
+                }
+                new bootstrap.Modal(deleteModal).show();
+            }
+        });
+    }
+})();
+</script>
 
 {% endblock %}

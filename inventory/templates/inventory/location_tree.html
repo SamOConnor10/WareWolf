@@ -1,12 +1,181 @@
 {% extends "inventory/base.html" %}
 
 {% block content %}
-<h1 class="fw-bold">Location Hierarchy</h1>
 
-<ul class="list-group">
-    {% for loc in roots %}
-        {% include "inventory/location_node.html" with node=loc %}
-    {% endfor %}
-</ul>
+<div class="location-tree-page">
+    <!-- HEADER -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h1 class="fw-bold mb-1">
+                <i class="bi bi-diagram-3 text-primary me-2"></i>Location hierarchy
+            </h1>
+            <p class="text-muted mb-0">Browse your warehouse location tree</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'location_list' %}" class="btn btn-outline-secondary" title="List view">
+                <i class="bi bi-list-ul me-1"></i>List view
+            </a>
+            {% if perms.inventory.add_location %}
+                <a href="{% url 'location_create' %}" class="btn btn-primary">
+                    <i class="bi bi-plus-lg me-1"></i>Add Location
+                </a>
+            {% endif %}
+        </div>
+    </div>
 
-{% endblock %}
+    <!-- CONTROLS + TREE -->
+    <div class="card shadow-sm border-0 mb-4" id="location-controls-card">
+        <div class="card-body py-3 px-4">
+            <div class="d-flex flex-nowrap align-items-center gap-3">
+                <div style="min-width: 0; max-width: 280px;">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" id="location-search" class="form-control border-start-0"
+                               placeholder="Search locations..." autocomplete="off">
+                    </div>
+                </div>
+                <div class="btn-group btn-group-sm flex-shrink-0">
+                    <button type="button" class="btn btn-outline-secondary" id="expand-all" title="Expand all">
+                        <i class="bi bi-arrows-expand me-1"></i>Expand all
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" id="collapse-all" title="Collapse all">
+                        <i class="bi bi-arrows-collapse me-1"></i>Collapse all
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white border-0 py-3">
+            <h5 class="mb-0 fw-semibold">
+                <i class="bi bi-geo-alt me-2 text-muted"></i>Location tree
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            {% if roots %}
+                <ul class="location-tree list-unstyled mb-0">
+                    {% for loc in roots %}
+                        {% include "inventory/location_node.html" with node=loc %}
+                    {% endfor %}
+                </ul>
+                <div id="no-results" class="text-center py-5 text-muted" style="display: none;">
+                    <i class="bi bi-search display-4 d-block mb-2 opacity-50"></i>
+                    <p class="mb-0">No locations match your search</p>
+                </div>
+            {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-geo-alt display-4 text-muted d-block mb-3 opacity-50"></i>
+                    <h5 class="text-muted mb-2">No locations yet</h5>
+                    <p class="text-muted mb-3">Create your first location to start organising your warehouse</p>
+                    {% if perms.inventory.add_location %}
+                        <a href="{% url 'location_create' %}" class="btn btn-primary">
+                            <i class="bi bi-plus-lg me-1"></i>Add Location
+                        </a>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+.location-tree { --tree-indent: 24px; }
+.location-node { border-bottom: 1px solid #eee; transition: background 0.15s ease; }
+.location-node:hover { background: #f8fafc; }
+.location-node.match-highlight { background: #eff6ff; }
+.location-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 16px; min-height: 44px;
+}
+.location-row .toggle-btn {
+    width: 24px; height: 24px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: none; background: transparent; color: #64748b; border-radius: 6px;
+    cursor: pointer; transition: color 0.2s, background 0.2s;
+}
+.location-row .toggle-btn:hover { background: #e2e8f0; color: #334155; }
+.location-row .toggle-btn.has-children { cursor: pointer; }
+.location-row .toggle-btn.empty { cursor: default; visibility: hidden; }
+.location-row .toggle-btn.has-children i { transition: transform 0.2s ease; }
+.location-row .toggle-btn.has-children:not(.expanded) i { transform: rotate(-90deg); }
+.location-row .location-icon { color: #94a3b8; font-size: 1.1rem; }
+.location-row .location-icon.expanded { color: #3b82f6; }
+.location-row .location-name { flex: 1; font-weight: 500; color: #1e293b; }
+.location-row .location-type { font-size: 0.8rem; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 999px; }
+.location-children { list-style: none; padding-left: 0; margin: 0; margin-left: 20px; border-left: 1px solid #e2e8f0; }
+.location-children.collapsed { display: none; }
+</style>
+
+<script>
+(function() {
+    var searchEl = document.getElementById('location-search');
+    var expandBtn = document.getElementById('expand-all');
+    var collapseBtn = document.getElementById('collapse-all');
+    var noResults = document.getElementById('no-results');
+    var tree = document.querySelector('.location-tree');
+    if (!tree) return;
+
+    function allNodes() { return tree.querySelectorAll('.location-node'); }
+    function allToggles() { return tree.querySelectorAll('.toggle-btn.has-children'); }
+    function allChildren() { return tree.querySelectorAll('.location-children'); }
+
+    function updateNoResults(show) { if (noResults) noResults.style.display = show ? 'block' : 'none'; }
+
+    function filterTree(q) {
+        var query = (q || '').trim().toLowerCase();
+        var nodes = allNodes();
+        var anyVisible = false;
+        nodes.forEach(function(node) {
+            var row = node.querySelector('.location-row');
+            var name = (row && row.querySelector('.location-name')) ? row.querySelector('.location-name').textContent : '';
+            var matches = !query || name.toLowerCase().indexOf(query) !== -1;
+            var children = node.querySelector('.location-children');
+            var childNodes = children ? children.querySelectorAll('.location-node') : [];
+            var childMatches = false;
+            childNodes.forEach(function(cn) {
+                var cr = cn.querySelector('.location-row');
+                var cnName = cr && cr.querySelector('.location-name') ? cr.querySelector('.location-name').textContent : '';
+                if (cnName.toLowerCase().indexOf(query) !== -1) childMatches = true;
+            });
+            var show = matches || childMatches;
+            node.style.display = show ? '' : 'none';
+            if (show) anyVisible = true;
+            if (row) row.classList.toggle('match-highlight', !!query && matches);
+            if (children && (matches || childMatches)) {
+                children.classList.remove('collapsed');
+                var toggle = node.querySelector('.toggle-btn.has-children');
+                if (toggle) toggle.classList.add('expanded');
+            }
+        });
+        updateNoResults(!anyVisible);
+    }
+
+    if (searchEl) {
+        var debounce;
+        searchEl.addEventListener('input', function() {
+            clearTimeout(debounce);
+            debounce = setTimeout(function() { filterTree(searchEl.value); }, 200);
+        });
+    }
+    if (expandBtn) expandBtn.addEventListener('click', function() {
+        allChildren().forEach(function(el) { el.classList.remove('collapsed'); });
+        allToggles().forEach(function(t) { t.classList.add('expanded'); });
+    });
+    if (collapseBtn) collapseBtn.addEventListener('click', function() {
+        allChildren().forEach(function(el) { el.classList.add('collapsed'); });
+        allToggles().forEach(function(t) { t.classList.remove('expanded'); });
+    });
+    tree.addEventListener('click', function(e) {
+        var toggle = e.target.closest('.toggle-btn.has-children');
+        if (!toggle) return;
+        var node = toggle.closest('.location-node');
+        var children = node && node.querySelector('.location-children');
+        if (!children) return;
+        children.classList.toggle('collapsed');
+        toggle.classList.toggle('expanded');
+    });
+})();
+</script>
+
+{% endblock content %}

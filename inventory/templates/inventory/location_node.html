@@ -1,13 +1,19 @@
-<li class="list-group-item">
-    <strong>{{ node.name }}</strong>
-    <small class="text-muted">({{ node.location_type }})</small>
-
-    {% if node.children.all %}
-        <button class="btn btn-sm btn-link" data-bs-toggle="collapse" data-bs-target="#node-{{ node.id }}">
-            Expand
+<li class="location-node" data-id="{{ node.id }}">
+    <div class="location-row">
+        <button type="button" class="toggle-btn {% if node.children.all %}has-children{% else %}empty{% endif %}" aria-label="Toggle">
+            <i class="bi bi-chevron-down"></i>
         </button>
-
-        <ul id="node-{{ node.id }}" class="collapse ms-4 list-group mt-2">
+        <span class="location-icon {% if node.children.all %}expanded{% endif %}">
+            <i class="bi bi-geo-alt"></i>
+        </span>
+        <a href="{% url 'location_view' node.id %}" class="location-name text-decoration-none text-dark flex-grow-1">{{ node.name }}</a>
+        <span class="location-type">{{ node.get_location_type_display }}</span>
+        {% if node.inventory_items.count %}
+            <a href="{% url 'item_list' %}?location={{ node.id }}" class="badge bg-primary text-decoration-none">{{ node.inventory_items.count }}</a>
+        {% endif %}
+    </div>
+    {% if node.children.all %}
+        <ul class="location-children">
             {% for child in node.children.all %}
                 {% include "inventory/location_node.html" with node=child %}
             {% endfor %}

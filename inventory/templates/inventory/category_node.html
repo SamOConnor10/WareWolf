@@ -1,25 +1,26 @@
-<li class="list-group-item">
-
-    <div class="d-flex justify-content-between">
-        <span>{{ node.name }}</span>
-
-        <div>
-            {% if perms.inventory.change_category %}
-                <a href="{% url 'category_edit' node.id %}" class="btn btn-sm btn-outline-secondary">Edit</a>
+<li class="category-node" data-name="{{ node.name|lower }}" data-id="{{ node.id }}" data-display-name="{{ node.name|escapejs }}" data-parent-id="{{ node.parent_id|default:'' }}" data-children-count="{{ node.children.count }}" data-items-count="{{ node.items.count }}">
+    <div class="category-row">
+        <input type="checkbox" class="form-check-input category-checkbox" value="{{ node.id }}" aria-label="Select {{ node.name }}">
+        <button type="button" class="toggle-btn has-children{% if not node.children.all %} empty{% endif %} expanded" aria-label="Toggle children">
+            {% if node.children.all %}
+                <i class="bi bi-chevron-down"></i>
+            {% else %}
+                <span style="width:1em;display:inline-block;"></span>
             {% endif %}
-
-            {% if perms.inventory.delete_category %}
-                <a href="{% url 'category_delete' node.id %}" class="btn btn-sm btn-outline-danger">Delete</a>
+        </button>
+        <i class="bi bi-folder2 category-icon folder-open"></i>
+        <span class="category-name">{{ node.name }}</span>
+        {% with item_count=node.items.count %}
+            {% if item_count > 0 %}
+                <span class="category-count">{{ item_count }} item{{ item_count|pluralize }}</span>
             {% endif %}
-        </div>
+        {% endwith %}
     </div>
-
     {% if node.children.all %}
-        <ul class="list-group ms-4 mt-2">
+        <ul class="category-children">
             {% for child in node.children.all %}
                 {% include "inventory/category_node.html" with node=child %}
             {% endfor %}
         </ul>
     {% endif %}
-
 </li>

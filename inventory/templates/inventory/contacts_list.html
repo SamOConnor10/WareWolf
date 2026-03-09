@@ -1,27 +1,35 @@
 {% extends "inventory/base.html" %}
 {% load static %}
+{% load querystring %}
+
 {% block content %}
 
-<h1 class="fw-bold mb-1">Suppliers & Customers</h1>
-<p class="text-muted">Manage your business relationships</p>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <h1 class="fw-bold mb-1"><i class="bi bi-people text-primary me-2"></i>Suppliers & Customers</h1>
+        <p class="text-muted mb-0">Manage your business relationships</p>
+    </div>
+    {% if perms.inventory.view_supplier or perms.inventory.view_client %}
+        <a href="{% url 'contact_export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-outline-success" title="Export filtered contacts">
+            <i class="bi bi-download me-1"></i>Export CSV
+        </a>
+    {% endif %}
+</div>
 
 <!-- SUMMARY CARDS -->
 <div class="row mb-4">
-
     <div class="col-md-4">
         <div class="card shadow-sm border-0 p-3">
             <h6 class="text-muted mb-1">Total Suppliers</h6>
             <div class="fs-3 fw-bold">{{ total_suppliers }}</div>
         </div>
     </div>
-
     <div class="col-md-4">
         <div class="card shadow-sm border-0 p-3">
             <h6 class="text-muted mb-1">Total Customers</h6>
             <div class="fs-3 fw-bold">{{ total_customers }}</div>
         </div>
     </div>
-
     <div class="col-md-4">
         <div class="card shadow-sm border-0 p-3">
             <h6 class="text-muted mb-1">Active Relationships</h6>
@@ -30,9 +38,8 @@
     </div>
 </div>
 
-<!-- ANALYTICS ROW (Optional but great visually) -->
+<!-- TOP CUSTOMER / SUPPLIER -->
 <div class="row mb-4">
-
     <div class="col-md-6">
         <div class="card shadow-sm border-0 p-3">
             <h6 class="text-muted mb-1">Top Customer</h6>
@@ -44,7 +51,6 @@
             {% endif %}
         </div>
     </div>
-
     <div class="col-md-6">
         <div class="card shadow-sm border-0 p-3">
             <h6 class="text-muted mb-1">Top Supplier</h6>
@@ -56,162 +62,193 @@
             {% endif %}
         </div>
     </div>
-
 </div>
 
-<!-- SEARCH BAR -->
-<form method="get" class="mb-3">
+<!-- Search (auto-submit) -->
+<form method="get" id="contacts-filter-form" class="mb-3">
+    <input type="hidden" name="type" value="{{ type_filter }}">
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <input type="hidden" name="per_page" value="{{ per_page }}">
     <div class="input-group shadow-sm">
         <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-        <input type="text" name="q" class="form-control"
-               placeholder="Search name, email, phone…"
-               value="{{ request.GET.q }}">
-        <button class="btn btn-outline-secondary">Search</button>
+        <input type="text" name="q" id="contacts-search" class="form-control"
+               placeholder="Search name, email, phone…" value="{{ search_query }}" autocomplete="off">
     </div>
 </form>
 
-<!-- FILTER BUTTONS + ADD BUTTON -->
-<div class="d-flex justify-content-between align-items-center mb-3">
-
+<!-- Filter buttons + Results + Columns + Action bar -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
     <div class="btn-group">
-        <a href="?type=all" class="btn {% if type_filter == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
-            All
-        </a>
-        <a href="?type=suppliers" class="btn {% if type_filter == 'suppliers' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
-            Suppliers
-        </a>
-        <a href="?type=customers" class="btn {% if type_filter == 'customers' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
-            Customers
-        </a>
+        <a href="?{% querystring request type='all' %}" class="btn {% if type_filter == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">All</a>
+        <a href="?{% querystring request type='suppliers' %}" class="btn {% if type_filter == 'suppliers' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Suppliers</a>
+        <a href="?{% querystring request type='customers' %}" class="btn {% if type_filter == 'customers' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Customers</a>
     </div>
-
-    {% if type_filter == "suppliers" %}
-        {% if perms.inventory.add_supplier %}
-            <a href="{% url 'supplier_create' %}" class="btn btn-primary">
-                <i class="bi bi-person-plus"></i> Add Supplier
-            </a>
+    <p class="text-muted small mb-0">
+        {% if pagination and page_obj.paginator %}
+            Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} contact{{ page_obj.paginator.count|pluralize }}
         {% endif %}
-    {% elif type_filter == "customers" %}
-        {% if perms.inventory.add_client %}
-            <a href="{% url 'client_create' %}" class="btn btn-primary">
-                <i class="bi bi-person-plus"></i> Add Customer
-            </a>
+    </p>
+    <div class="dropdown">
+        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Select columns">
+            <i class="bi bi-layout-three-columns me-1"></i>Columns
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end shadow-sm p-2" style="min-width: 200px;">
+            <li class="dropdown-header small">Show columns</li>
+            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="name" checked> Name</label></li>
+            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="type" checked> Type</label></li>
+            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="contact" checked> Contact Info</label></li>
+            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="orders" checked> Orders</label></li>
+            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="total" checked> Total Value</label></li>
+        </ul>
+    </div>
+    <div class="d-flex gap-2 align-items-center" id="contacts-actions-bar">
+        <span class="text-muted small" id="contacts-selected-count"></span>
+        {% if perms.inventory.change_supplier or perms.inventory.change_client %}
+            <a href="#" id="btn-contact-edit" class="btn btn-sm btn-outline-secondary disabled" title="Edit selected">Edit</a>
         {% endif %}
-    {% else %}
-        {% if perms.inventory.add_supplier or perms.inventory.add_client %}
+        {% if perms.inventory.delete_supplier or perms.inventory.delete_client %}
+            <a href="#" id="btn-contact-delete" class="btn btn-sm btn-outline-danger disabled" title="Delete selected">Delete</a>
+        {% endif %}
+        {% if type_filter == "suppliers" and perms.inventory.add_supplier %}
+            <a href="{% url 'supplier_create' %}" class="btn btn-primary btn-sm"><i class="bi bi-person-plus"></i> Add Supplier</a>
+        {% elif type_filter == "customers" and perms.inventory.add_client %}
+            <a href="{% url 'client_create' %}" class="btn btn-primary btn-sm"><i class="bi bi-person-plus"></i> Add Customer</a>
+        {% else %}
             {% if perms.inventory.add_supplier %}
-                <a href="{% url 'supplier_create' %}" class="btn btn-primary">
-                    <i class="bi bi-person-plus"></i> Add Contact
-                </a>
+                <a href="{% url 'supplier_create' %}" class="btn btn-primary btn-sm"><i class="bi bi-person-plus"></i> Add Contact</a>
             {% elif perms.inventory.add_client %}
-                <a href="{% url 'client_create' %}" class="btn btn-primary">
-                    <i class="bi bi-person-plus"></i> Add Contact
-                </a>
+                <a href="{% url 'client_create' %}" class="btn btn-primary btn-sm"><i class="bi bi-person-plus"></i> Add Contact</a>
             {% endif %}
         {% endif %}
-    {% endif %}
+    </div>
 </div>
 
 <!-- CONTACTS TABLE -->
-<div class="table-responsive shadow-sm bg-white rounded">
-<table class="table table-hover align-middle mb-0">
+<div class="card shadow-sm border-0 overflow-hidden">
+<div class="table-responsive">
+<table class="table table-hover align-middle mb-0" id="contacts-table">
     <thead class="table-light">
         <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Contact Info</th>
-            <th>Orders</th>
-            <th>Total Value</th>
-            <th class="text-end">Actions</th>
+            <th style="width:40px;"><input type="checkbox" class="form-check-input" id="contact-select-all" title="Select all"></th>
+            <th data-col="name"><a href="?{% querystring request sort=sort|toggle_sort:'name' %}" class="sort-link">Name</a></th>
+            <th data-col="type"><a href="?{% querystring request sort=sort|toggle_sort:'type' %}" class="sort-link">Type</a></th>
+            <th data-col="contact">Contact Info</th>
+            <th data-col="orders"><a href="?{% querystring request sort=sort|toggle_sort:'orders' %}" class="sort-link">Orders</a></th>
+            <th data-col="total"><a href="?{% querystring request sort=sort|toggle_sort:'total_value' %}" class="sort-link">Total Value</a></th>
         </tr>
     </thead>
-
     <tbody>
         {% for c in contacts %}
-        <tr>
-            <td class="fw-semibold">{{ c.name }}</td>
-
-            <td>
+        <tr class="contact-row" data-contact-id="{{ c.id }}" data-contact-type="{{ c.type }}" data-contact-name="{{ c.name|escapejs }}">
+            <td><input type="checkbox" class="form-check-input contact-checkbox" value="{{ c.id }}" data-type="{{ c.type }}"></td>
+            <td data-col="name" class="fw-semibold"><a href="{% if c.type == 'supplier' %}{% url 'supplier_edit' c.id %}{% else %}{% url 'client_edit' c.id %}{% endif %}" class="text-decoration-none text-dark">{{ c.name }}</a></td>
+            <td data-col="type">
                 {% if c.type == "supplier" %}
                     <span class="badge bg-info">Supplier</span>
                 {% else %}
                     <span class="badge bg-success">Customer</span>
                 {% endif %}
             </td>
-
-            <td>
+            <td data-col="contact">
                 <div><i class="bi bi-envelope"></i> {{ c.email }}</div>
                 <div><i class="bi bi-telephone"></i> {{ c.phone }}</div>
             </td>
-
-            <td>{{ c.orders }}</td>
-            <td>€{{ c.total_value }}</td>
-
-            <td class="text-end">
-
-                {% if c.type == "supplier" %}
-                    {% if perms.inventory.change_supplier %}
-                        <a href="{% url 'supplier_edit' c.id %}" class="btn btn-sm btn-outline-secondary">
-                            <i class="bi bi-pencil"></i>
-                        </a>
-                    {% endif %}
-                    {% if perms.inventory.delete_supplier %}
-                        <a href="{% url 'supplier_delete' c.id %}" class="btn btn-sm btn-outline-danger">
-                            <i class="bi bi-trash"></i>
-                        </a>
-                    {% endif %}
-
-                {% else %}
-
-                    {% if perms.inventory.change_client %}
-                        <a href="{% url 'client_edit' c.id %}" class="btn btn-sm btn-outline-secondary">
-                            <i class="bi bi-pencil"></i>
-                        </a>
-                    {% endif %}
-                    {% if perms.inventory.delete_client %}
-                        <a href="{% url 'client_delete' c.id %}" class="btn btn-sm btn-outline-danger">
-                            <i class="bi bi-trash"></i>
-                        </a>
-                    {% endif %}
-
-                {% endif %}
-
-            </td>
+            <td data-col="orders">{{ c.orders }}</td>
+            <td data-col="total">€{{ c.total_value }}</td>
         </tr>
         {% empty %}
-        <tr>
-            <td colspan="6" class="text-center text-muted p-3">No contacts found.</td>
-        </tr>
+        <tr><td colspan="6" class="text-center text-muted p-3">No contacts found.</td></tr>
         {% endfor %}
     </tbody>
 </table>
 </div>
+</div>
 
 <!-- PAGINATION -->
 {% if pagination %}
-<nav class="mt-3">
-    <ul class="pagination">
-
-        {% if page_obj.has_previous %}
-        <li class="page-item">
-            <a class="page-link" href="?page={{ page_obj.previous_page_number }}&type={{ type_filter }}&q={{ request.GET.q }}">Previous</a>
-        </li>
-        {% endif %}
-
-        {% for num in page_obj.paginator.page_range %}
-            <li class="page-item {% if num == page_obj.number %}active{% endif %}">
-                <a class="page-link" href="?page={{ num }}&type={{ type_filter }}&q={{ request.GET.q }}">{{ num }}</a>
-            </li>
-        {% endfor %}
-
-        {% if page_obj.has_next %}
-        <li class="page-item">
-            <a class="page-link" href="?page={{ page_obj.next_page_number }}&type={{ type_filter }}&q={{ request.GET.q }}">Next</a>
-        </li>
-        {% endif %}
-
-    </ul>
-</nav>
+{% include "inventory/includes/pagination.html" with page_obj=page_obj per_page=per_page per_page_choices=per_page_choices %}
 {% endif %}
+
+<style>
+.sort-link { color: inherit; text-decoration: none; }
+.sort-link:hover { color: var(--bs-primary); }
+</style>
+
+<script>
+(function() {
+    var form = document.getElementById('contacts-filter-form');
+    if (!form) return;
+    var searchEl = document.getElementById('contacts-search');
+    var searchTimeout;
+    if (searchEl) {
+        searchEl.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(function() { form.submit(); }, 300);
+        });
+    }
+    var selectAll = document.getElementById('contact-select-all');
+    var checkboxes = document.querySelectorAll('.contact-checkbox');
+    var btnEdit = document.getElementById('btn-contact-edit');
+    var btnDelete = document.getElementById('btn-contact-delete');
+    var selectedCount = document.getElementById('contacts-selected-count');
+    function getSelected() {
+        return Array.from(checkboxes).filter(function(cb) { return cb.checked; }).map(function(cb) {
+            return { id: cb.value, type: cb.dataset.type };
+        });
+    }
+    function updateActions() {
+        var sel = getSelected();
+        var n = sel.length;
+        selectedCount.textContent = n > 0 ? n + ' selected' : '';
+        [btnEdit, btnDelete].forEach(function(btn) {
+            if (btn) {
+                btn.classList.toggle('disabled', n === 0 || (btn === btnEdit && n !== 1));
+                btn.style.pointerEvents = (n === 0 || (btn === btnEdit && n !== 1)) ? 'none' : '';
+            }
+        });
+        if (selectAll) selectAll.checked = n > 0 && n === checkboxes.length;
+    }
+    if (selectAll) selectAll.addEventListener('change', function() { checkboxes.forEach(function(cb) { cb.checked = selectAll.checked; }); updateActions(); });
+    checkboxes.forEach(function(cb) { cb.addEventListener('change', updateActions); });
+    if (btnEdit) btnEdit.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (this.classList.contains('disabled')) return;
+        var sel = getSelected()[0];
+        if (!sel) return;
+        var url = sel.type === 'supplier' ? '{% url "supplier_edit" 0 %}'.replace('/0/', '/' + sel.id + '/') : '{% url "client_edit" 0 %}'.replace('/0/', '/' + sel.id + '/');
+        window.location.href = url;
+    });
+    if (btnDelete) btnDelete.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (btnDelete.classList.contains('disabled')) return;
+        var sel = getSelected()[0];
+        if (!sel || !confirm('Delete this contact?')) return;
+        var url = sel.type === 'supplier' ? '{% url "supplier_delete" 0 %}'.replace('/0/', '/' + sel.id + '/') : '{% url "client_delete" 0 %}'.replace('/0/', '/' + sel.id + '/');
+        window.location.href = url;
+    });
+    var STORAGE_KEY = 'warewolf_contacts_list_columns';
+    function loadColumnPrefs() { try { var s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+    function saveColumnPrefs(obj) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(obj)); } catch (e) {} }
+    function applyColumnVisibility() {
+        var prefs = loadColumnPrefs();
+        document.querySelectorAll('.col-toggle').forEach(function(cb) {
+            var col = cb.dataset.col;
+            if (prefs && prefs[col] !== undefined) cb.checked = prefs[col];
+            var visible = cb.checked;
+            document.querySelectorAll('[data-col="' + col + '"]').forEach(function(el) { el.style.display = visible ? '' : 'none'; });
+        });
+    }
+    document.querySelectorAll('.col-toggle').forEach(function(cb) {
+        cb.addEventListener('change', function() {
+            var prefs = loadColumnPrefs() || {};
+            prefs[cb.dataset.col] = cb.checked;
+            saveColumnPrefs(prefs);
+            applyColumnVisibility();
+        });
+    });
+    document.addEventListener('DOMContentLoaded', applyColumnVisibility);
+    applyColumnVisibility();
+})();
+</script>
 
 {% endblock %}

@@ -1,4 +1,5 @@
-from django.urls import path
+from django.urls import path, reverse
+from django.shortcuts import redirect
 from . import views
 from django.contrib.auth import views as auth_views
 
@@ -24,6 +25,7 @@ urlpatterns = [
     # Stock CRUD
     path("items/", views.item_list, name="item_list"),
     path("items/create/", views.item_create, name="item_create"),
+    path("items/<int:pk>/", views.item_detail, name="item_detail"),
     path("items/<int:pk>/edit/", views.item_edit, name="item_edit"),
     path("items/<int:pk>/delete/", views.item_delete, name="item_delete"),
     path("items/<int:pk>/adjust/", views.item_adjust_quantity, name="item_adjust"),
@@ -42,13 +44,15 @@ urlpatterns = [
     path("locations/create/", views.location_create, name="location_create"),
     path("locations/<int:pk>/edit/", views.location_edit, name="location_edit"),
     path("locations/<int:pk>/delete/", views.location_delete, name="location_delete"),
-    path("locations/tree/", views.location_tree, name="location_tree"),
+    path("locations/tree/", lambda r: redirect(reverse("location_list") + "?view=tree"), name="location_tree"),
+    path("locations/export/csv/", views.location_export_csv, name="location_export_csv"),
     path("locations/<int:pk>/view/", views.location_view, name="location_view"),
     # Orders CRUD
     path("orders/", views.order_list, name="order_list"),
     path("orders/create/", views.order_create, name="order_create"),
     path("orders/<int:pk>/edit/", views.order_edit, name="order_edit"),
     path("orders/<int:pk>/delete/", views.order_delete, name="order_delete"),
+    path("orders/export/csv/", views.order_export_csv, name="order_export_csv"),
     path(
         "orders/<int:pk>/mark-delivered/",
         views.order_mark_delivered,
@@ -56,6 +60,7 @@ urlpatterns = [
     ),
     # CONTACTS (combined Suppliers + Customers) CRUD
     path("contacts/", views.contacts_list, name="contacts_list"),
+    path("contacts/export/csv/", views.contact_export_csv, name="contact_export_csv"),
     path("contacts/add/supplier/", views.supplier_create, name="supplier_create"),
     path("contacts/add/customer/", views.client_create, name="client_create"),
     path("contacts/supplier/<int:pk>/edit/", views.supplier_edit, name="supplier_edit"),
