@@ -324,6 +324,23 @@ def recalculate_all_recommendations() -> None:
     recalculate_recommendations_for_items(items)
 
 
+RECALC_CACHE_KEY = "warewolf_recommendations_recalc"
+RECALC_CACHE_SECONDS = 300  # 5 minutes
+
+
+def ensure_recommendations_fresh() -> None:
+    """
+    Run full recalculation only if we haven't done so recently.
+    Throttles the expensive per-item recalc to avoid slowing every page load.
+    """
+    from django.core.cache import cache
+
+    if cache.get(RECALC_CACHE_KEY):
+        return
+    recalculate_all_recommendations()
+    cache.set(RECALC_CACHE_KEY, True, RECALC_CACHE_SECONDS)
+
+
 def get_recommendations_for_context(context_type: str, limit: int = 10):
     """
     Return a queryset of active recommendations appropriate for a UI context.

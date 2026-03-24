@@ -1,9 +1,48 @@
 {% extends "inventory/base_orders.html" %}
 {% load querystring %}
 
+{% block extra_head %}
+<script>
+(function(){
+  var p = window.location.pathname;
+  if (p !== '/orders/' && p !== '/orders') return;
+  var params = {};
+  (window.location.search || '').slice(1).split('&').forEach(function(s){
+    var kv = s.split('=');
+    if (kv[0]) params[decodeURIComponent(kv[0])] = kv[1] ? decodeURIComponent(kv[1]) : '';
+  });
+  var fk = 'warewolf_order_filters';
+  var lk = 'warewolf_order_last_type';
+  function get(t){ try { var s = localStorage.getItem(fk + '_' + t); return s ? JSON.parse(s) : {}; } catch(e){ return {}; } }
+  function save(t,o){ try { localStorage.setItem(fk + '_' + t, JSON.stringify(o)); } catch(e){} }
+  function hasFilter(){ var k=['q','status','date_from','date_to','receiving_location','shipping_location','overdue','priority','min_total','saved_view','sort','item']; return k.some(function(x){ var v=params[x]; return v && v !== 'all'; }); }
+  function qs(o){ return Object.keys(o).filter(function(k){ return o[k]; }).map(function(k){ return encodeURIComponent(k)+'='+encodeURIComponent(o[k]); }).join('&'); }
+  if (params.clear === '1') {
+    var t = params.type || 'purchase';
+    save(t, {});
+    window.location.replace(window.location.pathname + '?type=' + t);
+    return;
+  }
+  var typeInUrl = params.type || '';
+  var cur = typeInUrl || 'purchase';
+  if (!hasFilter()) {
+    var target = typeInUrl || (function(){ try { return localStorage.getItem(lk) || 'purchase'; } catch(e){ return 'purchase'; }})();
+    var saved = get(target);
+    var hasSaved = Object.keys(saved).some(function(k){ return k !== 'type' && k !== 'page'; });
+    if (target !== cur || hasSaved) {
+      saved.type = target;
+      var u = window.location.pathname + (qs(saved) ? '?' + qs(saved) : '');
+      window.location.replace(u);
+      return;
+    }
+  }
+})();
+</script>
+{% endblock %}
+
 {% block orders_content %}
 
-<div class="orders-page" id="orders-page">
+<div class="orders-page" id="orders-page" data-type="{{ type_filter }}">
     <div class="ww-loading-bar" id="order-loading-bar" aria-hidden="true"></div>
     <!-- HEADER -->
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
@@ -176,7 +215,7 @@
             <i class="bi bi-funnel-fill text-primary"></i>
             <span>Showing filtered {{ type_filter }} orders.</span>
         </span>
-        <a href="{% url 'order_list' %}?type={{ type_filter }}" class="btn btn-outline-primary btn-sm">
+        <a href="{% url 'order_list' %}?type={{ type_filter }}&clear=1" class="btn btn-outline-primary btn-sm">
             <i class="bi bi-x-circle me-1"></i>Clear filters
         </a>
     </div>
@@ -351,6 +390,26 @@
 
 <script>
 (function() {
+    // Save filter/sidebar state (redirect runs in head; we only save here)
+    var pageEl = document.getElementById('orders-page');
+    if (pageEl) {
+        var cur = pageEl.getAttribute('data-type') || 'purchase';
+        var params = {};
+        (window.location.search || '').slice(1).split('&').forEach(function(s){
+            var kv = s.split('=');
+            if (kv[0]) params[decodeURIComponent(kv[0])] = kv[1] ? decodeURIComponent(kv[1]) : '';
+        });
+        try {
+            localStorage.setItem('warewolf_order_last_type', cur);
+            var toSave = { type: cur };
+            ['q','status','date_from','date_to','receiving_location','shipping_location','overdue','priority','min_total','saved_view','sort','item','per_page'].forEach(function(k){
+                if (params[k]) toSave[k] = params[k];
+            });
+            if (!params.status || params.status === 'all') delete toSave.status;
+            localStorage.setItem('warewolf_order_filters_' + cur, JSON.stringify(toSave));
+        } catch (e) {}
+    }
+
     var form = document.getElementById('order-filter-form');
     if (!form) return;
     var loadingBar = document.getElementById('order-loading-bar');

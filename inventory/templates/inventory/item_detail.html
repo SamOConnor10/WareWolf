@@ -126,7 +126,7 @@
                             <dt class="col-sm-4 text-muted">Supplier</dt>
                             <dd class="col-sm-8">
                                 {% if item.supplier %}
-                                    <a href="{% url 'supplier_edit' item.supplier.id %}">{{ item.supplier.name }}</a>
+                                    <a href="{% url 'supplier_view' item.supplier.id %}">{{ item.supplier.name }}</a>
                                 {% else %}—{% endif %}
                             </dd>
                             <dt class="col-sm-4 text-muted">Location</dt>

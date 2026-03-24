@@ -34,6 +34,13 @@ class Supplier(models.Model):
     email = models.EmailField(blank=True)
     phone = models.CharField(max_length=50, blank=True)
     address = models.TextField(blank=True)
+    description = models.TextField(blank=True, help_text="Description of the company")
+    website = models.URLField(blank=True, help_text="Company website URL")
+    image = models.ImageField(upload_to="suppliers/", blank=True, null=True, help_text="Company logo or image")
+    currency = models.CharField(max_length=10, blank=True, help_text="Default currency e.g. EUR, USD")
+    tax_id = models.CharField(max_length=50, blank=True, help_text="Company Tax ID")
+    notes = models.TextField(blank=True, help_text="Internal notes")
+    is_active = models.BooleanField(default=True)
 
     def __str__(self):
         return self.name
@@ -44,6 +51,13 @@ class Client(models.Model):
     email = models.EmailField(blank=True)
     phone = models.CharField(max_length=50, blank=True)
     address = models.TextField(blank=True)
+    description = models.TextField(blank=True, help_text="Description of the company")
+    website = models.URLField(blank=True, help_text="Company website URL")
+    image = models.ImageField(upload_to="customers/", blank=True, null=True, help_text="Company logo or image")
+    currency = models.CharField(max_length=10, blank=True, help_text="Default currency e.g. EUR, USD")
+    tax_id = models.CharField(max_length=50, blank=True, help_text="Company Tax ID")
+    notes = models.TextField(blank=True, help_text="Internal notes")
+    is_active = models.BooleanField(default=True)
 
     def __str__(self):
         return self.name
@@ -639,7 +653,7 @@ class UserPreference(models.Model):
     THEME_AUTO = "auto"
     THEME_CHOICES = [(THEME_LIGHT, "Light"), (THEME_DARK, "Dark"), (THEME_AUTO, "Auto")]
 
-    theme = models.CharField(max_length=10, choices=THEME_CHOICES, default=THEME_AUTO)
+    theme = models.CharField(max_length=10, choices=THEME_CHOICES, default=THEME_LIGHT)
 
     ACCENT_BLUE = "blue"
     ACCENT_GREEN = "green"

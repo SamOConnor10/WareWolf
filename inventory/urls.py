@@ -20,6 +20,8 @@ urlpatterns = [
 
     path("notifications/<int:notification_id>/dismiss/", views.dismiss_notification, name="dismiss_notification"),
     path("alerts/dismiss/", views.dismiss_alert, name="dismiss_alert"),
+    path("alerts/dismiss-bulk/", views.dismiss_alerts_bulk, name="dismiss_alerts_bulk"),
+    path("alerts/", views.alerts_list, name="alerts_list"),
     
 
     # Stock CRUD
@@ -65,7 +67,9 @@ urlpatterns = [
     path("contacts/export/csv/", views.contact_export_csv, name="contact_export_csv"),
     path("contacts/add/supplier/", views.supplier_create, name="supplier_create"),
     path("contacts/add/customer/", views.client_create, name="client_create"),
+    path("contacts/supplier/<int:pk>/", views.supplier_view, name="supplier_view"),
     path("contacts/supplier/<int:pk>/edit/", views.supplier_edit, name="supplier_edit"),
+    path("contacts/customer/<int:pk>/", views.client_view, name="client_view"),
     path("contacts/customer/<int:pk>/edit/", views.client_edit, name="client_edit"),
     path("contacts/supplier/<int:pk>/delete/", views.supplier_delete, name="supplier_delete"),
     path("contacts/customer/<int:pk>/delete/", views.client_delete, name="client_delete"),

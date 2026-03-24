@@ -310,27 +310,67 @@ class OrderForm(forms.ModelForm):
         return cleaned
 
 
+CURRENCY_CHOICES = [
+    ("", "Select currency"),
+    ("EUR", "€ EUR - Euro"),
+    ("USD", "$ USD - US Dollar"),
+    ("GBP", "£ GBP - British Pound"),
+    ("CAD", "C$ CAD - Canadian Dollar"),
+    ("AUD", "A$ AUD - Australian Dollar"),
+]
+
+
 class SupplierForm(forms.ModelForm):
+    currency = forms.ChoiceField(
+        choices=CURRENCY_CHOICES,
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
     class Meta:
         model = Supplier
-        fields = ["name", "email", "phone", "address"]
+        fields = [
+            "name", "description", "website", "email", "phone",
+            "address", "currency", "tax_id", "notes", "image", "is_active",
+        ]
         widgets = {
-            "name": forms.TextInput(attrs={"class": "form-control"}),
-            "email": forms.EmailInput(attrs={"class": "form-control"}),
-            "phone": forms.TextInput(attrs={"class": "form-control"}),
-            "address": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Company name"}),
+            "description": forms.Textarea(attrs={"class": "form-control", "rows": 3, "placeholder": "Description of the company"}),
+            "website": forms.URLInput(attrs={"class": "form-control", "placeholder": "https://example.com"}),
+            "email": forms.EmailInput(attrs={"class": "form-control", "placeholder": "Contact email address"}),
+            "phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "Contact phone number"}),
+            "address": forms.Textarea(attrs={"class": "form-control", "rows": 2, "placeholder": "Full address"}),
+            "tax_id": forms.TextInput(attrs={"class": "form-control", "placeholder": "Company Tax ID"}),
+            "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2, "placeholder": "Internal notes"}),
+            "image": forms.FileInput(attrs={"class": "form-control", "accept": "image/*"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
 
 class ClientForm(forms.ModelForm):
+    currency = forms.ChoiceField(
+        choices=CURRENCY_CHOICES,
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
     class Meta:
         model = Client
-        fields = ["name", "email", "phone", "address"]
+        fields = [
+            "name", "description", "website", "email", "phone",
+            "address", "currency", "tax_id", "notes", "image", "is_active",
+        ]
         widgets = {
-            "name": forms.TextInput(attrs={"class": "form-control"}),
-            "email": forms.EmailInput(attrs={"class": "form-control"}),
-            "phone": forms.TextInput(attrs={"class": "form-control"}),
-            "address": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Company name"}),
+            "description": forms.Textarea(attrs={"class": "form-control", "rows": 3, "placeholder": "Description of the company"}),
+            "website": forms.URLInput(attrs={"class": "form-control", "placeholder": "https://example.com"}),
+            "email": forms.EmailInput(attrs={"class": "form-control", "placeholder": "Contact email address"}),
+            "phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "Contact phone number"}),
+            "address": forms.Textarea(attrs={"class": "form-control", "rows": 2, "placeholder": "Full address"}),
+            "tax_id": forms.TextInput(attrs={"class": "form-control", "placeholder": "Company Tax ID"}),
+            "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2, "placeholder": "Internal notes"}),
+            "image": forms.FileInput(attrs={"class": "form-control", "accept": "image/*"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
 

@@ -1,14 +1,59 @@
 {% extends "inventory/base.html" %}
 
 {% block content %}
-<h2 class="fw-bold">Logout</h2>
+<style>
+    #logoutConfirmModal .modal-content {
+        border-radius: 0.75rem;
+    }
+    #logoutConfirmModal .modal-title {
+        font-weight: 700;
+    }
+    #logoutConfirmModal .modal-body p {
+        font-size: 0.98rem;
+        color: #374151;
+    }
+    #logoutConfirmModal .alert {
+        border: 0;
+    }
+    .logout-backdrop {
+        background-color: rgba(15, 23, 42, 0.52);
+        backdrop-filter: blur(1.5px);
+    }
+</style>
 
-<p>Are you sure you want to log out?</p>
-
-<form method="POST">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-danger">Logout</button>
-    <a href="{% url 'dashboard' %}" class="btn btn-secondary">Cancel</a>
-</form>
-
+<div class="modal show d-block" id="logoutConfirmModal" tabindex="-1" aria-labelledby="logoutConfirmModalLabel" aria-modal="true" role="dialog">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow border-0 border-start border-danger border-4">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title d-flex align-items-center" id="logoutConfirmModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill text-danger me-2 fs-4"></i>
+                    Confirm logout
+                </h5>
+                <a href="{% url 'dashboard' %}" class="btn-close" aria-label="Close"></a>
+            </div>
+            <div class="modal-body pt-2">
+                <p class="mb-2">
+                    Are you sure you want to log out of account
+                    <strong>{{ request.user.username }}</strong>?
+                </p>
+                <div class="alert alert-warning d-flex align-items-start mb-0">
+                    <i class="bi bi-info-circle me-2 mt-1"></i>
+                    <div>
+                        You can sign back in at any time to continue managing inventory, orders, and alerts.
+                    </div>
+                </div>
+            </div>
+            <form method="POST">
+                {% csrf_token %}
+                <div class="modal-footer border-0 pt-0">
+                    <a href="{% url 'dashboard' %}" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-box-arrow-right me-1"></i>Log out now
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="modal-backdrop fade show logout-backdrop"></div>
 {% endblock %}

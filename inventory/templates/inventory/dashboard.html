@@ -6,78 +6,131 @@
 <!-- HEADER -->
 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 pb-3">
     <div>
-        <h1 class="fw-bold mb-1">Dashboard</h1>
+        <h1 class="fw-bold mb-0">Dashboard</h1>
+        <p class="text-muted mb-0">Your real-time warehouse overview and analytics.</p>
+    </div>
+    <div class="text-md-end">
         <p class="text-muted mb-0">
             {% now "H" as hour %}
             {% if hour < "12" %}Good morning{% elif hour < "17" %}Good afternoon{% else %}Good evening{% endif %}, {{ request.user.username|default:"User" }}.
-            Your real-time warehouse overview and analytics.
         </p>
         <p class="text-muted small mt-1 mb-0">Data as of {% now "d M Y, H:i" %}</p>
-    </div>
-    <div class="d-flex flex-wrap gap-2 quick-actions">
-        <a href="{% url 'order_create' %}" class="btn btn-primary btn-sm"><i class="bi bi-plus-circle me-1"></i>Create order</a>
-        <a href="{% url 'item_list' %}?filter=low_stock" class="btn btn-outline-danger btn-sm"><i class="bi bi-exclamation-triangle me-1"></i>View low stock</a>
-        {% if is_manager_or_admin %}
-        <a href="{% url 'run_anomaly_scan' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-search me-1"></i>Run anomaly scan</a>
-        {% endif %}
     </div>
 </div>
 
 <!-- SUMMARY CARDS -->
-<div class="row g-3 mb-4 align-items-start">
-    <div class="col-md-3">
-        <div class="card shadow-sm border-0 dashboard-card">
+<div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-xl-6 g-3 mb-4 align-items-start">
+    <div class="col">
+        <div class="card shadow-sm border-0 dashboard-card summary-kpi-card">
             <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseTotal" aria-expanded="true">
                 <div class="d-flex align-items-center">
                     <span class="badge bg-primary p-3 rounded-circle me-3"><i class="bi bi-box-seam fs-5"></i></span>
-                    <h6 class="text-muted mb-0">Total Stock Items</h6>
+                    <h6 class="text-muted mb-0 kpi-title">Total Stock Items</h6>
                 </div>
                 <i class="bi bi-chevron-down dashboard-chevron"></i>
             </button>
             <div class="collapse show" id="collapseTotal" data-persist="dash_total">
-                <div class="card-body pt-0"><a href="{% url 'item_list' %}" class="text-decoration-none text-dark hover-card"><h2 class="fw-bold">{{ total_items }}</h2></a></div>
+                <div class="card-body pt-0">
+                    <a href="{% url 'item_list' %}?clear=1&sort=name&per_page=20&q=&filter=&status=active&category=&stock_status=" class="kpi-link text-decoration-none text-dark">
+                        <h2 class="kpi-value mb-1">{{ total_items }}</h2>
+                        <p class="kpi-meta mb-0">Items currently tracked</p>
+                    </a>
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card shadow-sm border-0 dashboard-card">
+    <div class="col">
+        <div class="card shadow-sm border-0 dashboard-card summary-kpi-card">
             <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseLow" aria-expanded="true">
                 <div class="d-flex align-items-center">
                     <span class="badge bg-danger p-3 rounded-circle me-3"><i class="bi bi-exclamation-triangle fs-5"></i></span>
-                    <h6 class="text-muted mb-0">Low Stock Items</h6>
+                    <h6 class="text-muted mb-0 kpi-title">Low Stock Items</h6>
                 </div>
                 <i class="bi bi-chevron-down dashboard-chevron"></i>
             </button>
             <div class="collapse show" id="collapseLow" data-persist="dash_low">
-                <div class="card-body pt-0"><a href="{% url 'item_list' %}?filter=low_stock" class="text-decoration-none text-dark hover-card"><h2 class="fw-bold text-danger">{{ low_stock_items }}</h2></a></div>
+                <div class="card-body pt-0">
+                    <a href="{% url 'item_list' %}?clear=1&sort=name&per_page=20&q=&filter=low_stock&status=active&category=&stock_status=" class="kpi-link text-decoration-none text-dark">
+                        <h2 class="kpi-value text-danger mb-1">{{ low_stock_items }}</h2>
+                        <p class="kpi-meta mb-0">{{ low_stock_percent }}% of tracked items</p>
+                    </a>
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card shadow-sm border-0 dashboard-card">
+    <div class="col">
+        <div class="card shadow-sm border-0 dashboard-card summary-kpi-card">
+            <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapsePendingPurchase" aria-expanded="true">
+                <div class="d-flex align-items-center">
+                    <span class="badge bg-warning p-3 rounded-circle me-3"><i class="bi bi-cart-plus fs-5"></i></span>
+                    <h6 class="text-muted mb-0 kpi-title">Purchase Orders Pending</h6>
+                </div>
+                <i class="bi bi-chevron-down dashboard-chevron"></i>
+            </button>
+            <div class="collapse show" id="collapsePendingPurchase" data-persist="dash_pending_purchase_orders">
+                <div class="card-body pt-0">
+                    <a href="{% url 'order_list' %}?type=purchase&status=PENDING" class="kpi-link text-decoration-none text-dark">
+                        <h2 class="kpi-value mb-1">{{ pending_purchase_orders_count }}</h2>
+                        <p class="kpi-meta mb-0">Open purchase approvals</p>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="card shadow-sm border-0 dashboard-card summary-kpi-card">
+            <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapsePendingSales" aria-expanded="true">
+                <div class="d-flex align-items-center">
+                    <span class="badge bg-secondary p-3 rounded-circle me-3"><i class="bi bi-cart-dash fs-5"></i></span>
+                    <h6 class="text-muted mb-0 kpi-title">Sales Orders Pending</h6>
+                </div>
+                <i class="bi bi-chevron-down dashboard-chevron"></i>
+            </button>
+            <div class="collapse show" id="collapsePendingSales" data-persist="dash_pending_sales_orders">
+                <div class="card-body pt-0">
+                    <a href="{% url 'order_list' %}?type=sale&status=PENDING" class="kpi-link text-decoration-none text-dark">
+                        <h2 class="kpi-value mb-1">{{ pending_sales_orders_count }}</h2>
+                        <p class="kpi-meta mb-0">Open sales fulfilments</p>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="card shadow-sm border-0 dashboard-card summary-kpi-card">
             <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseSupp" aria-expanded="true">
                 <div class="d-flex align-items-center">
                     <span class="badge bg-info p-3 rounded-circle me-3"><i class="bi bi-truck fs-5"></i></span>
-                    <h6 class="text-muted mb-0">Total Suppliers</h6>
+                    <h6 class="text-muted mb-0 kpi-title">Active Suppliers</h6>
                 </div>
                 <i class="bi bi-chevron-down dashboard-chevron"></i>
             </button>
             <div class="collapse show" id="collapseSupp" data-persist="dash_supp">
-                <div class="card-body pt-0"><a href="{% url 'contacts_list' %}?type=suppliers" class="text-decoration-none text-dark hover-card"><h2 class="fw-bold">{{ supplier_count }}</h2></a></div>
+                <div class="card-body pt-0">
+                    <a href="{% url 'contacts_list' %}?type=suppliers" class="kpi-link text-decoration-none text-dark">
+                        <h2 class="kpi-value mb-1">{{ active_supplier_count }}</h2>
+                        <p class="kpi-meta mb-0">Suppliers currently active</p>
+                    </a>
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card shadow-sm border-0 dashboard-card">
+    <div class="col">
+        <div class="card shadow-sm border-0 dashboard-card summary-kpi-card">
             <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseCust" aria-expanded="true">
                 <div class="d-flex align-items-center">
                     <span class="badge bg-success p-3 rounded-circle me-3"><i class="bi bi-people fs-5"></i></span>
-                    <h6 class="text-muted mb-0">Total Customers</h6>
+                    <h6 class="text-muted mb-0 kpi-title">Active Customers</h6>
                 </div>
                 <i class="bi bi-chevron-down dashboard-chevron"></i>
             </button>
-            <div class="collapse show" id="collapseCust">
-                <div class="card-body pt-0"><a href="{% url 'contacts_list' %}?type=customers" class="text-decoration-none text-dark hover-card"><h2 class="fw-bold">{{ client_count }}</h2></a></div>
+            <div class="collapse show" id="collapseCust" data-persist="dash_cust">
+                <div class="card-body pt-0">
+                    <a href="{% url 'contacts_list' %}?type=customers" class="kpi-link text-decoration-none text-dark">
+                        <h2 class="kpi-value mb-1">{{ active_customer_count }}</h2>
+                        <p class="kpi-meta mb-0">Customers currently active</p>
+                    </a>
+                </div>
             </div>
         </div>
     </div>
@@ -87,27 +140,54 @@
 
 <!-- INVENTORY TREND + FORECAST -->
 <div class="row g-4 mb-4 align-items-start">
-
-    <!-- Inventory Trend -->
     <div class="col-md-6">
-        <div class="card shadow-sm border-0 dashboard-card inventory-trend-card">
-            <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseTrend" aria-expanded="true" aria-label="Toggle inventory trend chart">
-                <h5 class="fw-bold mb-0"><i class="bi bi-box-seam me-2"></i>Inventory Trend (Last {{ trend_days }} Days)</h5>
+        <div class="card shadow-sm border-0 dashboard-card dashboard-chart-card h-100">
+            <button type="button" class="card-header d-flex justify-content-between align-items-center py-2 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseTrend" aria-expanded="true" aria-label="Toggle inventory trend chart">
+                <h5 class="fw-bold mb-0"><i class="bi bi-box-seam me-2"></i>Inventory Stock Trend (Last {{ trend_days }} Days)</h5>
                 <i class="bi bi-chevron-down dashboard-chevron"></i>
             </button>
             <div class="collapse show" id="collapseTrend" data-persist="dash_trend">
-                <div class="card-body pt-0">
+                <div class="card-body pt-0 chart-card-body">
                     {% if stock_dates %}
-                        <div class="chart-top-spacer" aria-hidden="true"></div>
-                        <div class="chart-container">
-                            <canvas id="inventoryChart"></canvas>
+                        <div class="card-metric-row">
+                            <h3 class="card-primary-value text-primary mb-0">{{ current_stock_value }}</h3>
+                            {% if inventory_change_pct is not None %}
+                                {% if inventory_change_pct > 0 %}
+                                    <span class="badge bg-success-subtle text-success card-status-badge"><i class="bi bi-arrow-up-right"></i> +{{ inventory_change_pct }}%</span>
+                                {% elif inventory_change_pct < 0 %}
+                                    <span class="badge bg-danger-subtle text-danger card-status-badge"><i class="bi bi-arrow-down-right"></i> {{ inventory_change_pct }}%</span>
+                                {% else %}
+                                    <span class="badge bg-secondary-subtle text-secondary card-status-badge"><i class="bi bi-dash"></i> 0.0%</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="badge bg-secondary-subtle text-secondary card-status-badge">No baseline</span>
+                            {% endif %}
+                            <div class="ms-auto">
+                                <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#trendDetailModal"><i class="bi bi-arrows-fullscreen me-1"></i>Detailed view</button>
+                            </div>
                         </div>
-                        <div class="chart-footer d-flex flex-wrap gap-2 align-items-center">
+                        <div class="card-meta-row">
+                            <span class="card-meta-text">Current stock units</span><span></span>
+                        </div>
+                        <div class="chart-container"><canvas id="inventoryChart"></canvas></div>
+                        <div class="chart-insight">
+                            <p class="text-muted small mb-0">
+                                {% if inventory_change_pct is not None and inventory_change_pct > 0 %}
+                                    Stock levels are increasing over the last {{ trend_days }} days.
+                                {% elif inventory_change_pct is not None and inventory_change_pct < 0 %}
+                                    Stock levels are decreasing over the last {{ trend_days }} days.
+                                {% else %}
+                                    Stock levels are stable over the selected period.
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="chart-controls-row">
                             <a href="{% url 'item_list' %}" class="btn btn-sm btn-outline-primary">View full stock report</a>
-                            <span class="text-muted small">Range:</span>
-                            <a href="?trend_days=7" class="btn btn-sm btn-outline-secondary {% if trend_days == 7 %}active{% endif %}">7d</a>
-                            <a href="?trend_days=14" class="btn btn-sm btn-outline-secondary {% if trend_days == 14 %}active{% endif %}">14d</a>
-                            <a href="?trend_days=30" class="btn btn-sm btn-outline-secondary {% if trend_days == 30 %}active{% endif %}">30d</a>
+                            <div class="trend-range-pills btn-group btn-group-sm" role="group" aria-label="Select trend range">
+                                <a href="?trend_days=7&forecast_days={{ forecast_days }}" class="btn trend-pill {% if trend_days == 7 %}active{% endif %}">7d</a>
+                                <a href="?trend_days=14&forecast_days={{ forecast_days }}" class="btn trend-pill {% if trend_days == 14 %}active{% endif %}">14d</a>
+                                <a href="?trend_days=30&forecast_days={{ forecast_days }}" class="btn trend-pill {% if trend_days == 30 %}active{% endif %}">30d</a>
+                            </div>
                         </div>
                     {% else %}
                         <div class="text-center py-4">
@@ -120,47 +200,141 @@
             </div>
         </div>
     </div>
-
-    <!-- Forecasting -->
     <div class="col-md-6">
-        <div class="card shadow-sm border-0 dashboard-card">
-            <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseForecast" aria-expanded="true" aria-label="Toggle forecast chart">
-                <h5 class="fw-bold mb-0"><i class="bi bi-graph-up-arrow me-2"></i>Forecast (Simple Moving Average)</h5>
+        <div class="card shadow-sm border-0 dashboard-card dashboard-chart-card h-100">
+            <button type="button" class="card-header d-flex justify-content-between align-items-center py-2 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseForecast" aria-expanded="true" aria-label="Toggle forecast chart">
+                <h5 class="fw-bold mb-0"><i class="bi bi-graph-up-arrow me-2"></i>Projected Inventory Trend (Next {{ forecast_days }} Days)</h5>
                 <i class="bi bi-chevron-down dashboard-chevron"></i>
             </button>
             <div class="collapse show" id="collapseForecast" data-persist="dash_forecast">
-                <div class="card-body pt-0">
-                    {% if forecast %}
-                        <div class="chart-top-block d-flex flex-wrap align-items-center gap-2 mb-2">
-                            <h3 class="fw-bold text-primary mb-0">{{ forecast }}</h3>
-                            {% if sma_trend == "up" %}
-                                <span class="badge bg-success-subtle text-success"><i class="bi bi-arrow-up-short"></i> Rising</span>
-                            {% elif sma_trend == "down" %}
-                                <span class="badge bg-danger-subtle text-danger"><i class="bi bi-arrow-down-short"></i> Falling</span>
+                <div class="card-body pt-0 chart-card-body">
+                    {% if forecast_chart_labels and forecast_values %}
+                        <div class="card-metric-row">
+                            <h3 class="card-primary-value text-primary mb-0">{{ forecast_metric_value }}</h3>
+                            {% if forecast_badge == "rising" %}
+                                <span class="badge bg-success-subtle text-success card-status-badge"><i class="bi bi-arrow-up-right"></i> Rising inventory projection</span>
+                            {% elif forecast_badge == "falling" %}
+                                <span class="badge bg-danger-subtle text-danger card-status-badge"><i class="bi bi-arrow-down-right"></i> Falling inventory projection</span>
                             {% else %}
-                                <span class="badge bg-secondary-subtle text-secondary"><i class="bi bi-dash"></i> Stable</span>
+                                <span class="badge bg-secondary-subtle text-secondary card-status-badge"><i class="bi bi-dash"></i> Stable inventory projection</span>
                             {% endif %}
-                        </div>
-                        {% if sma_values %}
-                            <div class="sma-sparkline-box mb-2">
-                                <canvas id="smaChart"></canvas>
+                            <div class="ms-auto">
+                                <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#forecastDetailModal"><i class="bi bi-arrows-fullscreen me-1"></i>Detailed view</button>
                             </div>
-                        {% endif %}
-                        <div class="chart-footer">
-                            <p class="text-muted small mb-0">7-day average of recent total inventory (includes today). Expected level based on last {{ sma_values|length }} data points.</p>
+                        </div>
+                        <div class="card-meta-row">
+                            <span class="card-meta-text">Expected range: {{ forecast_expected_range_lower }} - {{ forecast_expected_range_upper }} units</span>
+                            <span class="card-meta-text">
+                                {% if forecast_has_significant_change %}
+                                    {{ forecast_days }}-day change: {% if forecast_change_pct > 0 %}+{% endif %}{{ forecast_change_pct }}%
+                                {% else %}
+                                    No significant change expected
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="sma-sparkline-box mb-2"><canvas id="forecastChart"></canvas></div>
+                        <div class="chart-insight"><p class="text-muted small mb-0">{{ forecast_insight_text }}</p></div>
+                        <div class="chart-controls-row chart-controls-row-end">
+                            <div class="trend-range-pills btn-group btn-group-sm" role="group" aria-label="Select forecast range">
+                                <a href="?trend_days={{ trend_days }}&forecast_days=7" class="btn trend-pill {% if forecast_days == 7 %}active{% endif %}">7d</a>
+                                <a href="?trend_days={{ trend_days }}&forecast_days=14" class="btn trend-pill {% if forecast_days == 14 %}active{% endif %}">14d</a>
+                                <a href="?trend_days={{ trend_days }}&forecast_days=30" class="btn trend-pill {% if forecast_days == 30 %}active{% endif %}">30d</a>
+                            </div>
                         </div>
                     {% else %}
                         <div class="text-center py-4">
                             <i class="bi bi-calculator text-muted" style="font-size: 2rem;"></i>
                             <p class="text-muted mb-0 mt-2">Not enough data to generate a forecast.</p>
-                            <p class="text-muted small mb-0">Need at least 2 data points for SMA.</p>
+                            <p class="text-muted small mb-0">Add more historical inventory movement to improve projection reliability.</p>
                         </div>
                     {% endif %}
                 </div>
             </div>
         </div>
     </div>
+</div>
 
+<!-- Trend detailed modal -->
+<div class="modal fade" id="trendDetailModal" tabindex="-1" aria-labelledby="trendDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen-xl-down modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="trendDetailModalLabel"><i class="bi bi-graph-up me-2"></i>Inventory Stock Trend (Last {{ trend_days }} Days)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3 mb-3">
+                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Current stock units</div><div class="h4 mb-0 text-primary">{{ current_stock_value }}</div></div></div>
+                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Change over period</div><div class="h5 mb-0">{% if inventory_change_pct is not None %}{% if inventory_change_pct > 0 %}+{% endif %}{{ inventory_change_pct }}%{% else %}No baseline{% endif %}</div></div></div>
+                    <div class="col-12 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Selected range</div><div class="h5 mb-0">{{ trend_days }} days</div></div></div>
+                </div>
+                <div class="chart-box chart-box-modal"><canvas id="inventoryChartModal"></canvas></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Forecast detailed modal -->
+<div class="modal fade" id="forecastDetailModal" tabindex="-1" aria-labelledby="forecastDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen-xl-down modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="forecastDetailModalLabel"><i class="bi bi-graph-up-arrow me-2"></i>Projected Inventory Analysis (Next {{ forecast_days }} Days)</h5>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" id="downloadForecastCsvBtn" class="btn btn-sm btn-outline-primary"><i class="bi bi-download me-1"></i>Download CSV</button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3 mb-3">
+                    <div class="col-6 col-md-3"><div class="forecast-metric-tile"><div class="small text-muted">Projected inventory</div><div class="h4 mb-0 text-primary">{{ forecast_metric_value }}</div></div></div>
+                    <div class="col-6 col-md-3"><div class="forecast-metric-tile"><div class="small text-muted">Forecast change</div><div class="h5 mb-0">{% if forecast_has_significant_change %}{% if forecast_change_pct > 0 %}+{% endif %}{{ forecast_change_pct }}%{% else %}No significant change{% endif %}</div></div></div>
+                    <div class="col-6 col-md-3"><div class="forecast-metric-tile"><div class="small text-muted">Expected range</div><div class="h5 mb-0">{{ forecast_expected_range_lower }} - {{ forecast_expected_range_upper }}</div></div></div>
+                    <div class="col-6 col-md-3"><div class="forecast-metric-tile"><div class="small text-muted">Confidence</div><div class="h5 mb-0">{{ forecast_confidence_label }}</div></div></div>
+                </div>
+                <div class="chart-box chart-box-modal mb-3"><canvas id="forecastChartModal"></canvas></div>
+                <div class="row g-3">
+                    <div class="col-lg-7">
+                        <div class="card border-0 bg-light-subtle h-100">
+                            <div class="card-body">
+                                <h6 class="fw-semibold mb-2">Projection insight</h6>
+                                <p class="mb-2">{{ forecast_insight_text }}</p>
+                                <ul class="mb-0 text-muted small">
+                                    <li>Forecast horizon: {{ forecast_days }} days</li>
+                                    <li>Historical data used: {{ forecast_history_days_used }} days</li>
+                                    <li>Expected interval: {{ forecast_expected_range_lower }} to {{ forecast_expected_range_upper }} units</li>
+                                    <li>Forecast engine: {{ forecast_model_name|upper }}</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-5">
+                        <div class="card border-0 bg-light-subtle h-100">
+                            <div class="card-body">
+                                <h6 class="fw-semibold mb-2">Model performance snapshot</h6>
+                                {% if forecast_eval.can_evaluate %}
+                                    <div class="small mb-1">Baseline MAE: <strong>{{ forecast_eval.baseline.mae }}</strong></div>
+                                    <div class="small mb-1">Baseline RMSE: <strong>{{ forecast_eval.baseline.rmse }}</strong></div>
+                                    <div class="small mb-1">Baseline MAPE: <strong>{{ forecast_eval.baseline.mape }}%</strong></div>
+                                    {% if forecast_eval.advanced.available %}
+                                        <hr class="my-2">
+                                        <div class="small mb-1">Advanced MAE: <strong>{{ forecast_eval.advanced.mae }}</strong></div>
+                                        <div class="small mb-1">Advanced RMSE: <strong>{{ forecast_eval.advanced.rmse }}</strong></div>
+                                        <div class="small mb-1">Advanced MAPE: <strong>{{ forecast_eval.advanced.mape }}%</strong></div>
+                                    {% else %}
+                                        <hr class="my-2">
+                                        <div class="small text-muted">Advanced model currently unavailable for this split.</div>
+                                    {% endif %}
+                                {% else %}
+                                    <div class="small text-muted">Not enough history to run backtesting metrics yet.</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <hr class="my-4">
@@ -427,9 +601,29 @@
 <script>
 let topDemandChartInstance = null;
 let locationChartInstance = null;
+let inventoryModalChartInstance = null;
+let forecastChartInstance = null;
+let forecastModalChartInstance = null;
 /* INVENTORY TREND */
 {% if stock_dates %}
 const inventoryCtx = document.getElementById('inventoryChart').getContext('2d');
+const trendTodayIndex = {{ trend_today_index|default:0 }};
+const trendDayStep = ({7: 1, 14: 2, 30: 3})[{{ trend_days|default:30 }}] || 3;
+const forecastDayStep = ({7: 7, 14: 5, 30: 9})[{{ forecast_days|default:7 }}] || 5;
+function showFixedStepTickFromToday(index, todayIdx, step) {
+    if (step <= 1) return true;
+    return Math.abs(index - todayIdx) % step === 0;
+}
+const unifiedScaleValues = [
+    ...{{ stock_values|safe }},
+    ...({{ forecast_hist_values|safe }} || []),
+    ...({{ forecast_values|safe }} || []),
+    ...({{ forecast_upper_values|safe }} || []),
+    ...({{ forecast_lower_values|safe }} || []),
+].map((v) => Number(v)).filter((v) => Number.isFinite(v) && v >= 0);
+const unifiedScaleMaxRaw = unifiedScaleValues.length ? Math.max(...unifiedScaleValues) : 0;
+const unifiedYAxisMin = 0;
+const unifiedYAxisMax = Math.max(1000, Math.ceil((unifiedScaleMaxRaw * 1.1) / 500) * 500);
 const inventoryChart = new Chart(inventoryCtx, {
     type: 'line',
     data: {
@@ -437,12 +631,13 @@ const inventoryChart = new Chart(inventoryCtx, {
         datasets: [{
             label: 'Inventory Level',
             data: {{ stock_values|safe }},
-            borderColor: 'rgba(75, 192, 192, 0.9)',
-            backgroundColor: 'rgba(75, 192, 192, 0.18)',
+            borderColor: 'rgba(37, 99, 235, 0.95)',
+            backgroundColor: 'rgba(59, 130, 246, 0.18)',
             borderWidth: 3,
-            tension: 0.35,
-            pointRadius: 3,
-            pointHoverRadius: 5
+            tension: 0.26,
+            fill: true,
+            pointRadius: 2.8,
+            pointHoverRadius: 5.5
         }]
     },
     options: {
@@ -461,9 +656,22 @@ const inventoryChart = new Chart(inventoryCtx, {
             }
         },
         scales: {
-            x: { grid: { display: false } },
+            x: {
+                grid: { display: false },
+                ticks: {
+                    autoSkip: false,
+                    maxRotation: 0,
+                    minRotation: 0,
+                    callback: function(value, index) {
+                        const label = this.getLabelForValue(value);
+                        return showFixedStepTickFromToday(index, trendTodayIndex, trendDayStep) ? label : "";
+                    }
+                }
+            },
             y: {
                 beginAtZero: true,
+                min: unifiedYAxisMin,
+                max: unifiedYAxisMax,
                 grid: { color: "rgba(0,0,0,0.05)" }
             }
         }
@@ -474,6 +682,59 @@ const inventoryChart = new Chart(inventoryCtx, {
 document.getElementById('inventoryChart').onclick = () => {
     window.location.href = "{% url 'item_list' %}";
 };
+
+const trendDetailModal = document.getElementById('trendDetailModal');
+if (trendDetailModal) {
+    trendDetailModal.addEventListener('shown.bs.modal', function() {
+        const modalCanvas = document.getElementById('inventoryChartModal');
+        if (!modalCanvas) return;
+        if (inventoryModalChartInstance) {
+            inventoryModalChartInstance.destroy();
+            inventoryModalChartInstance = null;
+        }
+        inventoryModalChartInstance = new Chart(modalCanvas.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: {{ stock_dates|safe }},
+                datasets: [{
+                    label: 'Inventory Level',
+                    data: {{ stock_values|safe }},
+                    borderColor: 'rgba(37, 99, 235, 0.95)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.18)',
+                    borderWidth: 3,
+                    tension: 0.26,
+                    fill: true,
+                    pointRadius: 2.8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => " Qty: " + ctx.parsed.y } } },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            autoSkip: false,
+                            maxRotation: 0,
+                            callback: function(value, index) {
+                                const label = this.getLabelForValue(value);
+                                return showFixedStepTickFromToday(index, trendTodayIndex, trendDayStep) ? label : "";
+                            }
+                        }
+                    },
+                    y: { beginAtZero: true, min: unifiedYAxisMin, max: unifiedYAxisMax, grid: { color: "rgba(0,0,0,0.05)" }, ticks: { precision: 0 } }
+                }
+            }
+        });
+    });
+    trendDetailModal.addEventListener('hidden.bs.modal', function() {
+        if (inventoryModalChartInstance) {
+            inventoryModalChartInstance.destroy();
+            inventoryModalChartInstance = null;
+        }
+    });
+}
 {% endif %}
 
 /* WEEKLY ORDERS (stacked: purchase + sale) */
@@ -657,59 +918,117 @@ if (locationCtx) {
 }
 {% endif %}
 
-/* SMA SPARKLINE */
-let smaChartInstance = null;
-{% if sma_values %}
-const smaCtx = document.getElementById('smaChart');
-if (smaCtx) {
-    smaChartInstance = new Chart(smaCtx.getContext('2d'), {
+/* PROJECTED INVENTORY */
+{% if forecast_chart_labels and forecast_values %}
+const forecastLabels = {{ forecast_chart_labels|safe }};
+const forecastHistValues = {{ forecast_hist_values|safe }};
+const forecastProjValues = {{ forecast_values|safe }};
+const forecastUpperValues = {{ forecast_upper_values|safe }};
+const forecastLowerValues = {{ forecast_lower_values|safe }};
+const forecastPoints = {{ forecast_points_json|safe }};
+const forecastTodayIndex = {{ forecast_today_index|default:0 }};
+
+const todayMarkerPlugin = {
+    id: 'todayMarker',
+    afterDatasetsDraw(chart) {
+        const xScale = chart.scales.x;
+        const yScale = chart.scales.y;
+        if (!xScale || !yScale || forecastTodayIndex < 0) return;
+        const rawX = xScale.getPixelForValue(forecastTodayIndex);
+        const nextX = xScale.getPixelForValue(forecastTodayIndex + 1);
+        const x = rawX + ((nextX - rawX) / 2 || 0);
+        const ctx = chart.ctx;
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([5, 4]);
+        ctx.strokeStyle = 'rgba(107,114,128,0.65)';
+        ctx.lineWidth = 1;
+        ctx.moveTo(x, yScale.top);
+        ctx.lineTo(x, yScale.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(107,114,128,0.9)';
+        ctx.font = '11px sans-serif';
+        ctx.fillText('Today', x + 6, yScale.top + 12);
+        ctx.restore();
+    }
+};
+
+function buildProjectedChart(canvasEl, options = {}) {
+    const isDetailed = Boolean(options.detailed);
+    const ctx2d = canvasEl.getContext('2d');
+    const gradient = ctx2d.createLinearGradient(0, 0, 0, isDetailed ? 420 : 280);
+    gradient.addColorStop(0, 'rgba(59,130,246,0.20)');
+    gradient.addColorStop(1, 'rgba(59,130,246,0.02)');
+    return new Chart(ctx2d, {
+        plugins: [todayMarkerPlugin],
         type: 'line',
         data: {
-            labels: {{ sma_dates|safe }},
+            labels: forecastLabels,
             datasets: [
-                {
-                    label: 'Daily total',
-                    data: {{ sma_values|safe }},
-                    borderColor: 'rgba(59, 130, 246, 0.9)',
-                    backgroundColor: 'rgba(59, 130, 246, 0.15)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.35,
-                    pointRadius: 4,
-                    pointBackgroundColor: 'rgba(59, 130, 246, 1)'
-                },
-                {
-                    label: '7-day avg',
-                    data: Array({{ sma_values|length }}).fill({{ forecast }}),
-                    borderColor: 'rgba(107, 114, 128, 0.6)',
-                    borderWidth: 1.5,
-                    borderDash: [4, 4],
-                    fill: false,
-                    pointRadius: 0
-                }
+                { label: 'Historical total units', data: forecastHistValues, borderColor: 'rgba(59, 130, 246, 0.92)', backgroundColor: gradient, borderWidth: isDetailed ? 2.6 : 2.2, fill: false, tension: 0.22, pointRadius: isDetailed ? 2.4 : 1.8, pointBackgroundColor: 'rgba(59, 130, 246, 1)' },
+                { label: 'Projected units', data: forecastProjValues, borderColor: 'rgba(16,185,129,0.95)', borderWidth: isDetailed ? 3 : 2.5, borderDash: [8, 5], fill: false, tension: 0.20, pointRadius: isDetailed ? 2.8 : 2.2, pointBackgroundColor: 'rgba(16,185,129,1)' },
+                { label: 'Upper confidence', data: forecastUpperValues, borderColor: 'rgba(16,185,129,0.22)', borderWidth: 1, pointRadius: 0, fill: false },
+                { label: 'Lower confidence', data: forecastLowerValues, borderColor: 'rgba(16,185,129,0.22)', borderWidth: 1, pointRadius: 0, fill: '-1', backgroundColor: 'rgba(16,185,129,0.10)' }
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            animation: { duration: 600 },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: (ctx) => ctx.datasetIndex === 0 ? " Qty: " + ctx.parsed.y : " SMA: " + ctx.parsed.y
-                    }
-                }
-            },
+            animation: { duration: 650 },
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { display: isDetailed }, tooltip: { callbacks: { label: (ctx) => " Units: " + ctx.parsed.y } } },
             scales: {
-                x: { grid: { display: false }, ticks: { maxRotation: 0 } },
-                y: {
-                    beginAtZero: true,
-                    grid: { color: "rgba(0,0,0,0.05)" },
-                    ticks: { precision: 0 }
-                }
+                x: {
+                    grid: { display: false },
+                    ticks: {
+                        autoSkip: false,
+                        maxRotation: 0,
+                        callback: function(value, index) {
+                            const label = this.getLabelForValue(value);
+                            return showFixedStepTickFromToday(index, forecastTodayIndex, forecastDayStep) ? label : "";
+                        }
+                    }
+                },
+                y: { beginAtZero: true, min: unifiedYAxisMin, max: unifiedYAxisMax, grid: { color: "rgba(148,163,184,0.16)" }, border: { display: false }, ticks: { precision: 0 } }
             }
         }
+    });
+}
+
+const forecastCtx = document.getElementById('forecastChart');
+if (forecastCtx) forecastChartInstance = buildProjectedChart(forecastCtx, { detailed: false });
+
+const forecastDetailModal = document.getElementById('forecastDetailModal');
+if (forecastDetailModal) {
+    forecastDetailModal.addEventListener('shown.bs.modal', function() {
+        const modalCanvas = document.getElementById('forecastChartModal');
+        if (!modalCanvas) return;
+        if (forecastModalChartInstance) forecastModalChartInstance.destroy();
+        forecastModalChartInstance = buildProjectedChart(modalCanvas, { detailed: true });
+    });
+    forecastDetailModal.addEventListener('hidden.bs.modal', function() {
+        if (forecastModalChartInstance) forecastModalChartInstance.destroy();
+    });
+}
+
+const downloadForecastCsvBtn = document.getElementById('downloadForecastCsvBtn');
+if (downloadForecastCsvBtn) {
+    downloadForecastCsvBtn.addEventListener('click', function() {
+        if (!forecastPoints || !forecastPoints.length) return;
+        const lines = ["date,predicted_units,lower_bound,upper_bound"];
+        forecastPoints.forEach(function(pt) {
+            lines.push([pt.date, Number(pt.yhat ?? 0).toFixed(2), Number(pt.yhat_lower ?? 0).toFixed(2), Number(pt.yhat_upper ?? 0).toFixed(2)].join(","));
+        });
+        const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "inventory_forecast_{{ forecast_days }}d.csv";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     });
 }
 {% endif %}
@@ -721,11 +1040,11 @@ document.addEventListener('shown.bs.collapse', function(e) {
     if (e.target.id === 'collapseTopItem' && typeof topDemandChartInstance !== 'undefined' && topDemandChartInstance) topDemandChartInstance.resize();
     if (e.target.id === 'collapsePie' && typeof pieChart !== 'undefined') pieChart.resize();
     if (e.target.id === 'collapseLocation' && typeof locationChartInstance !== 'undefined' && locationChartInstance) locationChartInstance.resize();
-    if (e.target.id === 'collapseForecast' && smaChartInstance) smaChartInstance.resize();
+    if (e.target.id === 'collapseForecast' && forecastChartInstance) forecastChartInstance.resize();
 });
 // Resize charts when window is resized
 window.addEventListener('resize', function() {
-    var charts = [inventoryChart, ordersChart, topDemandChartInstance, pieChart, locationChartInstance, smaChartInstance];
+    var charts = [inventoryChart, inventoryModalChartInstance, ordersChart, topDemandChartInstance, pieChart, locationChartInstance, forecastChartInstance, forecastModalChartInstance];
     charts.forEach(function(c) {
         if (typeof c !== 'undefined' && c) try { c.resize(); } catch(e) {}
     });
@@ -761,6 +1080,44 @@ window.addEventListener('resize', function() {
 .dashboard-card .card-header.btn-toggle[aria-expanded="false"] .dashboard-chevron {
     transform: rotate(-90deg);
 }
+.summary-kpi-card {
+    height: 100%;
+}
+.summary-kpi-card .card-body {
+    min-height: 82px;
+}
+.summary-kpi-card .card-header.btn-toggle[aria-expanded="false"] {
+    padding-top: 0.75rem !important;
+    padding-bottom: 0.75rem !important;
+}
+.kpi-title {
+    font-size: 0.95rem;
+    line-height: 1.15;
+    min-height: 2.3em;
+    display: flex;
+    align-items: center;
+}
+.kpi-link {
+    display: block;
+    border-radius: 0.5rem;
+    padding: 0.25rem 0.25rem 0.1rem;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+.kpi-link:hover {
+    transform: translateY(-2px);
+    background: rgba(13, 110, 253, 0.03);
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+}
+.kpi-value {
+    font-size: 2rem;
+    line-height: 1.1;
+    font-weight: 700;
+    color: #1f2937;
+}
+.kpi-meta {
+    color: #6b7280;
+    font-size: 0.82rem;
+}
 
 .chart-top-spacer {
     height: 52px;
@@ -771,6 +1128,97 @@ window.addEventListener('resize', function() {
     min-height: 52px;
 }
 
+.chart-card-body {
+    padding-top: 0.2rem !important;
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+}
+.card-metric-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.65rem;
+    min-height: 52px;
+    margin-bottom: 0.12rem;
+}
+.card-primary-value {
+    font-size: 2.05rem;
+    line-height: 1.05;
+    font-weight: 700;
+}
+.card-status-badge {
+    font-size: 0.88rem;
+    padding: 0.44rem 0.62rem;
+    border-radius: 0.52rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+}
+.card-meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.38rem;
+}
+.card-meta-text {
+    color: #6b7280;
+    font-size: 0.82rem;
+    line-height: 1.25;
+}
+.chart-insight {
+    min-height: 56px;
+    margin-top: 0.08rem;
+}
+.chart-controls-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: auto;
+    padding-top: 0.35rem;
+}
+.chart-controls-row-end {
+    justify-content: flex-end;
+}
+.chart-controls-row .btn {
+    min-height: 30px;
+}
+.trend-range-pills {
+    background: #eef2ff;
+    border-radius: 999px;
+    padding: 2px;
+}
+.trend-pill {
+    border: 0 !important;
+    background: transparent !important;
+    color: #475569 !important;
+    border-radius: 999px !important;
+    padding: 0.2rem 0.7rem !important;
+    font-weight: 600;
+}
+.trend-pill:hover {
+    background: rgba(99,102,241,0.14) !important;
+    color: #1e3a8a !important;
+}
+.trend-pill.active {
+    background: #2563eb !important;
+    color: #fff !important;
+    box-shadow: 0 1px 4px rgba(37, 99, 235, 0.35);
+}
+.chart-box-modal {
+    height: 480px !important;
+    max-height: 480px !important;
+    min-height: 420px !important;
+}
+.forecast-metric-tile {
+    background: rgba(248, 250, 252, 0.9);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 0.75rem;
+    padding: 0.75rem 0.9rem;
+    min-height: 82px;
+}
 .chart-footer {
     min-height: 48px;
 }
@@ -803,11 +1251,6 @@ window.addEventListener('resize', function() {
     min-height: 320px !important;
 }
 
-/* Mobile: quick actions full width */
-@media (max-width: 767px) {
-    .quick-actions { width: 100%; justify-content: flex-start; }
-}
-
 .sma-sparkline-box {
     height: 280px !important;
     max-height: 280px !important;
@@ -815,61 +1258,19 @@ window.addEventListener('resize', function() {
     position: relative;
     width: 100%;
 }
-
-/* POPUP: purchase recommendations */
-.po-popup {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    width: 360px;
-    background: #ffffff;
-    border-radius: 12px;
-    padding: 0;
-    z-index: 9999;
-    border: 1px solid #e5e7eb;
-    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
-}
-
-.po-header {
-    background: #2563eb;
-    color: white;
-    padding: 10px 14px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-radius: 12px 12px 0 0;
-}
-
-.po-body {
-    padding: 14px;
-    max-height: 320px;
-    overflow-y: auto;
-}
-
-.po-item {
-    padding-bottom: 10px;
-}
-
-.po-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 2px 8px;
-    border-radius: 999px;
-    font-size: 11px;
-}
-
-.po-badge-critical { background: #fee2e2; color: #b91c1c; }
-.po-badge-high { background: #fef3c7; color: #92400e; }
-.po-badge-medium { background: #e0f2fe; color: #0369a1; }
-.po-badge-low { background: #e5e7eb; color: #374151; }
-
-/* Dark mode compatibility */
-.dark-mode .po-popup {
-    background-color: #111827;
-    border-color: #30363d;
+@media (max-width: 767px) {
+    .summary-kpi-card .card-header.btn-toggle {
+        padding-top: 0.7rem !important;
+        padding-bottom: 0.7rem !important;
+    }
+    .summary-kpi-card .badge {
+        padding: 0.55rem !important;
+        margin-right: 0.6rem !important;
+    }
+    .kpi-value {
+        font-size: 1.75rem;
+    }
 }
 </style>
-
-{% include "inventory/includes/recommendations_popup.html" %}
 
 {% endblock %}

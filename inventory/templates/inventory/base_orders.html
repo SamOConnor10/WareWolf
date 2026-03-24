@@ -24,6 +24,7 @@
             </a>
         </nav>
     </div>
+    <script>(function(){var s=document.getElementById("ordersSidebar");if(s){try{if(localStorage.getItem("warewolf_orders_sidebar_collapsed")==="true")s.classList.add("collapsed");}catch(e){}}})();</script>
 
     <!-- ========================= -->
     <!-- MAIN CONTENT              -->
@@ -148,19 +149,12 @@ body.dark-mode .orders-sidebar .sidebar-link.active {
 
 <script>
 (function() {
-    var KEY = 'warewolf_orders_sidebar_collapsed';
     var sidebar = document.getElementById("ordersSidebar");
     var toggle = document.getElementById("ordersSidebarToggle");
-    if (sidebar) {
-        try {
-            var saved = localStorage.getItem(KEY);
-            if (saved === 'true') sidebar.classList.add("collapsed");
-        } catch (e) {}
-    }
     if (toggle && sidebar) {
         toggle.onclick = function () {
             sidebar.classList.toggle("collapsed");
-            try { localStorage.setItem(KEY, sidebar.classList.contains("collapsed")); } catch (e) {}
+            try { localStorage.setItem("warewolf_orders_sidebar_collapsed", sidebar.classList.contains("collapsed")); } catch (e) {}
         };
     }
 })();

@@ -10,7 +10,9 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
+from celery.schedules import crontab
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -133,6 +135,12 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Cache (in-memory) – used to throttle expensive recommendation recalculations
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    }
+}
 
 LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"          # dashboard route
@@ -151,3 +159,30 @@ DEFAULT_FROM_EMAIL = "WareWolf <samarthuroconnor@gmail.com>"
 TEMPLATES[0]["OPTIONS"]["context_processors"] += [
     "inventory.context_processors.user_preferences",
 ]
+
+# Celery (background tasks)
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", CELERY_BROKER_URL)
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULE = {
+    "run-anomaly-scan-every-30-minutes": {
+        "task": "inventory.tasks.run_anomaly_scan_task",
+        "schedule": 30 * 60,
+    },
+    "refresh-recommendations-every-30-minutes": {
+        "task": "inventory.tasks.refresh_recommendations_task",
+        "schedule": 30 * 60,
+    },
+    "send-weekly-alert-digest": {
+        "task": "inventory.tasks.send_weekly_alert_digest_task",
+        "schedule": crontab(hour=8, minute=0, day_of_week=1),  # Monday 08:00
+    },
+}
+
+# Smart alerts tuning
+FORECAST_NOTIFICATION_COOLDOWN_HOURS = int(
+    os.getenv("FORECAST_NOTIFICATION_COOLDOWN_HOURS", "12")
+)

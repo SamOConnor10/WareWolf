@@ -1,0 +1,476 @@
+{% extends "inventory/base.html" %}
+{% load querystring %}
+
+{% block extra_head %}
+<style>
+    .alerts-row-critical { background: #fff7f7; }
+    .alerts-row-warning { background: #fffdf3; }
+    .alerts-row-info { background: #f8fbff; }
+    .alerts-source-badge { font-size: 0.72rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <h1 class="fw-bold mb-1"><i class="bi bi-bell me-2 text-primary"></i>Alerts</h1>
+        <p class="text-muted mb-0">Monitor and manage real-time operational and predictive alerts in one place.</p>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-outline-secondary btn-sm" onclick="history.length > 1 ? history.back() : (window.location.href='{% url 'dashboard' %}')">
+            <i class="bi bi-arrow-left me-1"></i>Back
+        </button>
+        <div class="text-muted small">{{ total_count }} matching alerts</div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <a href="{% url 'alerts_list' %}?clear=1" class="text-decoration-none">
+            <div class="card border-0 shadow-sm h-100 {% if not severity_filter %}border-primary border-2{% endif %}">
+                <div class="card-body py-3 d-flex align-items-center gap-3">
+                    <div class="rounded-3 bg-primary bg-opacity-10 p-2"><i class="bi bi-collection text-primary fs-5"></i></div>
+                    <div><div class="text-muted small text-uppercase">All alerts</div><div class="fs-4 fw-bold">{{ total_all }}</div></div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-md-3">
+        <a href="?{% querystring request severity='critical' page=1 %}" class="text-decoration-none">
+            <div class="card border-0 shadow-sm h-100 {% if severity_filter == 'critical' %}border-danger border-2{% endif %}">
+                <div class="card-body py-3 d-flex align-items-center gap-3">
+                    <div class="rounded-3 bg-danger bg-opacity-10 p-2"><i class="bi bi-exclamation-triangle text-danger fs-5"></i></div>
+                    <div><div class="text-muted small text-uppercase">Critical</div><div class="fs-4 fw-bold">{{ total_critical }}</div></div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-md-3">
+        <a href="?{% querystring request severity='warning' page=1 %}" class="text-decoration-none">
+            <div class="card border-0 shadow-sm h-100 {% if severity_filter == 'warning' %}border-warning border-2{% endif %}">
+                <div class="card-body py-3 d-flex align-items-center gap-3">
+                    <div class="rounded-3 bg-warning bg-opacity-10 p-2"><i class="bi bi-exclamation-circle text-warning fs-5"></i></div>
+                    <div><div class="text-muted small text-uppercase">Warning</div><div class="fs-4 fw-bold">{{ total_warning }}</div></div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-md-3">
+        <a href="?{% querystring request severity='info' page=1 %}" class="text-decoration-none">
+            <div class="card border-0 shadow-sm h-100 {% if severity_filter == 'info' %}border-info border-2{% endif %}">
+                <div class="card-body py-3 d-flex align-items-center gap-3">
+                    <div class="rounded-3 bg-info bg-opacity-10 p-2"><i class="bi bi-info-circle text-info fs-5"></i></div>
+                    <div><div class="text-muted small text-uppercase">Info</div><div class="fs-4 fw-bold">{{ total_info }}</div></div>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white border-bottom-0 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="bi bi-pie-chart me-2 text-primary"></i>Alert type distribution</h6>
+        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#alertsTypeChartCollapse" aria-expanded="true" data-persist="alerts_type_chart_open">
+            <i class="bi bi-chevron-down"></i>
+        </button>
+    </div>
+    <div id="alertsTypeChartCollapse" class="collapse show" data-persist="alerts_type_chart_open">
+        <div class="card-body">
+            <div style="height: 280px;">
+                <canvas id="alertsTypeChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body py-3">
+        <form method="get" class="row g-3 align-items-end" id="alerts-filter-form">
+            <div class="col-md-3">
+                <label class="form-label small text-muted mb-1">Search</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                    <input type="text" name="q" class="form-control js-alerts-autosubmit" value="{{ q }}" placeholder="Search alert text...">
+                </div>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted mb-1">Severity</label>
+                <select name="severity" class="form-select js-alerts-autosubmit">
+                    <option value="">All severities</option>
+                    <option value="critical" {% if severity_filter == "critical" %}selected{% endif %}>Critical</option>
+                    <option value="warning" {% if severity_filter == "warning" %}selected{% endif %}>Warning</option>
+                    <option value="info" {% if severity_filter == "info" %}selected{% endif %}>Info</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted mb-1">Source</label>
+                <select name="source" class="form-select js-alerts-autosubmit">
+                    <option value="">All sources</option>
+                    {% for s in source_options %}
+                    <option value="{{ s }}" {% if source_filter == s %}selected{% endif %}>{{ s|title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted mb-1">Type</label>
+                <select name="alert_type" class="form-select js-alerts-autosubmit">
+                    <option value="">All types</option>
+                    {% for t_value, t_label in type_options %}
+                    <option value="{{ t_value }}" {% if type_filter == t_value %}selected{% endif %}>{{ t_label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if has_filters %}
+<div class="alert alert-light border d-flex align-items-center justify-content-between gap-3 mb-3" role="alert">
+    <span class="d-flex align-items-center gap-2">
+        <i class="bi bi-funnel-fill text-primary"></i>
+        <span>Showing filtered alerts.</span>
+    </span>
+    <a href="{% url 'alerts_list' %}?clear=1" class="btn btn-outline-primary btn-sm"><i class="bi bi-x-circle me-1"></i>Clear filters</a>
+</div>
+{% endif %}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <div class="small text-muted me-1">Showing {{ start_index }}-{{ end_index }} of {{ page_obj.paginator.count }} alerts</div>
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Table density">
+                <i class="bi bi-arrows-expand me-1"></i>Density
+            </button>
+            <ul class="dropdown-menu">
+                <li><button type="button" class="dropdown-item small py-1 ww-density" data-density="comfortable">Comfortable</button></li>
+                <li><button type="button" class="dropdown-item small py-1 ww-density" data-density="compact">Compact</button></li>
+            </ul>
+        </div>
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Select columns">
+                <i class="bi bi-layout-three-columns me-1"></i>Columns
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end p-2">
+                <li class="dropdown-header small">Show columns</li>
+                <li><label class="dropdown-item small"><input class="form-check-input me-2 col-toggle" type="checkbox" data-col="source" checked>Source</label></li>
+                <li><label class="dropdown-item small"><input class="form-check-input me-2 col-toggle" type="checkbox" data-col="type" checked>Type</label></li>
+                <li><label class="dropdown-item small"><input class="form-check-input me-2 col-toggle" type="checkbox" data-col="entity" checked>Item / Order</label></li>
+                <li><label class="dropdown-item small"><input class="form-check-input me-2 col-toggle" type="checkbox" data-col="quantity" checked>Quantity</label></li>
+                <li><label class="dropdown-item small"><input class="form-check-input me-2 col-toggle" type="checkbox" data-col="score" checked>Score</label></li>
+                <li><label class="dropdown-item small"><input class="form-check-input me-2 col-toggle" type="checkbox" data-col="status" checked>Status</label></li>
+                <li><label class="dropdown-item small"><input class="form-check-input me-2 col-toggle" type="checkbox" data-col="message" checked>Alert</label></li>
+                <li><label class="dropdown-item small"><input class="form-check-input me-2 col-toggle" type="checkbox" data-col="time" checked>Time</label></li>
+            </ul>
+        </div>
+    </div>
+    <div class="btn-group">
+        <button id="open-selected-btn" type="button" class="btn btn-sm btn-outline-primary" disabled>Open</button>
+        <button id="dismiss-selected-btn" type="submit" form="bulk-dismiss-form" class="btn btn-sm btn-outline-secondary" disabled>Dismiss</button>
+    </div>
+</div>
+
+<form method="post" action="{% url 'dismiss_alerts_bulk' %}" id="bulk-dismiss-form">
+    {% csrf_token %}
+    <div class="card shadow-sm border-0 ww-table-compact" id="alerts-table-card">
+        <div class="card-body p-0">
+            <div class="table-responsive ww-table-responsive">
+                <table class="table align-middle mb-0 ww-sticky-header">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 36px;"><input type="checkbox" id="select-all-alerts"></th>
+                            <th style="width: 130px;">
+                                <a href="?{% querystring request sort=sort|toggle_sort:'severity' page=1 %}" class="text-decoration-none text-dark">
+                                    Severity {% if sort == 'severity' %}<i class="bi bi-arrow-up"></i>{% elif sort == '-severity' %}<i class="bi bi-arrow-down"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th style="width: 130px;" data-col="source">
+                                <a href="?{% querystring request sort=sort|toggle_sort:'source' page=1 %}" class="text-decoration-none text-dark">
+                                    Source {% if sort == 'source' %}<i class="bi bi-arrow-up"></i>{% elif sort == '-source' %}<i class="bi bi-arrow-down"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th style="width: 120px;" data-col="type">
+                                <a href="?{% querystring request sort=sort|toggle_sort:'type' page=1 %}" class="text-decoration-none text-dark">
+                                    Type {% if sort == 'type' %}<i class="bi bi-arrow-up"></i>{% elif sort == '-type' %}<i class="bi bi-arrow-down"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th style="width: 220px;" data-col="entity">
+                                <a href="?{% querystring request sort=sort|toggle_sort:'entity' page=1 %}" class="text-decoration-none text-dark">
+                                    Item / Order {% if sort == 'entity' %}<i class="bi bi-arrow-up"></i>{% elif sort == '-entity' %}<i class="bi bi-arrow-down"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th style="width: 110px;" data-col="quantity">
+                                <a href="?{% querystring request sort=sort|toggle_sort:'quantity' page=1 %}" class="text-decoration-none text-dark">
+                                    Qty {% if sort == 'quantity' %}<i class="bi bi-arrow-up"></i>{% elif sort == '-quantity' %}<i class="bi bi-arrow-down"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th style="width: 110px;" data-col="score">
+                                <a href="?{% querystring request sort=sort|toggle_sort:'score' page=1 %}" class="text-decoration-none text-dark">
+                                    Score {% if sort == 'score' %}<i class="bi bi-arrow-up"></i>{% elif sort == '-score' %}<i class="bi bi-arrow-down"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th style="width: 130px;" data-col="status">
+                                <a href="?{% querystring request sort=sort|toggle_sort:'status' page=1 %}" class="text-decoration-none text-dark">
+                                    Status {% if sort == 'status' %}<i class="bi bi-arrow-up"></i>{% elif sort == '-status' %}<i class="bi bi-arrow-down"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th data-col="message">
+                                <a href="?{% querystring request sort=sort|toggle_sort:'message' page=1 %}" class="text-decoration-none text-dark">
+                                    Alert {% if sort == 'message' %}<i class="bi bi-arrow-up"></i>{% elif sort == '-message' %}<i class="bi bi-arrow-down"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th style="width: 170px;" data-col="time">
+                                <a href="?{% querystring request sort=sort|toggle_sort:'time' page=1 %}" class="text-decoration-none text-dark">
+                                    Time {% if sort == 'time' %}<i class="bi bi-arrow-up"></i>{% elif sort == '-time' %}<i class="bi bi-arrow-down"></i>{% endif %}
+                                </a>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for alert in alerts %}
+                        <tr class="alerts-row-{{ alert.severity }}">
+                            <td>
+                                <input type="checkbox" class="alert-row-check" name="selected_alerts" value="{{ alert.dismiss_token }}" data-url="{{ alert.url }}">
+                            </td>
+                            <td>
+                                {% if alert.severity == "critical" %}
+                                <span class="badge text-bg-danger">Critical</span>
+                                {% elif alert.severity == "warning" %}
+                                <span class="badge text-bg-warning">Warning</span>
+                                {% else %}
+                                <span class="badge text-bg-primary">Info</span>
+                                {% endif %}
+                            </td>
+                            <td data-col="source">
+                                {% if alert.source == "stock" %}
+                                <span class="badge alerts-source-badge text-bg-warning">Stock</span>
+                                {% elif alert.source == "forecast" %}
+                                <span class="badge alerts-source-badge text-bg-info">Forecast</span>
+                                {% elif alert.source == "anomaly" %}
+                                <span class="badge alerts-source-badge text-bg-danger">Anomaly</span>
+                                {% elif alert.source == "orders" %}
+                                <span class="badge alerts-source-badge text-bg-primary">Orders</span>
+                                {% elif alert.source == "access" %}
+                                <span class="badge alerts-source-badge text-bg-secondary">Access</span>
+                                {% else %}
+                                <span class="badge alerts-source-badge text-bg-light text-dark">{{ alert.source|default:"-"|title }}</span>
+                                {% endif %}
+                            </td>
+                            <td data-col="type"><span class="small text-muted">{{ alert.type_label|default:"-" }}</span></td>
+                            <td data-col="entity">
+                                {% if alert.item_name %}
+                                    <a href="{{ alert.url }}" class="text-decoration-none">{{ alert.item_name }}</a>
+                                {% else %}
+                                    <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td data-col="quantity">{{ alert.quantity|default:"—" }}</td>
+                            <td data-col="score">{{ alert.score|default:"—" }}</td>
+                            <td data-col="status">{{ alert.status|default:"—" }}</td>
+                            <td data-col="message"><a href="{{ alert.url }}" class="text-decoration-none">{{ alert.message }}</a></td>
+                            <td data-col="time"><span class="small text-muted">{{ alert.time|default:"-" }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="10" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox fs-3 d-block mb-2"></i>No alerts match your filters.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</form>
+
+{% include "inventory/includes/pagination.html" with page_obj=page_obj per_page=per_page per_page_choices=per_page_choices %}
+
+{{ chart_labels|json_script:"alertTypeLabels" }}
+{{ chart_values|json_script:"alertTypeValues" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+(function() {
+    var form = document.getElementById('alerts-filter-form');
+    if (!form) return;
+    var storageKey = 'warewolf_alert_filters_v1';
+    var paramsNow = new URLSearchParams(window.location.search);
+    if (paramsNow.get('clear') === '1') {
+        try { localStorage.removeItem(storageKey); } catch (e) {}
+        window.location.replace(window.location.pathname);
+        return;
+    }
+    function parseQuery() {
+        var p = new URLSearchParams(window.location.search);
+        return {
+            q: p.get('q') || '',
+            severity: p.get('severity') || '',
+            source: p.get('source') || '',
+            alert_type: p.get('alert_type') || '',
+            sort: p.get('sort') || '',
+            per_page: p.get('per_page') || ''
+        };
+    }
+    function hasAnyFilter(q) {
+        return !!(q.q || q.severity || q.source || q.alert_type);
+    }
+    function saveState() {
+        var state = {
+            q: form.querySelector('input[name="q"]')?.value || '',
+            severity: form.querySelector('select[name="severity"]')?.value || '',
+            source: form.querySelector('select[name="source"]')?.value || '',
+            alert_type: form.querySelector('select[name="alert_type"]')?.value || '',
+            sort: (new URLSearchParams(window.location.search)).get('sort') || '',
+            per_page: (new URLSearchParams(window.location.search)).get('per_page') || ''
+        };
+        try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch (e) {}
+    }
+    var urlState = parseQuery();
+    if (!hasAnyFilter(urlState)) {
+        try {
+            var saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
+            if (hasAnyFilter(saved)) {
+                var params = new URLSearchParams(window.location.search);
+                if (saved.q) params.set('q', saved.q);
+                if (saved.severity) params.set('severity', saved.severity);
+                if (saved.source) params.set('source', saved.source);
+                if (saved.alert_type) params.set('alert_type', saved.alert_type);
+                if (saved.sort) params.set('sort', saved.sort);
+                if (saved.per_page) params.set('per_page', saved.per_page);
+                if (params.toString()) {
+                    window.location.replace(window.location.pathname + '?' + params.toString());
+                    return;
+                }
+            }
+        } catch (e) {}
+    }
+    var timer;
+    form.querySelectorAll('.js-alerts-autosubmit').forEach(function(el) {
+        var ev = el.tagName === 'INPUT' ? 'input' : 'change';
+        el.addEventListener(ev, function() {
+            clearTimeout(timer);
+            timer = setTimeout(function() {
+                var pageInput = form.querySelector('input[name="page"]');
+                if (!pageInput) {
+                    pageInput = document.createElement('input');
+                    pageInput.type = 'hidden';
+                    pageInput.name = 'page';
+                    form.appendChild(pageInput);
+                }
+                pageInput.value = '1';
+                saveState();
+                form.submit();
+            }, el.tagName === 'INPUT' ? 250 : 0);
+        });
+    });
+    saveState();
+
+    var checks = Array.prototype.slice.call(document.querySelectorAll('.alert-row-check'));
+    var selectAll = document.getElementById('select-all-alerts');
+    var dismissBtn = document.getElementById('dismiss-selected-btn');
+    var openBtn = document.getElementById('open-selected-btn');
+
+    function updateBulkState() {
+        var selected = checks.filter(function(c) { return c.checked; });
+        var hasSelection = selected.length > 0;
+        dismissBtn.disabled = !hasSelection;
+        openBtn.disabled = !hasSelection;
+        if (selectAll) {
+            selectAll.checked = hasSelection && selected.length === checks.length;
+            selectAll.indeterminate = hasSelection && selected.length < checks.length;
+        }
+    }
+
+    if (selectAll) {
+        selectAll.addEventListener('change', function() {
+            checks.forEach(function(c) { c.checked = selectAll.checked; });
+            updateBulkState();
+        });
+    }
+    checks.forEach(function(c) { c.addEventListener('change', updateBulkState); });
+    updateBulkState();
+
+    if (openBtn) {
+        openBtn.addEventListener('click', function() {
+            var first = checks.find(function(c) { return c.checked; });
+            if (!first) return;
+            var url = first.getAttribute('data-url');
+            if (url) window.location.href = url;
+        });
+    }
+
+    // Column visibility persistence (same pattern as other list pages)
+    var COL_KEY = 'warewolf_alerts_list_columns';
+    function loadColumnPrefs() {
+        try {
+            var s = localStorage.getItem(COL_KEY);
+            return s ? JSON.parse(s) : null;
+        } catch (e) { return null; }
+    }
+    function saveColumnPrefs(obj) {
+        try { localStorage.setItem(COL_KEY, JSON.stringify(obj)); } catch (e) {}
+    }
+    function applyColumnVisibility() {
+        var prefs = loadColumnPrefs();
+        document.querySelectorAll('.col-toggle').forEach(function(cb) {
+            var col = cb.dataset.col;
+            if (prefs && prefs[col] !== undefined) cb.checked = prefs[col];
+            var visible = cb.checked;
+            document.querySelectorAll('[data-col="' + col + '"]').forEach(function(el) {
+                el.style.display = visible ? '' : 'none';
+            });
+        });
+    }
+    document.querySelectorAll('.col-toggle').forEach(function(cb) {
+        cb.addEventListener('change', function() {
+            var prefs = loadColumnPrefs() || {};
+            prefs[cb.dataset.col] = cb.checked;
+            saveColumnPrefs(prefs);
+            applyColumnVisibility();
+        });
+    });
+    applyColumnVisibility();
+
+    // Density selector (same pattern as other list pages)
+    var DENSITY_KEY = 'warewolf_alerts_list_density';
+    document.querySelectorAll('.ww-density').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var d = this.dataset.density;
+            var card = document.getElementById('alerts-table-card');
+            if (card) {
+                card.classList.remove('ww-table-compact');
+                if (d === 'compact') card.classList.add('ww-table-compact');
+            }
+            try { localStorage.setItem(DENSITY_KEY, d); } catch (e) {}
+        });
+    });
+    try {
+        var savedD = localStorage.getItem(DENSITY_KEY);
+        if (savedD === 'compact') document.getElementById('alerts-table-card')?.classList.add('ww-table-compact');
+    } catch (e) {}
+
+    var labelsEl = document.getElementById('alertTypeLabels');
+    var valuesEl = document.getElementById('alertTypeValues');
+    var canvas = document.getElementById('alertsTypeChart');
+    if (labelsEl && valuesEl && canvas) {
+        var labels = JSON.parse(labelsEl.textContent || '[]');
+        var values = JSON.parse(valuesEl.textContent || '[]');
+        new Chart(canvas.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: ['#f59e0b', '#06b6d4', '#ef4444', '#3b82f6', '#64748b', '#8b5cf6'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } }
+            }
+        });
+    }
+})();
+</script>
+{% endblock %}

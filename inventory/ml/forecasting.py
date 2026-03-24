@@ -7,7 +7,7 @@ import pandas as pd
 from django.db.models import Sum
 from django.utils import timezone
 
-from inventory.models import Order, Item
+from inventory.models import Order, OrderLine, Item
 
 @dataclass
 class ForecastOutput:
@@ -25,14 +25,14 @@ def _daily_demand_series(item: Item, days_back: int = 120) -> pd.DataFrame:
     start = end - timedelta(days=days_back)
 
     qs = (
-        Order.objects.filter(
+        OrderLine.objects.filter(
             item=item,
-            order_type=Order.TYPE_SALE,
-            order_date__range=(start, end),
+            order__order_type=Order.TYPE_SALE,
+            order__order_date__range=(start, end),
         )
-        .values("order_date")
+        .values("order__order_date")
         .annotate(y=Sum("quantity"))
-        .order_by("order_date")
+        .order_by("order__order_date")
     )
 
     # Build continuous daily series (fill missing days with 0 demand)
@@ -40,7 +40,7 @@ def _daily_demand_series(item: Item, days_back: int = 120) -> pd.DataFrame:
         df = pd.DataFrame({"ds": [], "y": []})
         return df
 
-    df = pd.DataFrame([{"ds": r["order_date"], "y": int(r["y"] or 0)} for r in qs])
+    df = pd.DataFrame([{"ds": r["order__order_date"], "y": int(r["y"] or 0)} for r in qs])
     df["ds"] = pd.to_datetime(df["ds"])
     df = df.set_index("ds").asfreq("D", fill_value=0).reset_index()
     df["y"] = df["y"].astype(float)

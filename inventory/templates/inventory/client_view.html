@@ -1,0 +1,191 @@
+{% extends "inventory/base_contacts.html" %}
+{% load humanize %}
+
+{% block contacts_content %}
+<div class="client-detail-page">
+    <!-- HEADER -->
+    <div class="d-flex flex-wrap gap-4 mb-4">
+        <div class="flex-shrink-0">
+            {% if client.image %}
+                <img src="{{ client.image.url }}" alt="{{ client.name }}" class="rounded-3 shadow-sm" style="width: 80px; height: 80px; object-fit: cover;">
+            {% else %}
+                <span class="rounded-3 bg-success bg-opacity-10 d-flex align-items-center justify-content-center shadow-sm" style="width: 80px; height: 80px;">
+                    <i class="bi bi-people text-success" style="font-size: 2rem;"></i>
+                </span>
+            {% endif %}
+        </div>
+        <div class="flex-grow-1 min-width-0">
+            <nav aria-label="breadcrumb" class="mb-2">
+                <ol class="breadcrumb mb-0 small">
+                    <li class="breadcrumb-item"><a href="{% url 'contacts_list' %}?type=customers" class="text-decoration-none">Customers</a></li>
+                    <li class="breadcrumb-item active">{{ client.name }}</li>
+                </ol>
+            </nav>
+            <h1 class="fw-bold mb-1">{{ client.name }}</h1>
+            <p class="text-muted mb-2">{% if client.description %}{{ client.description|truncatewords:20 }}{% else %}Sale order partner{% endif %}</p>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                {% if client.is_active %}
+                    <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Active</span>
+                {% else %}
+                    <span class="badge bg-secondary"><i class="bi bi-pause-circle me-1"></i>Inactive</span>
+                {% endif %}
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <a href="{% url 'contacts_list' %}?type=customers" class="btn btn-outline-secondary ms-auto">
+                    <i class="bi bi-arrow-left me-1"></i>Back to customers
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats row: 2 | center | 2 layout -->
+    <div class="row g-3 mb-4 align-items-stretch">
+        <div class="col-6 col-lg-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-3 px-3 text-center">
+                    <span class="text-muted small d-block">Sale orders</span>
+                    <span class="fw-bold text-success fs-4">{{ orders_count }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-3 px-3 text-center">
+                    <span class="text-muted small d-block">Total value</span>
+                    <span class="fw-bold text-success fs-4">€{{ total_value|floatformat:2|intcomma }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-4 d-flex justify-content-center align-items-stretch">
+            <div class="card border-0 shadow-sm h-100 w-100 border-primary border-2">
+                <div class="card-body py-3 px-3 text-center d-flex flex-column justify-content-center">
+                    <span class="text-muted small text-uppercase fw-semibold">Items purchased</span>
+                    <span class="fw-bold text-info fs-4 mt-1">{{ items_purchased_count }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-3 px-3 text-center">
+                    <span class="text-muted small d-block">Currency</span>
+                    <span class="fw-bold text-dark">{{ client.currency|default:"—" }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-3 px-3 text-center">
+                    <span class="text-muted small d-block">Tax ID</span>
+                    <span class="fw-bold text-dark small">{{ client.tax_id|default:"—" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chart -->
+    {% if chart_labels %}
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-semibold"><i class="bi bi-bar-chart text-primary me-2"></i>Order value by month</h5>
+        </div>
+        <div class="card-body">
+            <div class="chart-box" style="height: 220px;">
+                <canvas id="clientOrderChart"></canvas>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Sale orders table -->
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-semibold">
+                <i class="bi bi-cart-check text-success me-2"></i>Sale orders
+                <span class="badge bg-light text-dark ms-2">{{ orders_count }}</span>
+            </h6>
+            <a href="{% url 'order_list' %}?type=sale&q={{ client.name|urlencode }}" class="btn btn-sm btn-outline-primary py-0">View all</a>
+        </div>
+        <div class="card-body p-0">
+            {% if orders %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light"><tr><th>Date</th><th>Item</th><th class="text-end">Qty</th><th>Status</th><th></th></tr></thead>
+                    <tbody>
+                        {% for o in orders %}
+                        {% for ln in o.lines.all %}
+                        <tr>
+                            <td>{% if forloop.parentloop.first %}{{ o.order_date|date:"d M Y" }}{% endif %}</td>
+                            <td>
+                                <a href="{% url 'item_detail' ln.item.id %}" class="d-flex align-items-center gap-2 text-decoration-none text-dark">
+                                    {% if ln.item.image %}
+                                        <img src="{{ ln.item.image.url }}" alt="" class="rounded" style="width: 32px; height: 32px; object-fit: cover;">
+                                    {% else %}
+                                        <span class="rounded bg-light d-inline-flex align-items-center justify-content-center" style="width: 32px; height: 32px;"><i class="bi bi-box-seam text-muted"></i></span>
+                                    {% endif %}
+                                    {{ ln.item.name|truncatechars:30 }}
+                                </a>
+                            </td>
+                            <td class="text-end">{{ ln.quantity }}</td>
+                            <td>{% if forloop.first %}{{ o.get_status_display }}{% endif %}</td>
+                            <td>{% if forloop.first %}<a href="{% url 'order_detail' o.id %}" class="btn btn-sm btn-outline-secondary">View</a>{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                        {% empty %}
+                        <tr><td colspan="5" class="text-muted text-center py-4">No sale orders yet</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-4 text-muted">
+                <i class="bi bi-cart display-6 d-block mb-2 opacity-50"></i>
+                <p class="mb-1 small">No sale orders to this customer</p>
+                <a href="{% url 'order_create' %}?type=sale" class="btn btn-sm btn-outline-primary">Create order</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if chart_labels %}
+{{ chart_labels|json_script:"clientChartLabels" }}
+{{ chart_values|json_script:"clientChartValues" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+(function() {
+    var ctx = document.getElementById('clientOrderChart');
+    var labelsEl = document.getElementById('clientChartLabels');
+    var valuesEl = document.getElementById('clientChartValues');
+    if (!ctx || !labelsEl || !valuesEl) return;
+    var labels = JSON.parse(labelsEl.textContent);
+    var values = JSON.parse(valuesEl.textContent);
+    new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Order value (€)',
+                data: values,
+                borderColor: 'rgba(25, 135, 84, 0.9)',
+                backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: function(ctx) { return '€' + ctx.parsed.y.toLocaleString(); } } }
+            },
+            scales: {
+                y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

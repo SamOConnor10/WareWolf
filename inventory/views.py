@@ -36,10 +36,16 @@ from django.conf import settings
 from django.contrib.auth.decorators import user_passes_test
 from django.views.decorators.cache import never_cache
 from django.utils.dateparse import parse_date
+from django.core.cache import cache
+from collections import Counter
+import logging
 from .recommendation_engine import (
-    recalculate_all_recommendations,
+    ensure_recommendations_fresh,
     get_recommendations_for_context,
 )
+from .context_processors import get_alerts_for_user
+
+logger = logging.getLogger(__name__)
 
 # Shared pagination settings for all list views
 DEFAULT_PER_PAGE = 20
@@ -157,7 +163,7 @@ def logout_view(request):
         logout(request)
         return redirect("login")
 
-    return render(request, "registration/logout_confirm.html")
+    return redirect("dashboard")
 
 
 @login_required
@@ -197,7 +203,7 @@ def global_search(request):
             "type": "Supplier",
             "name": s.name,
             "sub": s.email or "",
-            "url": reverse("supplier_edit", args=[s.id]),
+            "url": reverse("supplier_view", args=[s.id]),
         })
 
     # Customers -> edit page (no separate profile view; edit shows details)
@@ -208,7 +214,7 @@ def global_search(request):
             "type": "Customer",
             "name": c.name,
             "sub": c.email,
-            "url": reverse("client_edit", args=[c.id]),
+            "url": reverse("client_view", args=[c.id]),
         })
 
     # Locations -> profile/view page (already correct)
@@ -328,6 +334,7 @@ def dismiss_notification(request, notification_id):
     n = get_object_or_404(Notification, id=notification_id, user=request.user)
     n.is_read = True
     n.save(update_fields=["is_read"])
+    cache.delete(f"ctx_notifications:{request.user.pk}")
     return redirect(request.META.get("HTTP_REFERER", "dashboard"))
 
 
@@ -342,6 +349,7 @@ def dismiss_alert(request):
         dismissed = set(request.session.get("dismissed_alerts", []))
         dismissed.add(key)
         request.session["dismissed_alerts"] = list(dismissed)
+    cache.delete(f"ctx_notifications:{request.user.pk}")
     return redirect(request.META.get("HTTP_REFERER", "dashboard"))
 
 
@@ -357,53 +365,94 @@ def dashboard(request):
     from inventory.models import DemandAnomaly
 
     # ---- basic counts ----
-    total_items = Item.objects.count()
-    low_stock_items = Item.objects.filter(quantity__lte=F("reorder_level")).count()
-    supplier_count = Supplier.objects.count()
-    client_count = Client.objects.count()
+    total_items = Item.objects.filter(is_active=True).count()
+    low_stock_items = Item.objects.filter(is_active=True, quantity__lte=F("reorder_level")).count()
+    active_supplier_count = Supplier.objects.filter(is_active=True).count()
+    active_customer_count = Client.objects.filter(is_active=True).count()
+    pending_purchase_orders_count = Order.objects.filter(
+        status=Order.STATUS_PENDING,
+        order_type=Order.TYPE_PURCHASE,
+    ).count()
+    pending_sales_orders_count = Order.objects.filter(
+        status=Order.STATUS_PENDING,
+        order_type=Order.TYPE_SALE,
+    ).count()
+    low_stock_percent = round((low_stock_items / total_items) * 100, 1) if total_items else 0
 
-    # ---- inventory trend (configurable: 7, 14, or 30 days) ----
-    today = timezone.now().date()
+    # ---- inventory trend + forecasting ----
+    today = timezone.localdate()
     trend_days = int(request.GET.get("trend_days", 30))
-    trend_days = max(7, min(30, trend_days))  # clamp 7–30
-    start_date = today - datetime.timedelta(days=trend_days - 1)
+    trend_days = max(7, min(30, trend_days))
+    debug_trend = request.GET.get("debug_trend") == "1"
 
-    # Exclude today from history: StockHistory for today is incomplete (only items with deliveries)
-    history_qs = (
-        StockHistory.objects
-        .filter(date__range=(start_date, today), date__lt=today)
-        .values("date")
-        .annotate(total_qty=Sum("quantity"))
-        .order_by("date")
+    from .inventory_forecasting import (
+        evaluate_model,
+        generate_forecast,
+        get_daily_inventory_series,
     )
 
-    stock_dates = [row["date"].strftime("%d %b") for row in history_qs]
-    stock_values = [int(row["total_qty"]) for row in history_qs]
+    full_series_df = get_daily_inventory_series(days_back=180)
+    trend_df = full_series_df.tail(trend_days).copy()
 
-    # Always append today with live total (Sum of all Item.quantity) — the only accurate source
-    current_total = Item.objects.aggregate(t=Sum("quantity"))["t"] or 0
-    today_str = today.strftime("%d %b")
-    stock_dates.append(today_str)
-    stock_values.append(int(current_total))
+    stock_dates = [d.strftime("%d %b") for d in trend_df["date"]]
+    stock_values = [int(v) for v in trend_df["total_units"]]
+    current_stock_value = int(stock_values[-1]) if stock_values else 0
 
-    # Simple Moving Average forecast (average of last 7 data points, includes today)
-    forecast = None
-    sma_dates = []
-    sma_values = []
-    sma_trend = "stable"  # up, down, stable
-    if stock_values:
-        window = min(len(stock_values), 7)
-        sma = sum(stock_values[-window:]) / window
-        forecast = round(sma)
-        sma_dates = stock_dates[-window:]
-        sma_values = stock_values[-window:]
-        if window >= 2:
-            first_val = sma_values[0]
-            last_val = sma_values[-1]
-            if last_val > first_val:
-                sma_trend = "up"
-            elif last_val < first_val:
-                sma_trend = "down"
+    inventory_change_pct = None
+    if len(stock_values) >= 2 and stock_values[0] > 0:
+        inventory_change_pct = round(((stock_values[-1] - stock_values[0]) / stock_values[0]) * 100, 1)
+
+    forecast_days = int(request.GET.get("forecast_days", 7))
+    if forecast_days not in (7, 14, 30):
+        forecast_days = 7
+    chart_history_days = 60 if forecast_days == 30 else 45
+
+    forecast_result = generate_forecast(
+        series_df=full_series_df,
+        horizon_days=forecast_days,
+        chart_history_days=chart_history_days,
+    )
+    model_eval = evaluate_model(series_df=full_series_df, horizon_days=forecast_days)
+
+    forecast_metric_value = (
+        forecast_result["next_day_forecast"] if forecast_result["next_day_forecast"] else forecast_result["latest_forecast"]
+    )
+    forecast_badge = forecast_result["trend_badge"]
+    forecast_change_pct = float(forecast_result.get("forecast_change_pct", 0.0))
+    forecast_has_significant_change = bool(forecast_result.get("has_significant_change", False))
+
+    if forecast_badge == "rising":
+        forecast_insight = (
+            f"Projected inventory increases by {abs(forecast_change_pct):.1f}% over the next {forecast_days} days, "
+            "indicating a net stock build-up."
+        )
+    elif forecast_badge == "falling":
+        forecast_insight = (
+            f"Projected inventory decreases by {abs(forecast_change_pct):.1f}% over the next {forecast_days} days, "
+            "indicating a net stock drawdown."
+        )
+    else:
+        forecast_insight = f"No significant change in stock levels expected over the next {forecast_days} days."
+
+    if debug_trend:
+        live_total = int(Item.objects.filter(is_active=True).aggregate(total=Sum("quantity"))["total"] or 0)
+        logger.info(
+            "Forecast debug | points=%s trend_points=%s live_total=%s series_last=%s model=%s fallback=%s",
+            len(full_series_df),
+            len(stock_values),
+            live_total,
+            current_stock_value,
+            forecast_result.get("model_used"),
+            forecast_result.get("used_fallback"),
+        )
+        if model_eval.get("can_evaluate"):
+            logger.info(
+                "Forecast backtest | baseline=%s advanced=%s train=%s valid=%s",
+                model_eval.get("baseline"),
+                model_eval.get("advanced"),
+                model_eval.get("train_points"),
+                model_eval.get("validation_points"),
+            )
 
     # ---- weekly orders activity (last 6 weeks, split by purchase vs sale) ----
     orders_start = today - datetime.timedelta(weeks=5)
@@ -472,27 +521,43 @@ def dashboard(request):
     location_labels = [row["location__name"] or "No location" for row in location_qs]
     location_values = [int(row["total_qty"]) for row in location_qs]
 
-    # -------------------------------
-    # SMART RECOMMENDATIONS (unified engine)
-    # -------------------------------
-    recalculate_all_recommendations()
-    recommendations = get_recommendations_for_context("dashboard", limit=8)
-
     is_manager_or_admin = request.user.groups.filter(name__in=["Manager", "Admin"]).exists()
 
     context = {
         "total_items": total_items,
         "low_stock_items": low_stock_items,
-        "supplier_count": supplier_count,
-        "client_count": client_count,
+        "active_supplier_count": active_supplier_count,
+        "active_customer_count": active_customer_count,
+        "pending_purchase_orders_count": pending_purchase_orders_count,
+        "pending_sales_orders_count": pending_sales_orders_count,
+        "low_stock_percent": low_stock_percent,
 
         "trend_days": trend_days,
         "stock_dates": stock_dates,
         "stock_values": stock_values,
-        "forecast": forecast,
-        "sma_dates": sma_dates,
-        "sma_values": sma_values,
-        "sma_trend": sma_trend,
+        "current_stock_value": current_stock_value,
+        "inventory_change_pct": inventory_change_pct,
+        "forecast_metric_value": forecast_metric_value,
+        "forecast_days": forecast_days,
+        "forecast_badge": forecast_badge,
+        "forecast_chart_labels": json.dumps(forecast_result["chart_labels"]),
+        "forecast_hist_values": json.dumps(forecast_result["chart_hist_values"]),
+        "forecast_values": json.dumps(forecast_result["chart_forecast_values"]),
+        "forecast_lower_values": json.dumps(forecast_result["chart_lower_values"]),
+        "forecast_upper_values": json.dumps(forecast_result["chart_upper_values"]),
+        "forecast_points_json": json.dumps(forecast_result.get("forecast_points", [])),
+        "forecast_model_name": forecast_result.get("model_used", "baseline"),
+        "forecast_model_used_fallback": forecast_result.get("used_fallback", False),
+        "forecast_model_fallback_reason": forecast_result.get("fallback_reason", ""),
+        "forecast_eval": model_eval,
+        "forecast_change_pct": round(forecast_change_pct, 2),
+        "forecast_has_significant_change": forecast_has_significant_change,
+        "forecast_expected_range_lower": forecast_result.get("expected_range_lower", 0),
+        "forecast_expected_range_upper": forecast_result.get("expected_range_upper", 0),
+        "forecast_history_days_used": forecast_result.get("history_days_used", 0),
+        "forecast_confidence_label": forecast_result.get("confidence_label", "Medium"),
+        "forecast_today_index": forecast_result.get("chart_today_index", 0),
+        "forecast_insight_text": forecast_insight,
 
         "weekly_order_labels": weekly_labels,
         "weekly_order_counts": weekly_counts,
@@ -512,9 +577,11 @@ def dashboard(request):
         "pie_values": pie_values,
         "location_labels": location_labels,
         "location_values": location_values,
-
-        "recommendations": recommendations,
-        "context_type": "dashboard",
+        "debug_trend": debug_trend,
+        "trend_today_index": (len(stock_dates) - 1) if stock_dates else 0,
+        "trend_debug_start_units": stock_values[0] if stock_values else 0,
+        "trend_debug_end_units": stock_values[-1] if stock_values else 0,
+        "trend_debug_forecast_points": len(forecast_result.get("forecast_points", [])),
     }
 
     response = render(request, "inventory/dashboard.html", context)
@@ -542,68 +609,21 @@ def item_forecast(request, pk):
         "hide_stock_sidebar": True,
     })
 
-from inventory.ml.anomaly import detect_sales_anomalies, save_anomalies
+from .alerts_jobs import run_anomaly_scan_and_notify
+from .tasks import run_anomaly_scan_task
 @login_required
 @user_passes_test(is_manager_or_admin)
 def run_anomaly_scan_view(request):
-    # Use the defaults that worked for you
-    results = detect_sales_anomalies(
-        days_back=120,
-        min_points=10,
-        last_n_days_only=180,
-        z_thresh_low=2.5,
-        z_thresh_med=3.5,
-        z_thresh_high=4.5,
-    )
-
-    created, created_objs = save_anomalies(results)
-
-    # Notifications for new MED/HIGH
-    from django.apps import apps
-    from django.contrib.auth import get_user_model
-
-    Notification = apps.get_model("inventory", "Notification")
-    User = get_user_model()
-
-    # Notify managers/admins for new MEDIUM/HIGH anomalies (one per item per scan)
-    notify = [a for a in created_objs if a.severity in ("MEDIUM", "HIGH")]
-
-    if notify:
-        # keep highest severity/score anomaly per item
-        sev_rank = {"HIGH": 2, "MEDIUM": 1, "LOW": 0}
-        best_by_item = {}
-
-        for a in notify:
-            cur = best_by_item.get(a.item_id)
-            if (
-                cur is None
-                or sev_rank.get(a.severity, 0) > sev_rank.get(cur.severity, 0)
-                or (a.severity == cur.severity and a.score > cur.score)
-            ):
-                best_by_item[a.item_id] = a
-
-        recipients = User.objects.filter(groups__name__in=["Manager", "Admin"]).distinct()
-
-        from django.urls import reverse
-        link = reverse("item_forecast", args=[a.item_id])
-
-        for a in list(best_by_item.values())[:25]:
-            msg = (
-                f"Demand anomaly ({a.severity}): {a.item.name} on {a.date:%d/%m/%Y} "
-                f"(Qty {a.quantity}, Score {a.score:.2f})"
-            )
-            for u in recipients:
-                pref, _ = UserPreference.objects.get_or_create(user=u)
-                if not pref.notify_anomalies:
-                    continue
-
-                Notification.objects.create(
-                    user=u,
-                    message=msg,
-                    url=link,   # keep only if your Notification model actually has url
-                )
-
-    messages.success(request, f"Anomaly scan complete. Detected {len(results)} anomalies ({created} new).")
+    try:
+        run_anomaly_scan_task.delay()
+        messages.success(request, "Anomaly scan queued in background. Results will appear shortly.")
+    except Exception:
+        # Fallback to sync execution when broker/worker is unavailable.
+        summary = run_anomaly_scan_and_notify()
+        messages.success(
+            request,
+            f"Anomaly scan complete. Detected {summary['detected']} anomalies ({summary['created']} new).",
+        )
     return redirect("dashboard")
 
 
@@ -753,6 +773,13 @@ def item_list(request):
     location_id = request.GET.get("location")
     if location_id:
         items = items.filter(location_id=location_id)
+
+    # -------------------------
+    # SUPPLIER FILTER
+    # -------------------------
+    supplier_id = request.GET.get("supplier")
+    if supplier_id:
+        items = items.filter(supplier_id=supplier_id)
 
     categories = Category.objects.order_by("name")
     locations = Location.objects.order_by("name")
@@ -1732,11 +1759,14 @@ def order_list(request):
         ]
     )
 
-    # Recommendations for this context (purchase vs sale)
-    recalculate_all_recommendations()
-    recommendations = get_recommendations_for_context(
-        "purchase" if type_filter == "purchase" else "sale", limit=6
-    )
+    # Recommendations popup should only appear for manager/admin accounts.
+    is_manager_or_admin = request.user.groups.filter(name__in=["Manager", "Admin"]).exists()
+    recommendations = []
+    if is_manager_or_admin:
+        ensure_recommendations_fresh()
+        recommendations = get_recommendations_for_context(
+            "purchase" if type_filter == "purchase" else "sale", limit=6
+        )
 
     return render(request, "inventory/order_list.html", {
         "orders": orders,
@@ -1949,6 +1979,97 @@ def order_create(request):
     if forced_type in ["purchase", "sale"]:
         initial["order_type"] = forced_type.upper()
 
+    # Pre-fill supplier/client from contact profile links (?supplier=ID or ?client=ID)
+    supplier_id = request.GET.get("supplier")
+    if supplier_id and (initial.get("order_type") == Order.TYPE_PURCHASE or forced_type == "purchase"):
+        try:
+            initial.setdefault("supplier", Supplier.objects.get(pk=supplier_id))
+        except (Supplier.DoesNotExist, ValueError):
+            pass
+    client_id = request.GET.get("client")
+    if client_id and (initial.get("order_type") == Order.TYPE_SALE or forced_type == "sale"):
+        try:
+            initial.setdefault("client", Client.objects.get(pk=client_id))
+        except (Client.DoesNotExist, ValueError):
+            pass
+
+    # Auto-fill from item's order/stock history (purchase orders)
+    item_for_history = initial.get("item")
+    if item_for_history and (initial.get("order_type") == Order.TYPE_PURCHASE or forced_type == "purchase"):
+        initial.setdefault("order_date", timezone.now().date())
+        # Last purchase order containing this item
+        last_po = (
+            Order.objects.filter(
+                order_type=Order.TYPE_PURCHASE,
+                lines__item=item_for_history,
+            )
+            .select_related("supplier", "receiving_location")
+            .prefetch_related("lines")
+            .order_by("-order_date")
+            .first()
+        )
+        if last_po:
+            if "supplier" not in initial or not initial["supplier"]:
+                initial.setdefault("supplier", last_po.supplier)
+            if "receiving_location" not in initial or not initial["receiving_location"]:
+                initial.setdefault("receiving_location", last_po.receiving_location)
+            initial.setdefault("priority", last_po.priority)
+            # Last unit_price for this item from any purchase order line
+            last_line = (
+                OrderLine.objects.filter(
+                    order__order_type=Order.TYPE_PURCHASE,
+                    item=item_for_history,
+                )
+                .order_by("-order__order_date")
+                .values_list("unit_price", flat=True)
+                .first()
+            )
+            if last_line is not None:
+                initial.setdefault("unit_price", last_line)
+        # Fallbacks from item
+        if not initial.get("supplier") and item_for_history.supplier_id:
+            initial["supplier"] = item_for_history.supplier
+        if not initial.get("receiving_location") and item_for_history.location_id:
+            initial["receiving_location"] = item_for_history.location
+        if "priority" not in initial or not initial["priority"]:
+            initial.setdefault("priority", Order.PRIORITY_MEDIUM)
+        if "unit_price" not in initial or initial["unit_price"] is None:
+            initial.setdefault("unit_price", item_for_history.unit_cost)
+
+    # Auto-fill for sale orders (from item's sale history)
+    if item_for_history and (initial.get("order_type") == Order.TYPE_SALE or forced_type == "sale"):
+        initial.setdefault("order_date", timezone.now().date())
+        last_so = (
+            Order.objects.filter(
+                order_type=Order.TYPE_SALE,
+                lines__item=item_for_history,
+            )
+            .select_related("client", "shipping_location")
+            .order_by("-order_date")
+            .first()
+        )
+        if last_so:
+            if "client" not in initial or not initial["client"]:
+                initial.setdefault("client", last_so.client)
+            if "shipping_location" not in initial or not initial["shipping_location"]:
+                initial.setdefault("shipping_location", last_so.shipping_location)
+            initial.setdefault("priority", last_so.priority)
+            last_line = (
+                OrderLine.objects.filter(
+                    order__order_type=Order.TYPE_SALE,
+                    item=item_for_history,
+                )
+                .order_by("-order__order_date")
+                .values_list("unit_price", flat=True)
+                .first()
+            )
+            if last_line is not None:
+                initial.setdefault("unit_price", last_line)
+        if "priority" not in initial or not initial["priority"]:
+            initial.setdefault("priority", Order.PRIORITY_MEDIUM)
+        if "unit_price" not in initial or initial["unit_price"] is None:
+            initial.setdefault("unit_price", item_for_history.unit_cost)
+
     # -------------------------
     # POST REQUEST (Form submit)
     # -------------------------
@@ -1978,7 +2099,12 @@ def order_create(request):
         formset = OrderLineFormSet(request.POST, instance=Order())
     else:
         form = OrderForm(initial=initial)
-        line_initial = [{"item": initial["item"], "quantity": initial.get("quantity", 1)}] if initial.get("item") else None
+        line_initial = None
+        if initial.get("item"):
+            line_data = {"item": initial["item"], "quantity": initial.get("quantity", 1)}
+            if initial.get("unit_price") is not None:
+                line_data["unit_price"] = initial["unit_price"]
+            line_initial = [line_data]
         formset = OrderLineFormSet(instance=Order(), initial=line_initial)
         if forced_type in ["purchase", "sale"]:
             form.fields["order_type"].widget.attrs.update({"disabled": True})
@@ -2102,75 +2228,128 @@ def order_mark_delivered(request, pk):
 @permission_required("inventory.view_client", raise_exception=True)
 def contacts_list(request):
     # ----------------------------
-    # 1. GET FILTERS
+    # 1. GET FILTERS (suppliers or customers only; default suppliers)
     # ----------------------------
-    type_filter = request.GET.get("type", "all")
+    type_filter = request.GET.get("type", "suppliers")
+    if type_filter not in ("suppliers", "customers"):
+        type_filter = "suppliers"
     q = request.GET.get("q", "").strip()
+    quick_filter = request.GET.get("filter", "")
+    min_orders_val = request.GET.get("min_orders", "")
+    min_value_val = request.GET.get("min_value", "")
+    has_contact = request.GET.get("has_contact", "")
+    status_filter = request.GET.get("status", "active")
 
     suppliers = Supplier.objects.all()
     clients = Client.objects.all()
+
+    def _contact_dict(obj, contact_type):
+        if contact_type == "supplier":
+            orders_qs = Order.objects.filter(supplier=obj)
+            line_total = OrderLine.objects.filter(order__supplier=obj).aggregate(
+                t=Sum(F("quantity") * F("unit_price"))
+            )["t"] or 0
+        else:
+            orders_qs = Order.objects.filter(client=obj)
+            line_total = OrderLine.objects.filter(order__client=obj).aggregate(
+                t=Sum(F("quantity") * F("unit_price"))
+            )["t"] or 0
+        return {
+            "id": obj.id,
+            "name": obj.name,
+            "type": contact_type,
+            "email": obj.email or "",
+            "phone": obj.phone or "",
+            "address": obj.address or "",
+            "website": getattr(obj, "website", "") or "",
+            "tax_id": getattr(obj, "tax_id", "") or "",
+            "description": getattr(obj, "description", "") or "",
+            "image": getattr(obj, "image", None),
+            "is_active": getattr(obj, "is_active", True),
+            "currency": getattr(obj, "currency", "") or "",
+            "orders": orders_qs.count(),
+            "total_value": line_total,
+        }
 
     # ----------------------------
     # 2. Build merged contact dataset
     # ----------------------------
     contacts = []
-
-    # SUPPLIERS
     for s in suppliers:
-        supplier_orders = Order.objects.filter(supplier=s)
-        line_total = OrderLine.objects.filter(order__supplier=s).aggregate(
-            t=Sum(F("quantity") * F("unit_price"))
-        )["t"] or 0
-        contacts.append({
-            "id": s.id,
-            "name": s.name,
-            "type": "supplier",
-            "email": s.email,
-            "phone": s.phone,
-            "address": s.address,
-            "orders": supplier_orders.count(),
-            "total_value": line_total,
-        })
-
-    # CUSTOMERS
+        contacts.append(_contact_dict(s, "supplier"))
     for c in clients:
-        client_orders = Order.objects.filter(client=c)
-        line_total = OrderLine.objects.filter(order__client=c).aggregate(
-            t=Sum(F("quantity") * F("unit_price"))
-        )["t"] or 0
-        contacts.append({
-            "id": c.id,
-            "name": c.name,
-            "type": "customer",
-            "email": c.email,
-            "phone": c.phone,
-            "address": c.address,
-            "orders": client_orders.count(),
-            "total_value": line_total,
-        })
+        contacts.append(_contact_dict(c, "customer"))
 
     # ----------------------------
-    # 3. Apply SEARCH FILTER
-    # ----------------------------
-    if q:
-        contacts = [
-            c for c in contacts
-            if q.lower() in c["name"].lower()
-            or q.lower() in c["email"].lower()
-            or q.lower() in c["phone"].lower()
-        ]
-
-    # ----------------------------
-    # 4. Apply TYPE FILTER
+    # 3. Apply TYPE FILTER (always suppliers or customers only - no "all")
     # ----------------------------
     if type_filter == "suppliers":
         contacts = [c for c in contacts if c["type"] == "supplier"]
-
     elif type_filter == "customers":
         contacts = [c for c in contacts if c["type"] == "customer"]
 
+    # Compute summary card counts (before search/dropdown filters, after type)
+    all_of_type = list(contacts)
+    count_with_orders = sum(1 for c in all_of_type if c["orders"] > 0)
+    count_no_orders = sum(1 for c in all_of_type if c["orders"] == 0)
+    count_high_value = sum(1 for c in all_of_type if float(c["total_value"] or 0) >= 500)
+    count_with_contact = sum(1 for c in all_of_type if (c.get("email") or "").strip() or (c.get("phone") or "").strip())
+
     # ----------------------------
-    # 4b. Sorting
+    # 4. Apply SEARCH FILTER
+    # ----------------------------
+    if q:
+        ql = q.lower()
+        contacts = [
+            c for c in contacts
+            if ql in (c["name"] or "").lower()
+            or ql in (c["email"] or "").lower()
+            or ql in (c["phone"] or "").lower()
+            or ql in (c["address"] or "").lower()
+            or ql in (c["website"] or "").lower()
+        ]
+
+    # ----------------------------
+    # 5. Apply QUICK FILTER (summary card clicks)
+    # ----------------------------
+    if quick_filter == "with_orders":
+        contacts = [c for c in contacts if c["orders"] > 0]
+    elif quick_filter == "no_orders":
+        contacts = [c for c in contacts if c["orders"] == 0]
+    elif quick_filter == "high_value":
+        contacts = [c for c in contacts if float(c["total_value"] or 0) >= 500]
+
+    # ----------------------------
+    # 6. Apply DROPDOWN FILTERS
+    # ----------------------------
+    if min_orders_val:
+        try:
+            mo = int(min_orders_val)
+            contacts = [c for c in contacts if c["orders"] >= mo]
+        except (ValueError, TypeError):
+            pass
+    if min_value_val:
+        try:
+            mv = Decimal(min_value_val)
+            contacts = [c for c in contacts if float(c["total_value"] or 0) >= float(mv)]
+        except (ValueError, TypeError, Exception):
+            pass
+    if has_contact == "yes":
+        contacts = [c for c in contacts if (c["email"] or "").strip() or (c["phone"] or "").strip()]
+    elif has_contact == "no":
+        contacts = [c for c in contacts if not ((c["email"] or "").strip() or (c["phone"] or "").strip())]
+
+    # ----------------------------
+    # 6b. STATUS FILTER (active/inactive)
+    # ----------------------------
+    if status_filter == "active":
+        contacts = [c for c in contacts if c.get("is_active", True)]
+    elif status_filter == "inactive":
+        contacts = [c for c in contacts if not c.get("is_active", True)]
+    # "all" -> no filter
+
+    # ----------------------------
+    # 7. Sorting
     # ----------------------------
     sort = request.GET.get("sort", "name")
     if sort == "name":
@@ -2217,14 +2396,26 @@ def contacts_list(request):
     page_obj = paginator.get_page(page_number)
 
     # ----------------------------
-    # 7. Summary cards
+    # Summary card counts
     # ----------------------------
     total_suppliers = suppliers.count()
     total_customers = clients.count()
     active_relationships = total_suppliers + total_customers
 
     # ----------------------------
-    # 8. Render page
+    # Filter state for UI (only show filter banner when user-applied filters)
+    # ----------------------------
+    has_filters = any([
+        q,
+        quick_filter,
+        min_orders_val,
+        min_value_val,
+        has_contact,
+        status_filter and status_filter != "active",
+    ])
+
+    # ----------------------------
+    # Render page
     # ----------------------------
     return render(request, "inventory/contacts_list.html", {
         "contacts": page_obj,
@@ -2236,14 +2427,20 @@ def contacts_list(request):
         "total_suppliers": total_suppliers,
         "total_customers": total_customers,
         "active_relationships": active_relationships,
-
-        # analytics
+        "count_with_orders": count_with_orders,
+        "count_no_orders": count_no_orders,
+        "count_high_value": count_high_value,
+        "active_filter": quick_filter,
+        "min_orders": min_orders_val,
+        "min_value": min_value_val,
+        "has_contact_filter": has_contact,
+        "status_filter": status_filter,
+        "count_with_contact": count_with_contact,
         "top_supplier": top_supplier,
         "top_customer": top_customer,
-
-        # keep search value in form
         "search_query": q,
         "sort": sort,
+        "has_filters": has_filters,
     })
 
 
@@ -2252,8 +2449,13 @@ def contacts_list(request):
 @permission_required("inventory.view_client", raise_exception=True)
 def contact_export_csv(request):
     """Export contacts to CSV, respecting current filters."""
-    type_filter = request.GET.get("type", "all")
+    type_filter = request.GET.get("type", "suppliers")
     q = request.GET.get("q", "").strip()
+    quick_filter = request.GET.get("filter", "")
+    min_orders_val = request.GET.get("min_orders", "")
+    min_value_val = request.GET.get("min_value", "")
+    has_contact = request.GET.get("has_contact", "")
+    status_filter = request.GET.get("status", "active")
     suppliers = Supplier.objects.all()
     clients = Client.objects.all()
     contacts = []
@@ -2263,10 +2465,11 @@ def contact_export_csv(request):
             t=Sum(F("quantity") * F("unit_price"))
         )["t"] or 0
         contacts.append({
-            "id": s.id, "name": s.name, "type": "supplier", "email": s.email, "phone": s.phone,
-            "address": s.address or "",
+            "id": s.id, "name": s.name, "type": "supplier", "email": s.email or "", "phone": s.phone or "",
+            "address": s.address or "", "website": getattr(s, "website", "") or "",
             "orders": supplier_orders.count(),
             "total_value": line_total,
+            "is_active": getattr(s, "is_active", True),
         })
     for c in clients:
         client_orders = Order.objects.filter(client=c)
@@ -2274,18 +2477,52 @@ def contact_export_csv(request):
             t=Sum(F("quantity") * F("unit_price"))
         )["t"] or 0
         contacts.append({
-            "id": c.id, "name": c.name, "type": "customer", "email": c.email, "phone": c.phone,
-            "address": c.address or "",
+            "id": c.id, "name": c.name, "type": "customer", "email": c.email or "", "phone": c.phone or "",
+            "address": c.address or "", "website": getattr(c, "website", "") or "",
             "orders": client_orders.count(),
             "total_value": line_total,
+            "is_active": getattr(c, "is_active", True),
         })
-    if q:
-        contacts = [c for c in contacts if q.lower() in (c["name"] or "").lower()
-                   or q.lower() in (c["email"] or "").lower() or q.lower() in (c["phone"] or "").lower()]
     if type_filter == "suppliers":
         contacts = [c for c in contacts if c["type"] == "supplier"]
     elif type_filter == "customers":
         contacts = [c for c in contacts if c["type"] == "customer"]
+    if q:
+        ql = q.lower()
+        contacts = [
+            c for c in contacts
+            if ql in (c["name"] or "").lower()
+            or ql in (c["email"] or "").lower()
+            or ql in (c["phone"] or "").lower()
+            or ql in (c["address"] or "").lower()
+            or ql in (c["website"] or "").lower()
+        ]
+    if quick_filter == "with_orders":
+        contacts = [c for c in contacts if c["orders"] > 0]
+    elif quick_filter == "no_orders":
+        contacts = [c for c in contacts if c["orders"] == 0]
+    elif quick_filter == "high_value":
+        contacts = [c for c in contacts if float(c["total_value"] or 0) >= 500]
+    if min_orders_val:
+        try:
+            mo = int(min_orders_val)
+            contacts = [c for c in contacts if c["orders"] >= mo]
+        except (ValueError, TypeError):
+            pass
+    if min_value_val:
+        try:
+            mv = Decimal(min_value_val)
+            contacts = [c for c in contacts if float(c["total_value"] or 0) >= float(mv)]
+        except (ValueError, TypeError, Exception):
+            pass
+    if has_contact == "yes":
+        contacts = [c for c in contacts if (c["email"] or "").strip() or (c["phone"] or "").strip()]
+    elif has_contact == "no":
+        contacts = [c for c in contacts if not ((c["email"] or "").strip() or (c["phone"] or "").strip())]
+    if status_filter == "active":
+        contacts = [c for c in contacts if c.get("is_active", True)]
+    elif status_filter == "inactive":
+        contacts = [c for c in contacts if not c.get("is_active", True)]
     sort = request.GET.get("sort", "name")
     if sort == "name":
         contacts = sorted(contacts, key=lambda c: (c["name"] or "").lower())
@@ -2308,10 +2545,11 @@ def contact_export_csv(request):
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="contacts.csv"'
     writer = csv.writer(response)
-    writer.writerow(["Name", "Type", "Email", "Phone", "Orders", "Total Value"])
+    writer.writerow(["Name", "Type", "Email", "Phone", "Website", "Address", "Orders", "Total Value"])
     for c in contacts:
         writer.writerow([
             c["name"], c["type"].title(), c["email"] or "", c["phone"] or "",
+            c.get("website", "") or "", c.get("address", "") or "",
             c["orders"], c["total_value"],
         ])
     return response
@@ -2321,14 +2559,14 @@ def contact_export_csv(request):
 @permission_required("inventory.add_supplier", raise_exception=True)
 def supplier_create(request):
     if request.method == "POST":
-        form = SupplierForm(request.POST)
+        form = SupplierForm(request.POST, request.FILES)
         if form.is_valid():
             form.save()
-            return redirect("contacts_list")
+            return redirect(reverse("contacts_list") + "?type=suppliers")
     else:
         form = SupplierForm()
 
-    return render(request, "inventory/supplier_form.html", {"form": form})
+    return render(request, "inventory/supplier_form.html", {"form": form, "hide_contacts_sidebar": True})
 
 
 @login_required
@@ -2337,17 +2575,18 @@ def supplier_edit(request, pk):
     supplier = get_object_or_404(Supplier, pk=pk)
 
     if request.method == "POST":
-        form = SupplierForm(request.POST, instance=supplier)
+        form = SupplierForm(request.POST, request.FILES, instance=supplier)
         if form.is_valid():
             form.save()
-            return redirect("contacts_list")
+            return redirect(reverse("contacts_list") + "?type=suppliers")
     else:
         form = SupplierForm(instance=supplier)
 
     return render(request, "inventory/supplier_form.html", {
         "form": form,
         "edit": True,
-        "supplier": supplier
+        "supplier": supplier,
+        "hide_contacts_sidebar": True,
     })
 
 
@@ -2358,7 +2597,7 @@ def supplier_delete(request, pk):
 
     if request.method == "POST":
         supplier.delete()
-        return redirect("contacts_list")
+        return redirect(reverse("contacts_list") + "?type=suppliers")
 
     return render(request, "inventory/supplier_confirm_delete.html", {
         "supplier": supplier
@@ -2366,17 +2605,57 @@ def supplier_delete(request, pk):
 
 
 @login_required
+@permission_required("inventory.view_supplier", raise_exception=True)
+@never_cache
+def supplier_view(request, pk):
+    """Supplier profile page with orders, stats, and details."""
+    supplier = get_object_or_404(Supplier, pk=pk)
+    orders = Order.objects.filter(supplier=supplier).prefetch_related("lines__item").select_related(
+        "receiving_location", "shipping_location"
+    ).order_by("-order_date")[:20]
+    orders_count = Order.objects.filter(supplier=supplier).count()
+    total_value = OrderLine.objects.filter(order__supplier=supplier).aggregate(
+        t=Sum(F("quantity") * F("unit_price"))
+    )["t"] or 0
+    items_supplied = Item.objects.filter(supplier=supplier, is_active=True).order_by("name")[:30]
+    items_supplied_count = Item.objects.filter(supplier=supplier).count()
+    # Chart data: order value by month (bar chart - different from location pie)
+    from django.db.models.functions import TruncMonth
+    order_values_by_month = (
+        OrderLine.objects.filter(order__supplier=supplier)
+        .annotate(month=TruncMonth("order__order_date"))
+        .values("month")
+        .annotate(total=Sum(F("quantity") * F("unit_price")))
+        .order_by("month")[:12]
+    )
+    chart_labels = [d["month"].strftime("%b %Y") if d["month"] else "" for d in order_values_by_month]
+    chart_values = [float(d["total"] or 0) for d in order_values_by_month]
+
+    return render(request, "inventory/supplier_view.html", {
+        "supplier": supplier,
+        "orders": orders,
+        "orders_count": orders_count,
+        "total_value": total_value,
+        "items_supplied": items_supplied,
+        "items_supplied_count": items_supplied_count,
+        "chart_labels": chart_labels,
+        "chart_values": chart_values,
+        "hide_contacts_sidebar": True,
+    })
+
+
+@login_required
 @permission_required("inventory.add_client", raise_exception=True)
 def client_create(request):
     if request.method == "POST":
-        form = ClientForm(request.POST)
+        form = ClientForm(request.POST, request.FILES)
         if form.is_valid():
             form.save()
-            return redirect("contacts_list")
+            return redirect(reverse("contacts_list") + "?type=customers")
     else:
         form = ClientForm()
 
-    return render(request, "inventory/client_form.html", {"form": form})
+    return render(request, "inventory/client_form.html", {"form": form, "hide_contacts_sidebar": True})
 
 
 @login_required
@@ -2385,17 +2664,18 @@ def client_edit(request, pk):
     client = get_object_or_404(Client, pk=pk)
 
     if request.method == "POST":
-        form = ClientForm(request.POST, instance=client)
+        form = ClientForm(request.POST, request.FILES, instance=client)
         if form.is_valid():
             form.save()
-            return redirect("contacts_list")
+            return redirect(reverse("contacts_list") + "?type=customers")
     else:
         form = ClientForm(instance=client)
 
     return render(request, "inventory/client_form.html", {
         "form": form,
         "edit": True,
-        "client": client
+        "client": client,
+        "hide_contacts_sidebar": True,
     })
 
 
@@ -2406,10 +2686,48 @@ def client_delete(request, pk):
 
     if request.method == "POST":
         client.delete()
-        return redirect("contacts_list")
+        return redirect(reverse("contacts_list") + "?type=customers")
 
     return render(request, "inventory/client_confirm_delete.html", {
         "client": client
+    })
+
+
+@login_required
+@permission_required("inventory.view_client", raise_exception=True)
+@never_cache
+def client_view(request, pk):
+    """Customer profile page with orders, stats, and details."""
+    client = get_object_or_404(Client, pk=pk)
+    orders = Order.objects.filter(client=client).prefetch_related("lines__item").select_related(
+        "receiving_location", "shipping_location"
+    ).order_by("-order_date")[:20]
+    orders_count = Order.objects.filter(client=client).count()
+    total_value = OrderLine.objects.filter(order__client=client).aggregate(
+        t=Sum(F("quantity") * F("unit_price"))
+    )["t"] or 0
+    items_purchased_count = OrderLine.objects.filter(order__client=client).values("item").distinct().count()
+    # Chart data: order value by month (bar chart - different from location pie)
+    from django.db.models.functions import TruncMonth
+    order_values_by_month = (
+        OrderLine.objects.filter(order__client=client)
+        .annotate(month=TruncMonth("order__order_date"))
+        .values("month")
+        .annotate(total=Sum(F("quantity") * F("unit_price")))
+        .order_by("month")[:12]
+    )
+    chart_labels = [d["month"].strftime("%b %Y") if d["month"] else "" for d in order_values_by_month]
+    chart_values = [float(d["total"] or 0) for d in order_values_by_month]
+
+    return render(request, "inventory/client_view.html", {
+        "client": client,
+        "orders": orders,
+        "orders_count": orders_count,
+        "total_value": total_value,
+        "items_purchased_count": items_purchased_count,
+        "chart_labels": chart_labels,
+        "chart_values": chart_values,
+        "hide_contacts_sidebar": True,
     })
 
 
@@ -2507,10 +2825,13 @@ def settings_view(request):
         if action == "reset_defaults":
             pref.delete()
             UserPreference.objects.create(user=request.user)
+            cache.delete(f"ctx_user_pref:{request.user.pk}")
+            cache.delete(f"ctx_notifications:{request.user.pk}")
             messages.success(request, "Settings reset to defaults.")
             return redirect(f"{reverse('settings')}?tab={active_tab}")
         if action == "clear_dismissed_alerts":
             request.session["dismissed_alerts"] = []
+            cache.delete(f"ctx_notifications:{request.user.pk}")
             messages.success(request, "Dismissed alerts have been restored.")
             return redirect(f"{reverse('settings')}?tab={active_tab}")
 
@@ -2522,6 +2843,8 @@ def settings_view(request):
         form = form_class(request.POST, instance=pref)
         if form.is_valid():
             form.save()
+            cache.delete(f"ctx_user_pref:{request.user.pk}")
+            cache.delete(f"ctx_notifications:{request.user.pk}")
             messages.success(request, "Settings saved.")
             return redirect(f"{reverse('settings')}?tab={active_tab}")
     else:
@@ -2532,3 +2855,137 @@ def settings_view(request):
         "form": form,
         "active_tab": active_tab,
     })
+
+
+@login_required
+def alerts_list(request):
+    alerts, _ = get_alerts_for_user(request, limit=None)
+
+    total_all = len(alerts)
+    total_critical = sum(1 for a in alerts if a.get("severity") == "critical")
+    total_warning = sum(1 for a in alerts if a.get("severity") == "warning")
+    total_info = sum(1 for a in alerts if a.get("severity") == "info")
+
+    severity = (request.GET.get("severity") or "").strip().lower()
+    source = (request.GET.get("source") or "").strip().lower()
+    alert_type = (request.GET.get("alert_type") or "").strip().lower()
+    q = (request.GET.get("q") or "").strip().lower()
+    sort = (request.GET.get("sort") or "severity").strip()
+    per_page = get_per_page(request)
+
+    source_options = sorted({(a.get("source") or "") for a in alerts if a.get("source")})
+    type_options = sorted({((a.get("type") or ""), (a.get("type_label") or (a.get("type") or "").replace("_", " ").title())) for a in alerts if a.get("type")}, key=lambda t: t[1])
+
+    filtered_alerts = alerts
+    if severity in {"critical", "warning", "info"}:
+        filtered_alerts = [a for a in filtered_alerts if a.get("severity") == severity]
+    if source:
+        filtered_alerts = [a for a in filtered_alerts if (a.get("source") or "").lower() == source]
+    if alert_type:
+        filtered_alerts = [a for a in filtered_alerts if (a.get("type") or "").lower() == alert_type]
+    if q:
+        filtered_alerts = [a for a in filtered_alerts if q in (a.get("message") or "").lower()]
+
+    if sort == "source":
+        filtered_alerts = sorted(filtered_alerts, key=lambda a: ((a.get("source") or "").lower(), (a.get("message") or "").lower()))
+    elif sort == "-source":
+        filtered_alerts = sorted(filtered_alerts, key=lambda a: ((a.get("source") or "").lower(), (a.get("message") or "").lower()), reverse=True)
+    elif sort == "time":
+        filtered_alerts = sorted(filtered_alerts, key=lambda a: a.get("time", ""))
+    elif sort == "-time":
+        filtered_alerts = sorted(filtered_alerts, key=lambda a: a.get("time", ""), reverse=True)
+    elif sort == "message":
+        filtered_alerts = sorted(filtered_alerts, key=lambda a: (a.get("message") or "").lower())
+    elif sort == "-message":
+        filtered_alerts = sorted(filtered_alerts, key=lambda a: (a.get("message") or "").lower(), reverse=True)
+    elif sort == "entity":
+        filtered_alerts = sorted(filtered_alerts, key=lambda a: (a.get("item_name") or "").lower())
+    elif sort == "-entity":
+        filtered_alerts = sorted(filtered_alerts, key=lambda a: (a.get("item_name") or "").lower(), reverse=True)
+    elif sort == "quantity":
+        filtered_alerts = sorted(filtered_alerts, key=lambda a: float(a.get("quantity") or 0))
+    elif sort == "-quantity":
+        filtered_alerts = sorted(filtered_alerts, key=lambda a: float(a.get("quantity") or 0), reverse=True)
+    elif sort == "score":
+        filtered_alerts = sorted(filtered_alerts, key=lambda a: float(a.get("score") or 0))
+    elif sort == "-score":
+        filtered_alerts = sorted(filtered_alerts, key=lambda a: float(a.get("score") or 0), reverse=True)
+    elif sort == "status":
+        filtered_alerts = sorted(filtered_alerts, key=lambda a: (a.get("status") or "").lower())
+    elif sort == "-status":
+        filtered_alerts = sorted(filtered_alerts, key=lambda a: (a.get("status") or "").lower(), reverse=True)
+    elif sort == "type":
+        filtered_alerts = sorted(filtered_alerts, key=lambda a: ((a.get("type_label") or "").lower(), (a.get("message") or "").lower()))
+    elif sort == "-type":
+        filtered_alerts = sorted(filtered_alerts, key=lambda a: ((a.get("type_label") or "").lower(), (a.get("message") or "").lower()), reverse=True)
+    elif sort == "-severity":
+        severity_order = {"critical": 2, "warning": 1, "info": 0}
+        filtered_alerts = sorted(filtered_alerts, key=lambda a: (severity_order.get(a.get("severity"), -1), a.get("time", "")), reverse=False)
+    else:
+        severity_order = {"critical": 0, "warning": 1, "info": 2}
+        filtered_alerts = sorted(filtered_alerts, key=lambda a: (severity_order.get(a.get("severity"), 9), a.get("time", "")), reverse=False)
+
+    for a in filtered_alerts:
+        if a.get("is_db_notification"):
+            a["dismiss_token"] = f"n:{a.get('id')}"
+        else:
+            a["dismiss_token"] = f"k:{a.get('key')}"
+
+    type_counter = Counter((a.get("source") or "other").title() for a in alerts)
+    chart_labels = list(type_counter.keys())
+    chart_values = list(type_counter.values())
+
+    paginator = Paginator(filtered_alerts, per_page)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    start_index = page_obj.start_index() if page_obj.paginator.count else 0
+    end_index = page_obj.end_index() if page_obj.paginator.count else 0
+
+    return render(request, "inventory/alerts_list.html", {
+        "alerts": page_obj.object_list,
+        "page_obj": page_obj,
+        "per_page": per_page,
+        "per_page_choices": PER_PAGE_CHOICES,
+        "start_index": start_index,
+        "end_index": end_index,
+        "severity_filter": severity,
+        "source_filter": source,
+        "type_filter": alert_type,
+        "q": request.GET.get("q", ""),
+        "sort": sort,
+        "source_options": source_options,
+        "type_options": type_options,
+        "total_count": paginator.count,
+        "total_all": total_all,
+        "total_critical": total_critical,
+        "total_warning": total_warning,
+        "total_info": total_info,
+        "has_filters": bool(severity or source or alert_type or q),
+        "chart_labels": chart_labels,
+        "chart_values": chart_values,
+    })
+
+
+@require_POST
+@login_required
+def dismiss_alerts_bulk(request):
+    tokens = request.POST.getlist("selected_alerts")
+    dismissed = set(request.session.get("dismissed_alerts", []))
+    notification_ids = []
+    for token in tokens:
+        if token.startswith("n:"):
+            try:
+                notification_ids.append(int(token.split(":", 1)[1]))
+            except (ValueError, TypeError):
+                continue
+        elif token.startswith("k:"):
+            key = token.split(":", 1)[1]
+            if key:
+                dismissed.add(key)
+
+    if notification_ids:
+        Notification.objects.filter(id__in=notification_ids, user=request.user).update(is_read=True)
+    request.session["dismissed_alerts"] = list(dismissed)
+    cache.delete(f"ctx_notifications:{request.user.pk}")
+    return redirect(request.META.get("HTTP_REFERER", reverse("alerts_list")))

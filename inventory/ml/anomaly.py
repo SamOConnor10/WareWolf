@@ -8,7 +8,7 @@ import pandas as pd
 from django.db.models import Sum
 from django.utils import timezone
 
-from inventory.models import Order, DemandAnomaly
+from inventory.models import Order, OrderLine, DemandAnomaly
 
 
 @dataclass
@@ -39,13 +39,16 @@ def build_daily_sales_df(days_back: int = 120) -> pd.DataFrame:
     start = end - timedelta(days=days_back)
 
     qs = (
-        Order.objects.filter(order_type=Order.TYPE_SALE, order_date__range=(start, end))
-        .values("item_id", "order_date")
+        OrderLine.objects.filter(
+            order__order_type=Order.TYPE_SALE,
+            order__order_date__range=(start, end),
+        )
+        .values("item_id", "order__order_date")
         .annotate(y=Sum("quantity"))
-        .order_by("item_id", "order_date")
+        .order_by("item_id", "order__order_date")
     )
 
-    rows = [{"item_id": r["item_id"], "ds": r["order_date"], "y": int(r["y"] or 0)} for r in qs]
+    rows = [{"item_id": r["item_id"], "ds": r["order__order_date"], "y": int(r["y"] or 0)} for r in qs]
     df = pd.DataFrame(rows)
     if df.empty:
         return df

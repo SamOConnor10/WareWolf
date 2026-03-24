@@ -1,0 +1,165 @@
+{% extends "inventory/base.html" %}
+
+{% block content %}
+
+<div class="d-flex mt-4">
+    <!-- ========================= -->
+    <!-- CONTACTS SIDEBAR          -->
+    <!-- ========================= -->
+    {% if not hide_contacts_sidebar %}
+    <div id="contactsSidebar" class="sidebar contacts-sidebar expanded shadow-sm">
+        <div class="sidebar-header">
+            <span class="sidebar-title">Contacts</span>
+            <button id="contactsSidebarToggle" class="toggle-btn" type="button" title="Collapse sidebar" aria-label="Toggle sidebar">
+                <i class="bi bi-chevron-left" id="contactsSidebarArrow"></i>
+            </button>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="{% url 'contacts_list' %}?type=suppliers" class="sidebar-link {% if type_filter == 'suppliers' %}active{% endif %}">
+                <i class="bi bi-truck"></i>
+                <span class="label">Suppliers</span>
+            </a>
+            <a href="{% url 'contacts_list' %}?type=customers" class="sidebar-link {% if type_filter == 'customers' %}active{% endif %}">
+                <i class="bi bi-people"></i>
+                <span class="label">Customers</span>
+            </a>
+        </nav>
+    </div>
+    <script>(function(){var s=document.getElementById("contactsSidebar");if(s){try{if(localStorage.getItem("warewolf_contacts_sidebar_collapsed")==="true")s.classList.add("collapsed");}catch(e){}}})();</script>
+    {% endif %}
+
+    <!-- ========================= -->
+    <!-- MAIN CONTENT              -->
+    <!-- ========================= -->
+    <div id="contactsMainContent" class="flex-grow-1 {% if hide_contacts_sidebar %}ms-0{% else %}ms-3{% endif %}">
+        {% block contacts_content %}{% endblock %}
+    </div>
+</div>
+
+<style>
+.contacts-sidebar {
+    width: 220px;
+    min-width: 220px;
+    transition: width 0.25s ease, min-width 0.25s ease;
+    background: linear-gradient(180deg, #fafbfc 0%, #f5f6f8 100%);
+    border-right: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 16px 0;
+    height: fit-content;
+    min-height: 200px;
+    position: sticky;
+    top: 24px;
+}
+.contacts-sidebar.collapsed {
+    width: 56px !important;
+    min-width: 56px !important;
+}
+.contacts-sidebar.collapsed .label,
+.contacts-sidebar.collapsed .sidebar-title { display: none !important; }
+.contacts-sidebar.collapsed #contactsSidebarArrow { transform: rotate(180deg); }
+.contacts-sidebar .sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px 12px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #e5e7eb;
+}
+.contacts-sidebar .sidebar-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6b7280;
+}
+.contacts-sidebar .toggle-btn {
+    display: flex;
+    align-items-center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    color: #6b7280;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+.contacts-sidebar .toggle-btn:hover {
+    background: #f3f4f6;
+    color: #111827;
+}
+.contacts-sidebar .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.contacts-sidebar .sidebar-link {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    margin: 0 8px;
+    text-decoration: none;
+    color: #374151 !important;
+    font-size: 0.9375rem;
+    transition: background 0.2s ease, color 0.2s ease;
+    border-radius: 8px;
+    font-weight: 500;
+}
+.contacts-sidebar .sidebar-link i {
+    font-size: 1.125rem;
+    margin-right: 12px;
+    flex-shrink: 0;
+    opacity: 0.9;
+}
+.contacts-sidebar .sidebar-link:hover {
+    background: #eff6ff;
+    color: #1d4ed8 !important;
+}
+.contacts-sidebar .sidebar-link.active {
+    background: #1d4ed8;
+    color: #ffffff !important;
+}
+.contacts-sidebar.collapsed .sidebar-link {
+    justify-content: center;
+    padding: 10px;
+}
+.contacts-sidebar.collapsed .sidebar-link i { margin-right: 0; }
+#contactsMainContent { padding-top: 15px; }
+
+body.dark-mode .contacts-sidebar {
+    background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
+    border-color: #374151;
+}
+body.dark-mode .contacts-sidebar .sidebar-header { border-color: #374151; }
+body.dark-mode .contacts-sidebar .sidebar-title { color: #9ca3af; }
+body.dark-mode .contacts-sidebar .toggle-btn {
+    background: #374151;
+    border-color: #4b5563;
+    color: #9ca3af;
+}
+body.dark-mode .contacts-sidebar .sidebar-link { color: #e5e7eb !important; }
+body.dark-mode .contacts-sidebar .sidebar-link:hover {
+    background: #374151;
+    color: #93c5fd !important;
+}
+body.dark-mode .contacts-sidebar .sidebar-link.active {
+    background: #2563eb;
+    color: #ffffff !important;
+}
+</style>
+
+<script>
+(function() {
+    var sidebar = document.getElementById("contactsSidebar");
+    var toggle = document.getElementById("contactsSidebarToggle");
+    if (toggle && sidebar) {
+        toggle.onclick = function () {
+            sidebar.classList.toggle("collapsed");
+            try { localStorage.setItem("warewolf_contacts_sidebar_collapsed", sidebar.classList.contains("collapsed")); } catch (e) {}
+        };
+    }
+})();
+</script>
+
+{% endblock %}

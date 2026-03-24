@@ -9,7 +9,7 @@
     </div>
 
     <div class="card-footer d-flex justify-content-between">
-        <a href="{% url 'contacts_list' %}" class="btn btn-secondary">Cancel</a>
+        <a href="{% url 'contacts_list' %}?type=suppliers" class="btn btn-secondary">Cancel</a>
 
         {% if perms.inventory.delete_supplier %}
         <form method="post">

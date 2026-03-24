@@ -1,6 +1,32 @@
 {% extends "inventory/base_stock.html" %}
 {% load querystring %}
 
+{% block extra_head %}
+<script>
+(function(){
+  var p = window.location.pathname;
+  if (p !== '/items/' && p !== '/items') return;
+  var search = window.location.search || '';
+  var baseUrl = '{% url "item_list" %}';
+  if (search.indexOf('clear=1') !== -1) {
+    try { localStorage.removeItem('warewolf_item_list_params'); } catch (e) {}
+    var clean = baseUrl + search.replace(/[?&]clear=1/g, '').replace(/^&/, '?').replace(/\?$/, '');
+    window.location.replace(clean === baseUrl ? baseUrl : (clean.endsWith('?') ? clean.slice(0,-1) : clean) || baseUrl);
+    return;
+  }
+  if (!search || search === '?') {
+    try {
+      var saved = localStorage.getItem('warewolf_item_list_params');
+      if (saved && saved.length > 1) {
+        window.location.replace(baseUrl + (saved.startsWith('?') ? saved : '?' + saved));
+        return;
+      }
+    } catch (e) {}
+  }
+})();
+</script>
+{% endblock %}
+
 {% block stock_content %}
 
 <div class="stock-items-page">
@@ -372,27 +398,8 @@
     var STORAGE_KEY = 'warewolf_item_list_columns';
     var baseUrl = '{% url "item_list" %}';
     var search = window.location.search || '';
-    if (search.indexOf('clear=1') !== -1) {
-        try { localStorage.removeItem(PARAMS_KEY); } catch (e) {}
-        var clean = baseUrl + search.replace(/[?&]clear=1/g, '').replace(/^&/, '?').replace(/\?$/, '');
-        if (clean === baseUrl) window.location.replace(baseUrl);
-        else window.location.replace(clean.replace(/\?$/, '') ? clean : baseUrl);
-        return;
-    }
     if (search && search !== '?') {
         try { localStorage.setItem(PARAMS_KEY, search); } catch (e) {}
-    } else {
-        /* Skip auto-restore when there are flash messages (e.g. error from adjust) */
-        var hasFlash = document.querySelector('.ww-alerts .alert');
-        if (!hasFlash) {
-            try {
-                var saved = localStorage.getItem(PARAMS_KEY);
-                if (saved && saved.length > 1) {
-                    window.location.replace(baseUrl + (saved.startsWith('?') ? saved : '?' + saved));
-                    return;
-                }
-            } catch (e) {}
-        }
     }
 
     var form = document.getElementById('item-filter-form');
