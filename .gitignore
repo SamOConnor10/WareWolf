@@ -17,6 +17,11 @@ env/
 staticfiles/
 media/
 
+# Celery Beat local schedule (SQLite)
+celerybeat-schedule
+celerybeat-schedule-shm
+celerybeat-schedule-wal
+
 # IDE
 .vscode/
 .idea/

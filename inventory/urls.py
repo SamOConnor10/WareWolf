@@ -13,6 +13,9 @@ urlpatterns = [
     path("anomalies/<int:pk>/dismiss/", views.anomaly_dismiss, name="anomaly_dismiss"),
     path("anomalies/<int:pk>/review/", views.anomaly_review, name="anomaly_review"),
     path("anomalies/<int:pk>/undismiss/", views.anomaly_undismiss, name="anomaly_undismiss"),
+    path("anomalies/bulk/review/", views.anomaly_bulk_review, name="anomaly_bulk_review"),
+    path("anomalies/bulk/dismiss/", views.anomaly_bulk_dismiss, name="anomaly_bulk_dismiss"),
+    path("anomalies/bulk/undismiss/", views.anomaly_bulk_undismiss, name="anomaly_bulk_undismiss"),
     path("search/", views.global_search, name="global_search"),
 
     path("manager-requests/<int:request_id>/approve/", views.approve_manager_request, name="approve_manager_request"),

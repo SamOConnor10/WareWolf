@@ -1,0 +1,33 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# After this deploys:
+# 1. Create PostgreSQL + Redis in the Render dashboard and link them to this service
+#    so DATABASE_URL and REDIS_URL are set automatically.
+# 2. Set DJANGO_ALLOWED_HOSTS to your service hostname, e.g. warewolf-web.onrender.com
+# 3. Set DJANGO_CSRF_TRUSTED_ORIGINS to https://warewolf-web.onrender.com
+# 4. Copy the same DJANGO_SECRET_KEY to any optional Celery worker/beat services.
+#
+# Optional: add Background Worker services (see DEPLOYMENT.md) for Celery.
+
+services:
+  - type: web
+    name: warewolf-web
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    startCommand: gunicorn warewolf.wsgi:application --bind 0.0.0.0:$PORT
+    preDeployCommand: python manage.py migrate --noinput
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.8"
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: DJANGO_ALLOWED_HOSTS
+        sync: false
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        sync: false
+      - key: DJANGO_SECRET_KEY
+        sync: false
+      - key: DJANGO_DATABASE_SSL_REQUIRE
+        value: "true"

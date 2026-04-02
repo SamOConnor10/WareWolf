@@ -494,10 +494,75 @@ def dashboard(request):
 
     # ---- recent activity feed ----
     from inventory.models import Activity
-    recent_activity = Activity.objects.all()[:5]
+    # Compact card shows a short list (newest -> oldest). Expanded modal shows more history.
+    recent_activity = Activity.objects.all().order_by("-timestamp")[:5]
+    recent_activity_detail_list = Activity.objects.all().order_by("-timestamp")[:50]
+    recent_activity_export_list = [
+        {
+            "message": a.message,
+            "user": (a.user.username if a.user else "System"),
+            "timestamp": a.timestamp.isoformat(),
+        }
+        for a in recent_activity_detail_list
+    ]
 
     # ---- recent demand anomalies ----
-    recent_anomalies = DemandAnomaly.objects.filter(dismissed=False).select_related("item")[:8]
+    recent_anomalies = (
+        DemandAnomaly.objects
+        .filter(dismissed=False)
+        .select_related("item")
+        .order_by("-date", "-score")[:8]
+    )
+
+    # Demand anomalies expanded (modal) filters mimic the anomaly_list page,
+    # but render inside the dashboard instead of a separate page.
+    anom_severity = request.GET.get("anom_severity", "")
+    anom_show = request.GET.get("anom_show", "active")  # active | dismissed | all
+    anom_q = request.GET.get("q", "").strip()
+
+    anomalies_qs = DemandAnomaly.objects.select_related("item").order_by("-date", "-score")
+    if anom_severity:
+        anomalies_qs = anomalies_qs.filter(severity=anom_severity)
+    if anom_show == "active":
+        anomalies_qs = anomalies_qs.filter(dismissed=False)
+    elif anom_show == "dismissed":
+        anomalies_qs = anomalies_qs.filter(dismissed=True)
+    # "all" -> no filter
+    if anom_q:
+        anomalies_qs = anomalies_qs.filter(item__name__icontains=anom_q)
+
+    anomalies_heading_label = (
+        "Active anomalies" if anom_show == "active" else
+        "Dismissed anomalies" if anom_show == "dismissed" else
+        "All anomalies"
+    )
+
+    # Paginator for the detailed modal (so it behaves like the other list pages)
+    anomalies_per_page = get_per_page(request)
+    anomalies_paginator = Paginator(anomalies_qs, anomalies_per_page)
+    anomalies_page_obj = anomalies_paginator.get_page(request.GET.get("page"))
+    anomalies_detail_list = list(anomalies_page_obj.object_list)
+    anomalies_total_count = anomalies_paginator.count
+    def _export_score(val):
+        try:
+            v = float(val)
+            return 0.0 if v != v else v  # NaN -> 0
+        except (TypeError, ValueError):
+            return 0.0
+
+    # Plain list for {% json_script %} — avoids breaking the dashboard Chart.js block via </script> in names
+    anomalies_export_list = [
+        {
+            "item": a.item.name,
+            "date": a.date.isoformat(),
+            "quantity": int(a.quantity) if a.quantity is not None else 0,
+            "score": _export_score(a.score),
+            "severity": a.severity,
+        }
+        for a in anomalies_qs[:200]
+    ]
+    # String form kept for any callers/templates that still expect it; dashboard uses json_script + list
+    anomalies_export_json = json.dumps(anomalies_export_list)
 
     # ---- inventory-by-category pie data ----
     # Sum quantities grouped by category name
@@ -510,6 +575,15 @@ def dashboard(request):
 
     pie_labels = [row["category__name"] or "Uncategorised" for row in category_qs]
     pie_values = [int(row["total_qty"]) for row in category_qs]
+    pie_total_units = int(sum(pie_values)) if pie_values else 0
+    pie_table_rows = [
+        {
+            "label": lbl,
+            "qty": int(qty),
+            "pct": round(100.0 * int(qty) / pie_total_units, 2) if pie_total_units else 0.0,
+        }
+        for lbl, qty in zip(pie_labels, pie_values)
+    ]
 
     # ---- inventory-by-location (for chart next to category pie) ----
     location_qs = (
@@ -520,6 +594,10 @@ def dashboard(request):
     )
     location_labels = [row["location__name"] or "No location" for row in location_qs]
     location_values = [int(row["total_qty"]) for row in location_qs]
+    location_total_units = int(sum(location_values)) if location_values else 0
+    location_table_rows = [
+        {"label": lbl, "qty": int(qty)} for lbl, qty in zip(location_labels, location_values)
+    ]
 
     is_manager_or_admin = request.user.groups.filter(name__in=["Manager", "Admin"]).exists()
 
@@ -571,12 +649,29 @@ def dashboard(request):
         "top_items_counts": top_items_counts,
         "recent_activity": recent_activity,
         "recent_anomalies": recent_anomalies,
+        "recent_activity_detail_list": recent_activity_detail_list,
+        "recent_activity_export_list": recent_activity_export_list,
+        "anomalies_detail_list": anomalies_detail_list,
+        "anomalies_page_obj": anomalies_page_obj,
+        "anomalies_total_count": anomalies_total_count,
+        "anomalies_export_list": anomalies_export_list,
+        "anomalies_export_json": anomalies_export_json,
+        "anom_severity": anom_severity,
+        "anom_show": anom_show,
+        "anom_q": anom_q,
+        "anomalies_per_page": anomalies_per_page,
+        "per_page_choices": PER_PAGE_CHOICES,
+        "anomalies_heading_label": anomalies_heading_label,
         "is_manager_or_admin": is_manager_or_admin,
 
         "pie_labels": pie_labels,
         "pie_values": pie_values,
+        "pie_total_units": pie_total_units,
+        "pie_table_rows": pie_table_rows,
         "location_labels": location_labels,
         "location_values": location_values,
+        "location_total_units": location_total_units,
+        "location_table_rows": location_table_rows,
         "debug_trend": debug_trend,
         "trend_today_index": (len(stock_dates) - 1) if stock_dates else 0,
         "trend_debug_start_units": stock_values[0] if stock_values else 0,
@@ -666,6 +761,9 @@ def anomaly_review(request, pk):
     a.is_reviewed = True
     a.save(update_fields=["is_reviewed"])
     messages.success(request, "Marked anomaly as reviewed.")
+    next_url = request.POST.get("next") or request.GET.get("next")
+    if next_url and next_url.startswith("/"):
+        return redirect(next_url)
     return redirect("anomaly_list")
 
 from django.apps import apps
@@ -690,6 +788,9 @@ def anomaly_dismiss(request, pk):
     ).update(dismissed=True, dismissed_at=timezone.now())
 
     messages.success(request, "Dismissed anomaly.")
+    next_url = request.POST.get("next") or request.GET.get("next")
+    if next_url and next_url.startswith("/"):
+        return redirect(next_url)
     return redirect("anomaly_list")
 
 @require_POST
@@ -701,7 +802,82 @@ def anomaly_undismiss(request, pk):
     a.dismissed_at = None
     a.save(update_fields=["dismissed", "dismissed_at"])
     messages.success(request, "Restored anomaly.")
+    next_url = request.POST.get("next") or request.GET.get("next")
+    if next_url and next_url.startswith("/"):
+        return redirect(next_url)
     return redirect("anomaly_list")
+
+
+@require_POST
+@login_required
+@user_passes_test(is_manager_or_admin)
+def anomaly_bulk_review(request):
+    selected_ids = request.POST.getlist("selected_anomalies")
+    if not selected_ids:
+        messages.info(request, "No anomalies selected.")
+        return redirect(request.POST.get("next") or "dashboard")
+
+    DemandAnomaly.objects.filter(pk__in=selected_ids).update(is_reviewed=True)
+    messages.success(request, "Marked selected anomalies as reviewed.")
+
+    next_url = request.POST.get("next") or request.GET.get("next")
+    if next_url and next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect("dashboard")
+
+
+@require_POST
+@login_required
+@user_passes_test(is_manager_or_admin)
+def anomaly_bulk_dismiss(request):
+    selected_ids = request.POST.getlist("selected_anomalies")
+    if not selected_ids:
+        messages.info(request, "No anomalies selected.")
+        return redirect(request.POST.get("next") or "dashboard")
+
+    anomalies = (
+        DemandAnomaly.objects
+        .select_related("item")
+        .filter(pk__in=selected_ids)
+    )
+    now = timezone.now()
+    anomalies.update(dismissed=True, dismissed_at=now)
+
+    # Also dismiss matching notifications for each anomaly (clean up bell)
+    Notification = apps.get_model("inventory", "Notification")
+    for a in anomalies:
+        needle = f": {a.item.name} on {a.date:%d/%m/%Y} "
+        Notification.objects.filter(
+            user=request.user,
+            dismissed=False,
+            message__startswith="Demand anomaly (",
+            message__contains=needle,
+        ).update(dismissed=True, dismissed_at=now)
+
+    messages.success(request, "Dismissed selected anomalies.")
+
+    next_url = request.POST.get("next") or request.GET.get("next")
+    if next_url and next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect("dashboard")
+
+
+@require_POST
+@login_required
+@user_passes_test(is_manager_or_admin)
+def anomaly_bulk_undismiss(request):
+    selected_ids = request.POST.getlist("selected_anomalies")
+    if not selected_ids:
+        messages.info(request, "No anomalies selected.")
+        return redirect(request.POST.get("next") or "dashboard")
+
+    DemandAnomaly.objects.filter(pk__in=selected_ids).update(dismissed=False, dismissed_at=None)
+    messages.success(request, "Restored selected anomalies.")
+
+    next_url = request.POST.get("next") or request.GET.get("next")
+    if next_url and next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect("dashboard")
 
 
 # -------------------------------

@@ -260,15 +260,56 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title fw-bold" id="trendDetailModalLabel"><i class="bi bi-graph-up me-2"></i>Inventory Stock Trend (Last {{ trend_days }} Days)</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" id="downloadTrendCsvBtn" class="btn btn-sm btn-outline-primary"><i class="bi bi-download me-1"></i>Download CSV</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#trendHelpModal"><i class="bi bi-question-circle me-1"></i>Help</button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
             </div>
             <div class="modal-body">
                 <div class="row g-3 mb-3">
-                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Current stock units</div><div class="h4 mb-0 text-primary">{{ current_stock_value }}</div></div></div>
-                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Change over period</div><div class="h5 mb-0">{% if inventory_change_pct is not None %}{% if inventory_change_pct > 0 %}+{% endif %}{{ inventory_change_pct }}%{% else %}No baseline{% endif %}</div></div></div>
-                    <div class="col-12 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Selected range</div><div class="h5 mb-0">{{ trend_days }} days</div></div></div>
+                    <div class="col-6 col-md-3"><div class="forecast-metric-tile"><div class="small text-muted">Current stock units</div><div class="h4 mb-0 text-primary">{{ current_stock_value }}</div></div></div>
+                    <div class="col-6 col-md-3"><div class="forecast-metric-tile"><div class="small text-muted">Change over period</div><div class="h5 mb-0">{% if inventory_change_pct is not None %}{% if inventory_change_pct > 0 %}+{% endif %}{{ inventory_change_pct }}%{% else %}No baseline{% endif %}</div></div></div>
+                    <div class="col-6 col-md-3"><div class="forecast-metric-tile"><div class="small text-muted">Selected range</div><div class="h5 mb-0">{{ trend_days }} days</div></div></div>
+                    <div class="col-6 col-md-3"><div class="forecast-metric-tile"><div class="small text-muted">Daily points</div><div class="h5 mb-0">{{ stock_dates|length }}</div></div></div>
                 </div>
-                <div class="chart-box chart-box-modal"><canvas id="inventoryChartModal"></canvas></div>
+                <div class="chart-box chart-box-modal mb-3"><canvas id="inventoryChartModal"></canvas></div>
+                <div class="row g-3">
+                    <div class="col-lg-7">
+                        <div class="card border-0 bg-light-subtle h-100">
+                            <div class="card-body">
+                                <h6 class="fw-semibold mb-2">Stock insight</h6>
+                                <p class="mb-2">
+                                    {% if inventory_change_pct is not None and inventory_change_pct > 0 %}
+                                        Total on-hand units increased over the last {{ trend_days }} days compared with the start of this window.
+                                    {% elif inventory_change_pct is not None and inventory_change_pct < 0 %}
+                                        Total on-hand units decreased over the last {{ trend_days }} days compared with the start of this window.
+                                    {% else %}
+                                        Total on-hand units are relatively flat across the selected window.
+                                    {% endif %}
+                                </p>
+                                <ul class="mb-0 text-muted small">
+                                    <li>Each point is end-of-day total units across active stock items.</li>
+                                    <li>Range selector (7d / 14d / 30d) reloads the page with the same forecast horizon preserved.</li>
+                                    <li>Y-axis scale matches the projected inventory chart for easy comparison.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-5">
+                        <div class="card border-0 bg-light-subtle h-100">
+                            <div class="card-body">
+                                <h6 class="fw-semibold mb-2">How this series is built</h6>
+                                <p class="small text-muted mb-2">Figures are computed when you load the dashboard from your live database — not static placeholders.</p>
+                                <ul class="mb-0 text-muted small">
+                                    <li>Daily totals use stock snapshots where available, otherwise movements and adjustments are reconstructed into an end-of-day series.</li>
+                                    <li>The latest point is aligned with the current sum of item quantities so the chart matches warehouse reality.</li>
+                                    <li>This view is descriptive history only; projections use the separate model on the adjacent card.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -282,6 +323,7 @@
                 <h5 class="modal-title fw-bold" id="forecastDetailModalLabel"><i class="bi bi-graph-up-arrow me-2"></i>Projected Inventory Analysis (Next {{ forecast_days }} Days)</h5>
                 <div class="d-flex align-items-center gap-2">
                     <button type="button" id="downloadForecastCsvBtn" class="btn btn-sm btn-outline-primary"><i class="bi bi-download me-1"></i>Download CSV</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#forecastHelpModal"><i class="bi bi-question-circle me-1"></i>Help</button>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
             </div>
@@ -337,9 +379,562 @@
     </div>
 </div>
 
-<hr class="my-4">
+<!-- Help: projected inventory -->
+<div class="modal fade" id="forecastHelpModal" tabindex="-1" aria-labelledby="forecastHelpModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 520px;">
+        <div class="modal-content">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title fw-bold" id="forecastHelpModalLabel">Projected inventory</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-3">Everything here is calculated when you open the dashboard from your live warehouse data — numbers are not hard-coded.</p>
+                <h6 class="fw-semibold">What you are seeing</h6>
+                <ul class="small mb-3">
+                    <li><strong>Historical total units</strong> — end-of-day combined quantity across active items (same series as the stock trend card, with a shorter history window on the chart for clarity).</li>
+                    <li><strong>Projected units</strong> — model estimate for each future day; the dashed line starts after today.</li>
+                    <li><strong>Shaded band</strong> — upper and lower bounds from the model’s uncertainty interval (wider band = more uncertainty).</li>
+                    <li><strong>Today</strong> — vertical marker at the boundary between recorded history and the forecast.</li>
+                </ul>
+                <h6 class="fw-semibold">Summary tiles</h6>
+                <ul class="small mb-3">
+                    <li><strong>Projected inventory</strong> — headline figure (next-day or end-of-horizon style projection from the model output).</li>
+                    <li><strong>Forecast change</strong> — percentage move across the selected horizon; “No significant change” when the move is small.</li>
+                    <li><strong>Expected range</strong> — min–max from the confidence interval over the horizon.</li>
+                    <li><strong>Confidence</strong> — qualitative label derived from how tight that interval is.</li>
+                </ul>
+                <h6 class="fw-semibold">Projection insight &amp; metrics</h6>
+                <p class="small mb-2">The insight text summarises direction and magnitude. <strong>Model performance snapshot</strong> shows backtest errors (MAE, RMSE, MAPE) for a simple baseline versus the advanced model so you can judge fit on recent history.</p>
+                <h6 class="fw-semibold">Export</h6>
+                <p class="small mb-0"><strong>Download CSV</strong> exports dated projected values with lower and upper bounds for the current horizon.</p>
+            </div>
+        </div>
+    </div>
+</div>
 
-<!-- ORDERS ANALYTICS + TOP ITEM -->
+<!-- Help: stock trend -->
+<div class="modal fade" id="trendHelpModal" tabindex="-1" aria-labelledby="trendHelpModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 520px;">
+        <div class="modal-content">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title fw-bold" id="trendHelpModalLabel">Inventory stock trend</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-3">The line chart is built from your database each time you load the dashboard.</p>
+                <h6 class="fw-semibold">What the line shows</h6>
+                <p class="small mb-3">Each point is <strong>total units in stock at end of day</strong> (sum of quantities), for the last 7, 14, or 30 days depending on the selector.</p>
+                <h6 class="fw-semibold">Tiles</h6>
+                <ul class="small mb-3">
+                    <li><strong>Current stock units</strong> — value on the latest day in the window.</li>
+                    <li><strong>Change over period</strong> — percentage change from the first to the last day in the window.</li>
+                    <li><strong>Daily points</strong> — number of days plotted (may be fewer than the range if data started recently).</li>
+                </ul>
+                <h6 class="fw-semibold">Axis and comparison</h6>
+                <p class="small mb-0">The vertical scale is shared with the projected inventory chart so you can compare levels at a glance. X-axis labels use fixed spacing from “today” to keep dates readable.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Weekly orders expanded modal -->
+<div class="modal fade" id="ordersDetailModal" tabindex="-1" aria-labelledby="ordersDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen-xl-down modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="ordersDetailModalLabel"><i class="bi bi-cart-check me-2"></i>Weekly Orders Activity</h5>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" id="downloadOrdersCsvBtn" class="btn btn-sm btn-outline-primary"><i class="bi bi-download me-1"></i>Download CSV</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#ordersHelpModal"><i class="bi bi-question-circle me-1"></i>Help</button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3 mb-3">
+                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Orders this week</div><div class="h4 mb-0 text-primary">{{ this_week_orders }}</div></div></div>
+                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">vs last week</div><div class="h5 mb-0">{% if last_week_orders is not None %}{{ last_week_orders }}{% else %}—{% endif %}</div></div></div>
+                    <div class="col-12 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Weeks shown</div><div class="h5 mb-0">{{ weekly_order_labels|length }}</div></div></div>
+                </div>
+                <div class="chart-box chart-box-modal mb-3"><canvas id="ordersChartModal"></canvas></div>
+                <div class="row g-3">
+                    <div class="col-lg-7">
+                        <div class="card border-0 bg-light-subtle h-100">
+                            <div class="card-body">
+                                <h6 class="fw-semibold mb-2">Summary</h6>
+                                <p class="small mb-0 text-muted">Stacked bars count <strong>purchase</strong> and <strong>sale</strong> orders per calendar week. Figures update from the orders table when you refresh the dashboard. Click the chart on the main card to open the full order list.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-5">
+                        <div class="card border-0 bg-light-subtle h-100">
+                            <div class="card-body">
+                                <h6 class="fw-semibold mb-2">Tip</h6>
+                                <p class="small text-muted mb-0">Use CSV to paste into a spreadsheet or report. Week labels are the week start dates used for grouping.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="ordersHelpModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 440px;">
+        <div class="modal-content">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title fw-bold">Weekly orders chart</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body small">
+                <p class="text-muted">Data is aggregated from your <strong>Order</strong> records by week.</p>
+                <ul class="mb-0">
+                    <li><strong>Purchase</strong> — count of purchase-type orders in that week.</li>
+                    <li><strong>Sale</strong> — count of sale-type orders in that week.</li>
+                    <li>Bar height is the sum of both; tooltips show the breakdown.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Top demand expanded modal -->
+<div class="modal fade" id="topDemandDetailModal" tabindex="-1" aria-labelledby="topDemandDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen-xl-down modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="topDemandDetailModalLabel"><i class="bi bi-tag me-2"></i>Item demand (order frequency)</h5>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" id="downloadTopDemandCsvBtn" class="btn btn-sm btn-outline-primary"><i class="bi bi-download me-1"></i>Download CSV</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#topDemandHelpModal"><i class="bi bi-question-circle me-1"></i>Help</button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body">
+                {% if top_item %}
+                <div class="row g-3 mb-3">
+                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Top item</div><div class="h6 mb-0 text-truncate" title="{{ top_item.name }}">{{ top_item.name }}</div></div></div>
+                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Order lines</div><div class="h4 mb-0 text-primary">{{ top_item.total_orders }}</div></div></div>
+                    <div class="col-12 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Items ranked</div><div class="h5 mb-0">Top {{ top_items_labels|length }}</div></div></div>
+                </div>
+                <div class="chart-box chart-box-modal mb-3"><canvas id="topDemandChartModal"></canvas></div>
+                <div class="row g-3">
+                    <div class="col-lg-7">
+                        <div class="card border-0 bg-light-subtle h-100">
+                            <div class="card-body">
+                                <h6 class="fw-semibold mb-2">What this measures</h6>
+                                <p class="small text-muted mb-0">Each bar counts how many <strong>order lines</strong> reference that item (a simple demand-frequency proxy). Rankings refresh with your data when you load the dashboard.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-5">
+                        <div class="card border-0 bg-light-subtle h-100">
+                            <div class="card-body">
+                                <h6 class="fw-semibold mb-2">Actions</h6>
+                                <p class="small text-muted mb-0"><a href="{% url 'order_list' %}">View all orders</a> or open an item from the chart to see its forecast page.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">Not enough data to show demand ranking.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="topDemandHelpModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 440px;">
+        <div class="modal-content">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title fw-bold">Demand ranking</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body small">
+                <p class="text-muted">“Demand” here means <strong>how often the item appears on orders</strong>, not revenue or profit.</p>
+                <p class="text-muted mb-0">Long names are shortened on the chart; the modal tiles show the full top item name in a tooltip where space is tight.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Category expanded modal -->
+<div class="modal fade" id="pieDetailModal" tabindex="-1" aria-labelledby="pieDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen-xl-down modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="pieDetailModalLabel"><i class="bi bi-pie-chart me-2"></i>Inventory by category</h5>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" id="downloadPieCsvBtn" class="btn btn-sm btn-outline-primary"><i class="bi bi-download me-1"></i>Download CSV</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#pieHelpModal"><i class="bi bi-question-circle me-1"></i>Help</button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body">
+                {% if pie_labels %}
+                <div class="row g-3 mb-3">
+                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Categories</div><div class="h4 mb-0 text-primary">{{ pie_labels|length }}</div></div></div>
+                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Total units</div><div class="h5 mb-0">{{ pie_total_units }}</div></div></div>
+                    <div class="col-12 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">View</div><div class="h6 mb-0 text-muted">Share of stock by quantity</div></div></div>
+                </div>
+                <div class="chart-box chart-box-modal mb-3"><canvas id="pieChartModal"></canvas></div>
+                <div class="table-responsive border rounded mb-0" style="max-height: 220px;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light sticky-top"><tr><th>Category</th><th class="text-end">Units</th><th class="text-end">% of total</th></tr></thead>
+                        <tbody>
+                            {% for row in pie_table_rows %}
+                            <tr><td>{{ row.label }}</td><td class="text-end">{{ row.qty }}</td><td class="text-end">{{ row.pct }}%</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="text-muted small mt-2 mb-0">Percentages are computed from total units across categories (live data).</p>
+                {% else %}
+                <p class="text-muted mb-0">No category data to show.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="pieHelpModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 440px;">
+        <div class="modal-content">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title fw-bold">Category breakdown</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body small">
+                <p class="text-muted">Each slice is the <strong>sum of item quantities</strong> in that category. “Uncategorised” groups items with no category set.</p>
+                <p class="text-muted mb-0">Refresh the dashboard to pull the latest totals from the database.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Location expanded modal -->
+<div class="modal fade" id="locationDetailModal" tabindex="-1" aria-labelledby="locationDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen-xl-down modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="locationDetailModalLabel"><i class="bi bi-geo-alt me-2"></i>Inventory by location</h5>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" id="downloadLocationCsvBtn" class="btn btn-sm btn-outline-primary"><i class="bi bi-download me-1"></i>Download CSV</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#locationHelpModal"><i class="bi bi-question-circle me-1"></i>Help</button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body">
+                {% if location_labels %}
+                <div class="row g-3 mb-3">
+                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Locations shown</div><div class="h4 mb-0 text-primary">{{ location_labels|length }}</div></div></div>
+                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Units (top locations)</div><div class="h5 mb-0">{{ location_total_units }}</div></div></div>
+                    <div class="col-12 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Scope</div><div class="h6 mb-0 text-muted">Top 8 by quantity</div></div></div>
+                </div>
+                <div class="chart-box chart-box-modal mb-3"><canvas id="locationChartModal"></canvas></div>
+                <div class="table-responsive border rounded mb-0" style="max-height: 220px;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light sticky-top"><tr><th>Location</th><th class="text-end">Units</th></tr></thead>
+                        <tbody>
+                            {% for row in location_table_rows %}
+                            <tr><td>{{ row.label }}</td><td class="text-end">{{ row.qty }}</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No location data to show.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="locationHelpModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 440px;">
+        <div class="modal-content">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title fw-bold">Locations</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body small">
+                <p class="text-muted">Bars show <strong>total units</strong> stored in each location for the top few locations by quantity.</p>
+                <p class="text-muted mb-0">Assign locations to items to improve this breakdown.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent activity expanded (full history slice) -->
+<div class="modal fade" id="activityDetailModal" tabindex="-1" aria-labelledby="activityDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen-xl-down modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="activityDetailModalLabel"><i class="bi bi-clock-history me-2"></i>Recent Activity (Expanded)</h5>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" id="downloadActivityCsvBtn" class="btn btn-sm btn-outline-primary"><i class="bi bi-download me-1"></i>Download CSV</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#activityHelpModal"><i class="bi bi-question-circle me-1"></i>Help</button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3 mb-3">
+                    <div class="col-6 col-md-4">
+                        <div class="forecast-metric-tile">
+                            <div class="small text-muted">Items shown</div>
+                            <div class="h4 mb-0 text-primary">{{ recent_activity_detail_list|length }}</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-8">
+                        <div class="forecast-metric-tile">
+                            <div class="small text-muted">What counts as activity</div>
+                            <div class="h6 mb-0 text-muted">Orders, stock adjustments, and system events from your live data feed.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="max-height: min(60vh, 520px); overflow-y: auto;">
+                    {% if recent_activity_detail_list %}
+                        {% for act in recent_activity_detail_list %}
+                            <div class="d-flex align-items-start mb-3">
+                                <span class="badge bg-primary rounded-circle me-3" style="width:10px;height:10px;margin-top:8px;"></span>
+                                <div class="w-100">
+                                    <div class="d-flex justify-content-between gap-2">
+                                        <div class="me-2">
+                                            <strong>{{ act.message }}</strong>
+                                            <div class="text-muted small">
+                                                {% if act.user %}
+                                                    by <span class="fw-semibold">{{ act.user.username }}</span> ·
+                                                {% else %}
+                                                    by <span class="fw-semibold">System</span> ·
+                                                {% endif %}
+                                                {{ act.timestamp|timesince }} ago
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% if not forloop.last %}
+                                <hr class="my-2">
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="bi bi-activity text-muted" style="font-size: 2rem;"></i>
+                            <p class="text-muted mb-0 mt-2">No recent activity yet.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Demand anomalies expanded (full active list) -->
+<div class="modal fade" id="activityHelpModal" tabindex="-1" aria-hidden="true" aria-labelledby="activityHelpModalLabel">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 520px;">
+        <div class="modal-content">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title fw-bold" id="activityHelpModalLabel"><i class="bi bi-info-circle me-2"></i>Recent activity</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body small">
+                <p class="text-muted mb-3">This timeline is generated from your live system records when the dashboard loads.</p>
+                <h6 class="fw-semibold mb-2">What counts as activity</h6>
+                <ul class="mb-3">
+                    <li><strong>Orders</strong> (created / delivered / updated)</li>
+                    <li><strong>Stock updates</strong> (adjustments and inventory changes)</li>
+                    <li><strong>System events</strong> (alerts and automated actions)</li>
+                </ul>
+                <h6 class="fw-semibold mb-2">How timestamps work</h6>
+                <p class="text-muted mb-0">The “by …” line shows the user responsible for the event (or “System”). The relative time is computed from the event timestamp.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="anomaliesDetailModal" tabindex="-1" aria-labelledby="anomaliesDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen-xl-down modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="anomaliesDetailModalLabel"><i class="bi bi-exclamation-triangle me-2"></i>Demand anomalies</h5>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" id="downloadAnomaliesCsvBtn" class="btn btn-sm btn-outline-primary"><i class="bi bi-download me-1"></i>Download CSV</button>
+                    {% if is_manager_or_admin %}
+                        <a href="{% url 'run_anomaly_scan' %}" class="btn btn-sm btn-outline-success"><i class="bi bi-wand me-1"></i>Run scan</a>
+                    {% endif %}
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#anomaliesHelpModal"><i class="bi bi-question-circle me-1"></i>Help</button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="card shadow-sm border-0 anomalies-modal-filter-card mb-3">
+                    <div class="card-body py-3">
+                        <form method="get" id="anomalies-filter-form" action="{% url 'dashboard' %}" class="row g-3 align-items-end">
+                            <input type="hidden" name="trend_days" value="{{ trend_days }}">
+                            <input type="hidden" name="forecast_days" value="{{ forecast_days }}">
+                            <input type="hidden" name="open_anomalies" value="1">
+                            <input type="hidden" name="page" value="1">
+                            <input type="hidden" name="per_page" value="{{ anomalies_per_page }}">
+
+                            <div class="col-md-6">
+                                <label class="form-label small text-muted mb-1">Search</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                                    <input type="text" name="q" id="anomalies-search" class="form-control"
+                                           placeholder="Search by item name..."
+                                           value="{{ anom_q|default:'' }}"
+                                           autocomplete="off">
+                                </div>
+                            </div>
+
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1">Severity</label>
+                                <select name="anom_severity" id="anomalies-severity" class="form-select">
+                                    <option value="" {% if anom_severity == "" %}selected{% endif %}>All severities</option>
+                                    <option value="HIGH" {% if anom_severity == "HIGH" %}selected{% endif %}>High</option>
+                                    <option value="MEDIUM" {% if anom_severity == "MEDIUM" %}selected{% endif %}>Medium</option>
+                                    <option value="LOW" {% if anom_severity == "LOW" %}selected{% endif %}>Low</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1">Status</label>
+                                <select name="anom_show" id="anomalies-show" class="form-select">
+                                    <option value="active" {% if anom_show == "active" %}selected{% endif %}>Active</option>
+                                    <option value="dismissed" {% if anom_show == "dismissed" %}selected{% endif %}>Dismissed</option>
+                                    <option value="all" {% if anom_show == "all" %}selected{% endif %}>All</option>
+                                </select>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+                    <p class="text-muted small mb-0">
+                        Showing {% if anomalies_page_obj.paginator.count %}{{ anomalies_page_obj.start_index }}-{{ anomalies_page_obj.end_index }}{% else %}0{% endif %} of {{ anomalies_total_count }} anomalies
+                    </p>
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Table density">
+                            <i class="bi bi-arrows-expand me-1"></i>Density
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm p-2">
+                            <li><button type="button" class="dropdown-item small py-1 ww-density" data-density="comfortable">Comfortable</button></li>
+                            <li><button type="button" class="dropdown-item small py-1 ww-density" data-density="compact">Compact</button></li>
+                        </ul>
+                    </div>
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Select columns">
+                            <i class="bi bi-layout-three-columns me-1"></i>Columns
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm p-2" style="min-width: 240px;">
+                            <li class="dropdown-header small">Show columns</li>
+                            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="item" checked> Item</label></li>
+                            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="date" checked> Date</label></li>
+                            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="qty" checked> Qty</label></li>
+                            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="score" checked> Score</label></li>
+                            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="severity" checked> Severity</label></li>
+                            <li class="px-2"><label class="form-check small mb-1"><input type="checkbox" class="form-check-input col-toggle" data-col="status" checked> Status</label></li>
+                        </ul>
+                    </div>
+
+                    <div class="ms-auto d-flex gap-2 align-items-center" id="anomalies-actions-bar"
+                         data-review-url="{% url 'anomaly_bulk_review' %}"
+                         data-dismiss-url="{% url 'anomaly_bulk_dismiss' %}"
+                         data-undismiss-url="{% url 'anomaly_bulk_undismiss' %}">
+                        <span class="text-muted small" id="anomalies-selected-count"></span>
+                        <button id="btn-anomalies-review" type="button" class="btn btn-sm btn-outline-primary disabled" disabled>Mark Reviewed</button>
+                        <button id="btn-anomalies-dismiss" type="button" class="btn btn-sm btn-outline-danger disabled" disabled>Dismiss</button>
+                        <button id="btn-anomalies-undo" type="button" class="btn btn-sm btn-outline-secondary disabled" disabled>Undo</button>
+                    </div>
+                </div>
+
+                <form method="post" id="anomalies-bulk-form" action="{% url 'anomaly_bulk_review' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+
+                    <div class="card shadow-sm border-0 ww-table-compact" id="anomalies-table-card">
+                        <div class="table-responsive ww-table-responsive">
+                            <table class="table table-hover align-middle mb-0 ww-sticky-header" id="anomalies-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 36px;">
+                                            <input type="checkbox" class="form-check-input" id="select-all-anomalies" title="Select all">
+                                        </th>
+                                        <th data-col="item">Item</th>
+                                        <th data-col="date">Date</th>
+                                        <th data-col="qty" class="text-end">Qty</th>
+                                        <th data-col="score" class="text-end">Score</th>
+                                        <th data-col="severity">Severity</th>
+                                        <th data-col="status">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for a in anomalies_page_obj %}
+                                    <tr>
+                                        <td style="width: 36px;">
+                                            <input type="checkbox" class="form-check-input anomaly-row-check"
+                                                   name="selected_anomalies" value="{{ a.id }}">
+                                        </td>
+                                        <td data-col="item" class="text-truncate" style="max-width: 280px;">
+                                            <a href="{% url 'item_forecast' a.item.id %}" class="text-decoration-none">{{ a.item.name }}</a>
+                                        </td>
+                                        <td data-col="date">{{ a.date|date:"d/m/Y" }}</td>
+                                        <td data-col="qty" class="text-end">{{ a.quantity }}</td>
+                                        <td data-col="score" class="text-end">{{ a.score|floatformat:2 }}</td>
+                                        <td data-col="severity">
+                                            {% if a.severity == "HIGH" %}<span class="badge bg-danger">High</span>
+                                            {% elif a.severity == "MEDIUM" %}<span class="badge bg-warning text-dark">Medium</span>
+                                            {% else %}<span class="badge bg-success">Low</span>{% endif %}
+                                        </td>
+                                        <td data-col="status">
+                                            {% if a.dismissed %}
+                                                <span class="badge bg-secondary">Dismissed</span>
+                                            {% elif a.is_reviewed %}
+                                                <span class="badge bg-info text-dark">Reviewed</span>
+                                            {% else %}
+                                                <span class="badge bg-light text-dark">New</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr><td colspan="7" class="text-center text-muted py-4">No anomalies found for this filter.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </form>
+
+                {% include "inventory/includes/pagination.html" with page_obj=anomalies_page_obj per_page=anomalies_per_page per_page_choices=per_page_choices %}
+
+                <p class="text-muted small mt-2 mb-0">Generated via robust anomaly detection on daily sales demand.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="anomaliesHelpModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 480px;">
+        <div class="modal-content">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title fw-bold">Demand anomalies</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body small">
+                <p class="text-muted">Rows highlight days where <strong>sales demand</strong> for an item looks unusual versus recent history.</p>
+                <ul class="mb-3">
+                    <li><strong>Score</strong> — distance from the expected demand behaviour.</li>
+                    <li><strong>Severity</strong> — High / Medium / Low triage label.</li>
+                    <li><strong>Status</strong> — New / Reviewed / Dismissed (controlled by the filter and action buttons).</li>
+                </ul>
+                <p class="text-muted mb-0">Use the filter dropdowns to switch between Active, Dismissed, or All anomalies, and use the actions to review/dismiss/undo directly here.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row g-4 mb-4 align-items-start">
 
     <!-- Weekly Orders -->
@@ -366,6 +961,9 @@
                                     {% endif %}
                                 </span>
                             {% endif %}
+                            <div class="ms-auto">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#ordersDetailModal"><i class="bi bi-arrows-fullscreen me-1"></i>Detailed view</button>
+                            </div>
                         </div>
                         <div class="chart-box mb-2">
                             <canvas id="ordersChart"></canvas>
@@ -400,8 +998,9 @@
                             <h3 class="fw-bold text-primary mb-0">
                                 <a href="{% url 'item_forecast' top_item.pk %}" class="text-decoration-none text-primary hover-card">{{ top_item.name }}</a>
                             </h3>
-                            <span class="text-muted small">{{ top_item.total_orders }} orders</span>
-                            <a href="{% url 'order_list' %}" class="text-decoration-none small">View all orders</a>
+                            <div class="ms-auto">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#topDemandDetailModal"><i class="bi bi-arrows-fullscreen me-1"></i>Detailed view</button>
+                            </div>
                         </div>
                         {% if top_items_labels %}
                             <div class="chart-box mb-2">
@@ -431,12 +1030,15 @@
     <!-- Recent Activity -->
     <div class="col-md-6">
         <div class="card shadow-sm border-0 dashboard-card activity-anomalies-card">
-            <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseActivity" aria-expanded="true">
+            <div class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseActivity" aria-expanded="true" aria-label="Toggle recent activity">
                 <h5 class="fw-bold mb-0"><i class="bi bi-clock-history me-2"></i>Recent Activity</h5>
                 <i class="bi bi-chevron-down dashboard-chevron"></i>
-            </button>
+            </div>
             <div class="collapse show" id="collapseActivity" data-persist="dash_activity">
                 <div class="card-body pt-0">
+        <div class="d-flex justify-content-end align-items-center gap-2 mb-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#activityDetailModal"><i class="bi bi-arrows-fullscreen me-1"></i>Detailed view</button>
+        </div>
         {% if recent_activity %}
         {% for act in recent_activity %}
             <div class="d-flex align-items-start mb-3">
@@ -478,18 +1080,18 @@
     <!-- Recent Demand Anomalies -->
     <div class="col-md-6">
         <div class="card shadow-sm border-0 dashboard-card activity-anomalies-card">
-            <button type="button" class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseAnomalies" aria-expanded="true">
+            <div class="card-header d-flex justify-content-between align-items-center py-3 bg-transparent border-0 cursor-pointer btn-toggle w-100 text-start" data-bs-toggle="collapse" data-bs-target="#collapseAnomalies" aria-expanded="true" aria-label="Toggle recent demand anomalies">
                 <h5 class="fw-bold mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Recent Demand Anomalies</h5>
-                <div class="d-flex align-items-center gap-2">
-                    {% if is_manager_or_admin %}
-                    <a href="{% url 'anomaly_list' %}" class="btn btn-sm btn-outline-secondary" onclick="event.stopPropagation()">View all</a>
-                    <a href="{% url 'run_anomaly_scan' %}" class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation()">Run scan</a>
-                    {% endif %}
-                    <i class="bi bi-chevron-down dashboard-chevron"></i>
-                </div>
-            </button>
+                <i class="bi bi-chevron-down dashboard-chevron"></i>
+            </div>
             <div class="collapse show" id="collapseAnomalies" data-persist="dash_anomalies">
                 <div class="card-body pt-0">
+        <div class="d-flex justify-content-end align-items-center gap-2 mb-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#anomaliesDetailModal"><i class="bi bi-arrows-fullscreen me-1"></i>Detailed view</button>
+            {% if is_manager_or_admin %}
+            <a href="{% url 'run_anomaly_scan' %}" class="btn btn-sm btn-outline-primary">Run scan</a>
+            {% endif %}
+        </div>
             <div class="table-responsive">
             <table class="table table-sm table-hover mb-0">
                 <thead class="table-light">
@@ -554,6 +1156,9 @@
             <div class="collapse show" id="collapsePie" data-persist="dash_pie">
                 <div class="card-body pt-0">
             {% if pie_labels %}
+                <div class="d-flex justify-content-end mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#pieDetailModal"><i class="bi bi-arrows-fullscreen me-1"></i>Detailed view</button>
+                </div>
                 <div class="chart-box chart-box-pie">
                 <canvas id="pieChart"></canvas>
                 </div>
@@ -578,6 +1183,9 @@
             <div class="collapse show" id="collapseLocation" data-persist="dash_location">
                 <div class="card-body pt-0">
             {% if location_labels %}
+                <div class="d-flex justify-content-end mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#locationDetailModal"><i class="bi bi-arrows-fullscreen me-1"></i>Detailed view</button>
+                </div>
                 <div class="chart-box chart-box-pie">
                 <canvas id="locationChart"></canvas>
                 </div>
@@ -597,13 +1205,88 @@
 
 <!-- CHART.JS -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{{ anomalies_export_list|json_script:"dashboard-anomalies-export" }}
+{{ recent_activity_export_list|json_script:"dashboard-activity-export" }}
 
 <script>
 let topDemandChartInstance = null;
+let topDemandModalChartInstance = null;
 let locationChartInstance = null;
+let locationModalChartInstance = null;
 let inventoryModalChartInstance = null;
 let forecastChartInstance = null;
 let forecastModalChartInstance = null;
+let ordersChart = null;
+let ordersModalChartInstance = null;
+let pieChart = null;
+let pieModalChartInstance = null;
+let inventoryChart = null;
+
+function expandPieColors(count) {
+    const palette = [
+        'rgba(59,130,246,0.85)','rgba(16,185,129,0.85)','rgba(245,158,11,0.85)','rgba(239,68,68,0.85)','rgba(139,92,246,0.85)',
+        'rgba(236,72,153,0.85)','rgba(20,184,166,0.85)','rgba(251,146,60,0.85)','rgba(99,102,241,0.85)','rgba(14,165,233,0.85)',
+        'rgba(34,197,94,0.75)','rgba(168,85,247,0.8)','rgba(244,63,94,0.8)','rgba(45,212,191,0.8)'
+    ];
+    const out = [];
+    for (let i = 0; i < count; i++) out.push(palette[i % palette.length]);
+    return out;
+}
+
+function buildOrdersStackedChart(ctx, detailed) {
+    return new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: {{ weekly_order_labels|safe }},
+            datasets: [
+                {
+                    label: 'Purchase',
+                    data: {{ weekly_purchase_counts|safe }},
+                    backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                    borderRadius: { topLeft: 0, topRight: 0 },
+                    maxBarThickness: detailed ? 48 : 40
+                },
+                {
+                    label: 'Sale',
+                    data: {{ weekly_sale_counts|safe }},
+                    backgroundColor: 'rgba(34, 197, 94, 0.8)',
+                    borderRadius: 6,
+                    maxBarThickness: detailed ? 48 : 40
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: detailed ? 600 : 1000, easing: detailed ? 'easeOutQuart' : 'easeOutBounce' },
+            scales: {
+                x: { stacked: true, grid: { display: false } },
+                y: { stacked: true, beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { precision: 0 } }
+            },
+            plugins: {
+                legend: { display: true, position: 'top', labels: { boxWidth: 12, padding: 8 } },
+                tooltip: {
+                    callbacks: {
+                        label: (c) => ' ' + c.dataset.label + ': ' + c.parsed.y,
+                        afterBody: (items) => 'Total: ' + items.reduce((s, i) => s + i.parsed.y, 0)
+                    }
+                }
+            }
+        }
+    });
+}
+
+function parseDashboardJsonScript(id) {
+    const el = document.getElementById(id);
+    if (!el || !el.textContent) return [];
+    try {
+        return JSON.parse(el.textContent);
+    } catch (e) {
+        return [];
+    }
+}
+const anomaliesExportRows = parseDashboardJsonScript('dashboard-anomalies-export');
+const activityExportRows = parseDashboardJsonScript('dashboard-activity-export');
 /* INVENTORY TREND */
 {% if stock_dates %}
 const inventoryCtx = document.getElementById('inventoryChart').getContext('2d');
@@ -624,7 +1307,7 @@ const unifiedScaleValues = [
 const unifiedScaleMaxRaw = unifiedScaleValues.length ? Math.max(...unifiedScaleValues) : 0;
 const unifiedYAxisMin = 0;
 const unifiedYAxisMax = Math.max(1000, Math.ceil((unifiedScaleMaxRaw * 1.1) / 500) * 500);
-const inventoryChart = new Chart(inventoryCtx, {
+inventoryChart = new Chart(inventoryCtx, {
     type: 'line',
     data: {
         labels: {{ stock_dates|safe }},
@@ -734,76 +1417,77 @@ if (trendDetailModal) {
             inventoryModalChartInstance = null;
         }
     });
+    document.getElementById('downloadTrendCsvBtn')?.addEventListener('click', function() {
+        const labels = {{ stock_dates|safe }};
+        const vals = {{ stock_values|safe }};
+        const lines = ['date_label,end_of_day_total_units'];
+        for (let i = 0; i < labels.length; i++) {
+            lines.push([String(labels[i]).replace(/,/g, ''), vals[i]].join(','));
+        }
+        const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'inventory_stock_trend_{{ trend_days }}d.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
 }
 {% endif %}
 
 /* WEEKLY ORDERS (stacked: purchase + sale) */
 {% if weekly_order_labels %}
 const ordersCtx = document.getElementById('ordersChart').getContext('2d');
-const ordersChart = new Chart(ordersCtx, {
-    type: 'bar',
-    data: {
-        labels: {{ weekly_order_labels|safe }},
-        datasets: [
-            {
-                label: 'Purchase',
-                data: {{ weekly_purchase_counts|safe }},
-                backgroundColor: 'rgba(59, 130, 246, 0.8)',
-                borderRadius: { topLeft: 0, topRight: 0 },
-                maxBarThickness: 40
-            },
-            {
-                label: 'Sale',
-                data: {{ weekly_sale_counts|safe }},
-                backgroundColor: 'rgba(34, 197, 94, 0.8)',
-                borderRadius: 6,
-                maxBarThickness: 40
-            }
-        ]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: { duration: 1000, easing: 'easeOutBounce' },
-        scales: {
-            x: { stacked: true, grid: { display: false } },
-            y: {
-                stacked: true,
-                beginAtZero: true,
-                grid: { color: "rgba(0,0,0,0.05)" },
-                ticks: { precision: 0 }
-            }
-        },
-        plugins: {
-            legend: {
-                display: true,
-                position: 'top',
-                labels: { boxWidth: 12, padding: 8 }
-            },
-            tooltip: {
-                callbacks: {
-                    label: (ctx) => " " + ctx.dataset.label + ": " + ctx.parsed.y,
-                    afterBody: (items) => {
-                        const total = items.reduce((s, i) => s + i.parsed.y, 0);
-                        return "Total: " + total;
-                    }
-                }
-            }
-        }
-    }
-});
+ordersChart = buildOrdersStackedChart(ordersCtx, false);
 
-// Click → orders page
 document.getElementById('ordersChart').onclick = () => {
     window.location.href = "{% url 'order_list' %}";
 };
+
+const ordersDetailModal = document.getElementById('ordersDetailModal');
+if (ordersDetailModal) {
+    ordersDetailModal.addEventListener('shown.bs.modal', function() {
+        const modalCanvas = document.getElementById('ordersChartModal');
+        if (!modalCanvas) return;
+        if (ordersModalChartInstance) {
+            ordersModalChartInstance.destroy();
+            ordersModalChartInstance = null;
+        }
+        ordersModalChartInstance = buildOrdersStackedChart(modalCanvas.getContext('2d'), true);
+    });
+    ordersDetailModal.addEventListener('hidden.bs.modal', function() {
+        if (ordersModalChartInstance) {
+            ordersModalChartInstance.destroy();
+            ordersModalChartInstance = null;
+        }
+    });
+}
+document.getElementById('downloadOrdersCsvBtn')?.addEventListener('click', function() {
+    const labels = {{ weekly_order_labels|safe }};
+    const p = {{ weekly_purchase_counts|safe }};
+    const s = {{ weekly_sale_counts|safe }};
+    const lines = ['week_start_label,purchase_orders,sale_orders,total_orders'];
+    for (let i = 0; i < labels.length; i++) {
+        lines.push([String(labels[i]).replace(/,/g, ''), p[i] || 0, s[i] || 0, (p[i] || 0) + (s[i] || 0)].join(','));
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'weekly_orders_activity.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+});
 {% endif %}
 
 /* TOP DEMAND (horizontal bar) */
 {% if top_items_labels %}
-const topDemandCtx = document.getElementById('topDemandChart');
-if (topDemandCtx) {
-    topDemandChartInstance = new Chart(topDemandCtx.getContext('2d'), {
+function buildTopDemandChart(ctx2d, detailed) {
+    return new Chart(ctx2d, {
         type: 'bar',
         data: {
             labels: {{ top_items_labels|safe }},
@@ -818,69 +1502,144 @@ if (topDemandCtx) {
                     'rgba(34, 197, 94, 0.2)'
                 ],
                 borderRadius: 4,
-                maxBarThickness: 28
+                maxBarThickness: detailed ? 36 : 28
             }]
         },
         options: {
             indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
-            animation: { duration: 800 },
+            animation: { duration: detailed ? 500 : 800 },
             plugins: {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => " " + ctx.parsed.x + " orders"
+                        label: (ctx) => ' ' + ctx.parsed.x + ' orders'
                     }
                 }
             },
             scales: {
                 x: {
                     beginAtZero: true,
-                    grid: { color: "rgba(0,0,0,0.05)" },
+                    grid: { color: 'rgba(0,0,0,0.05)' },
                     ticks: { precision: 0 }
                 },
                 y: { grid: { display: false } }
             }
         }
     });
+}
+const topDemandCtx = document.getElementById('topDemandChart');
+if (topDemandCtx) {
+    topDemandChartInstance = buildTopDemandChart(topDemandCtx.getContext('2d'), false);
     document.getElementById('topDemandChart').onclick = () => {
         window.location.href = "{% url 'order_list' %}";
     };
 }
+const topDemandDetailModal = document.getElementById('topDemandDetailModal');
+if (topDemandDetailModal) {
+    topDemandDetailModal.addEventListener('shown.bs.modal', function() {
+        const modalCanvas = document.getElementById('topDemandChartModal');
+        if (!modalCanvas) return;
+        if (topDemandModalChartInstance) {
+            topDemandModalChartInstance.destroy();
+            topDemandModalChartInstance = null;
+        }
+        topDemandModalChartInstance = buildTopDemandChart(modalCanvas.getContext('2d'), true);
+    });
+    topDemandDetailModal.addEventListener('hidden.bs.modal', function() {
+        if (topDemandModalChartInstance) {
+            topDemandModalChartInstance.destroy();
+            topDemandModalChartInstance = null;
+        }
+    });
+}
+document.getElementById('downloadTopDemandCsvBtn')?.addEventListener('click', function() {
+    const labels = {{ top_items_labels|safe }};
+    const counts = {{ top_items_counts|safe }};
+    const lines = ['item_label,order_line_count'];
+    for (let i = 0; i < labels.length; i++) {
+        lines.push(['"' + String(labels[i]).replace(/"/g, '""') + '"', counts[i] || 0].join(','));
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'top_items_by_order_frequency.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+});
 {% endif %}
 
 /* PIE CHART */
 {% if pie_labels %}
+function buildPieChart(ctx2d) {
+    const vals = {{ pie_values|safe }};
+    return new Chart(ctx2d, {
+        type: 'pie',
+        data: {
+            labels: {{ pie_labels|safe }},
+            datasets: [{
+                data: vals,
+                backgroundColor: expandPieColors(vals.length),
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'right' } }
+        }
+    });
+}
 const pieCtx = document.getElementById('pieChart').getContext('2d');
-const pieChart = new Chart(pieCtx, {
-    type: 'pie',
-    data: {
-        labels: {{ pie_labels|safe }},
-        datasets: [{
-            data: {{ pie_values|safe }},
-            backgroundColor: [
-                'rgba(59,130,246,0.8)',
-                'rgba(16,185,129,0.8)',
-                'rgba(245,158,11,0.8)',
-                'rgba(239,68,68,0.8)',
-                'rgba(139,92,246,0.8)'
-            ],
-            borderWidth: 1
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false
+pieChart = buildPieChart(pieCtx);
+
+const pieDetailModal = document.getElementById('pieDetailModal');
+if (pieDetailModal) {
+    pieDetailModal.addEventListener('shown.bs.modal', function() {
+        const modalCanvas = document.getElementById('pieChartModal');
+        if (!modalCanvas) return;
+        if (pieModalChartInstance) {
+            pieModalChartInstance.destroy();
+            pieModalChartInstance = null;
+        }
+        pieModalChartInstance = buildPieChart(modalCanvas.getContext('2d'));
+    });
+    pieDetailModal.addEventListener('hidden.bs.modal', function() {
+        if (pieModalChartInstance) {
+            pieModalChartInstance.destroy();
+            pieModalChartInstance = null;
+        }
+    });
+}
+document.getElementById('downloadPieCsvBtn')?.addEventListener('click', function() {
+    const labels = {{ pie_labels|safe }};
+    const vals = {{ pie_values|safe }};
+    const total = vals.reduce((a, b) => a + b, 0) || 1;
+    const lines = ['category,units,percent_of_total'];
+    for (let i = 0; i < labels.length; i++) {
+        const pct = ((vals[i] || 0) / total * 100).toFixed(2);
+        lines.push(['"' + String(labels[i]).replace(/"/g, '""') + '"', vals[i] || 0, pct].join(','));
     }
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'inventory_by_category.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 });
 {% endif %}
 
 /* INVENTORY BY LOCATION (horizontal bar) */
 {% if location_labels %}
-const locationCtx = document.getElementById('locationChart');
-if (locationCtx) {
-    locationChartInstance = new Chart(locationCtx.getContext('2d'), {
+function buildLocationChart(ctx2d, detailed) {
+    return new Chart(ctx2d, {
         type: 'bar',
         data: {
             labels: {{ location_labels|safe }},
@@ -889,26 +1648,26 @@ if (locationCtx) {
                 data: {{ location_values|safe }},
                 backgroundColor: 'rgba(99, 102, 241, 0.7)',
                 borderRadius: 4,
-                maxBarThickness: 32
+                maxBarThickness: detailed ? 40 : 32
             }]
         },
         options: {
             indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
-            animation: { duration: 600 },
+            animation: { duration: detailed ? 500 : 600 },
             plugins: {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => " " + ctx.parsed.x + " units"
+                        label: (ctx) => ' ' + ctx.parsed.x + ' units'
                     }
                 }
             },
             scales: {
                 x: {
                     beginAtZero: true,
-                    grid: { color: "rgba(0,0,0,0.05)" },
+                    grid: { color: 'rgba(0,0,0,0.05)' },
                     ticks: { precision: 0 }
                 },
                 y: { grid: { display: false } }
@@ -916,6 +1675,45 @@ if (locationCtx) {
         }
     });
 }
+const locationCtx = document.getElementById('locationChart');
+if (locationCtx) {
+    locationChartInstance = buildLocationChart(locationCtx.getContext('2d'), false);
+}
+const locationDetailModal = document.getElementById('locationDetailModal');
+if (locationDetailModal) {
+    locationDetailModal.addEventListener('shown.bs.modal', function() {
+        const modalCanvas = document.getElementById('locationChartModal');
+        if (!modalCanvas) return;
+        if (locationModalChartInstance) {
+            locationModalChartInstance.destroy();
+            locationModalChartInstance = null;
+        }
+        locationModalChartInstance = buildLocationChart(modalCanvas.getContext('2d'), true);
+    });
+    locationDetailModal.addEventListener('hidden.bs.modal', function() {
+        if (locationModalChartInstance) {
+            locationModalChartInstance.destroy();
+            locationModalChartInstance = null;
+        }
+    });
+}
+document.getElementById('downloadLocationCsvBtn')?.addEventListener('click', function() {
+    const labels = {{ location_labels|safe }};
+    const vals = {{ location_values|safe }};
+    const lines = ['location,units'];
+    for (let i = 0; i < labels.length; i++) {
+        lines.push(['"' + String(labels[i]).replace(/"/g, '""') + '"', vals[i] || 0].join(','));
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'inventory_by_location.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+});
 {% endif %}
 
 /* PROJECTED INVENTORY */
@@ -1033,22 +1831,238 @@ if (downloadForecastCsvBtn) {
 }
 {% endif %}
 
+document.getElementById('downloadAnomaliesCsvBtn')?.addEventListener('click', function() {
+    if (!Array.isArray(anomaliesExportRows) || !anomaliesExportRows.length) return;
+    const lines = ['item,date,quantity,score,severity'];
+    anomaliesExportRows.forEach(function(r) {
+        lines.push(['"' + String(r.item).replace(/"/g, '""') + '"', r.date, r.quantity, r.score, r.severity].join(','));
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'demand_anomalies_{{ anom_show|default:"active" }}.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+});
+
+document.getElementById('downloadActivityCsvBtn')?.addEventListener('click', function() {
+    if (!Array.isArray(activityExportRows) || !activityExportRows.length) return;
+    const lines = ['message,user,timestamp'];
+    activityExportRows.forEach(function(r) {
+        lines.push([
+            '"' + String(r.message ?? '').replace(/"/g, '""') + '"',
+            '"' + String(r.user ?? '').replace(/"/g, '""') + '"',
+            r.timestamp ?? ''
+        ].join(','));
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'recent_activity.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+});
+
 // Resize charts when collapse is shown (so charts render correctly after expand)
 document.addEventListener('shown.bs.collapse', function(e) {
-    if (e.target.id === 'collapseTrend' && typeof inventoryChart !== 'undefined') inventoryChart.resize();
-    if (e.target.id === 'collapseOrders' && typeof ordersChart !== 'undefined') ordersChart.resize();
-    if (e.target.id === 'collapseTopItem' && typeof topDemandChartInstance !== 'undefined' && topDemandChartInstance) topDemandChartInstance.resize();
-    if (e.target.id === 'collapsePie' && typeof pieChart !== 'undefined') pieChart.resize();
-    if (e.target.id === 'collapseLocation' && typeof locationChartInstance !== 'undefined' && locationChartInstance) locationChartInstance.resize();
+    if (e.target.id === 'collapseTrend' && inventoryChart) inventoryChart.resize();
+    if (e.target.id === 'collapseOrders' && ordersChart) ordersChart.resize();
+    if (e.target.id === 'collapseTopItem' && topDemandChartInstance) topDemandChartInstance.resize();
+    if (e.target.id === 'collapsePie' && pieChart) pieChart.resize();
+    if (e.target.id === 'collapseLocation' && locationChartInstance) locationChartInstance.resize();
     if (e.target.id === 'collapseForecast' && forecastChartInstance) forecastChartInstance.resize();
 });
 // Resize charts when window is resized
 window.addEventListener('resize', function() {
-    var charts = [inventoryChart, inventoryModalChartInstance, ordersChart, topDemandChartInstance, pieChart, locationChartInstance, forecastChartInstance, forecastModalChartInstance];
+    var charts = [inventoryChart, inventoryModalChartInstance, ordersChart, ordersModalChartInstance, topDemandChartInstance, topDemandModalChartInstance, pieChart, pieModalChartInstance, locationChartInstance, locationModalChartInstance, forecastChartInstance, forecastModalChartInstance];
     charts.forEach(function(c) {
         if (typeof c !== 'undefined' && c) try { c.resize(); } catch(e) {}
     });
 });
+</script>
+
+<script>
+(function() {
+    function safeParseJSON(s) {
+        try { return JSON.parse(s); } catch (e) { return null; }
+    }
+
+    function debounce(fn, ms) {
+        var t;
+        return function() {
+            var args = arguments;
+            clearTimeout(t);
+            t = setTimeout(function() { fn.apply(null, args); }, ms);
+        };
+    }
+
+    // Auto-open modal if requested via query param.
+    document.addEventListener('DOMContentLoaded', function() {
+        try {
+            var params = new URLSearchParams(window.location.search || '');
+            if (params.get('open_anomalies') === '1') {
+                var modalEl = document.getElementById('anomaliesDetailModal');
+                if (modalEl && window.bootstrap && window.bootstrap.Modal) {
+                    new window.bootstrap.Modal(modalEl).show();
+                }
+            }
+        } catch (e) {}
+    });
+
+    // Autosubmit filters (no Apply button).
+    var filterForm = document.getElementById('anomalies-filter-form');
+    if (filterForm) {
+        var pageInput = filterForm.querySelector('input[name="page"]');
+        function submitNow() {
+            if (pageInput) pageInput.value = '1';
+            filterForm.submit();
+        }
+
+        var searchInput = document.getElementById('anomalies-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', debounce(function() {
+                submitNow();
+            }, 300));
+        }
+
+        filterForm.querySelectorAll('select').forEach(function(sel) {
+            sel.addEventListener('change', function() {
+                submitNow();
+            });
+        });
+    }
+
+    // Density toggle.
+    var densityKey = 'warewolf_anomalies_modal_density';
+    var anomaliesCard = document.getElementById('anomalies-table-card');
+    if (anomaliesCard) {
+        document.querySelectorAll('#anomaliesDetailModal .ww-density').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var d = this.dataset.density;
+                anomaliesCard.classList.remove('ww-table-compact');
+                if (d === 'compact') anomaliesCard.classList.add('ww-table-compact');
+                try { localStorage.setItem(densityKey, d); } catch (e) {}
+            });
+        });
+
+        try {
+            var savedD = localStorage.getItem(densityKey);
+            if (savedD === 'compact') anomaliesCard.classList.add('ww-table-compact');
+        } catch (e) {}
+    }
+
+    // Column visibility toggle.
+    var columnsKey = 'warewolf_anomalies_modal_columns';
+    var colToggleEls = document.querySelectorAll('#anomaliesDetailModal .col-toggle');
+    if (colToggleEls && colToggleEls.length) {
+        function loadColumnPrefs() {
+            try {
+                var raw = localStorage.getItem(columnsKey);
+                var parsed = raw ? safeParseJSON(raw) : null;
+                return parsed && typeof parsed === 'object' ? parsed : {};
+            } catch (e) {
+                return {};
+            }
+        }
+
+        function applyColumnVisibility() {
+            var prefs = loadColumnPrefs();
+            colToggleEls.forEach(function(cb) {
+                var col = cb.dataset.col;
+                if (prefs && prefs[col] !== undefined) cb.checked = !!prefs[col];
+                var visible = cb.checked;
+                document.querySelectorAll('#anomaliesDetailModal [data-col="' + col + '"]').forEach(function(el) {
+                    el.style.display = visible ? '' : 'none';
+                });
+            });
+        }
+
+        // Initial apply
+        applyColumnVisibility();
+
+        colToggleEls.forEach(function(cb) {
+            cb.addEventListener('change', function() {
+                var prefs = loadColumnPrefs() || {};
+                prefs[cb.dataset.col] = cb.checked;
+                try { localStorage.setItem(columnsKey, JSON.stringify(prefs)); } catch (e) {}
+                applyColumnVisibility();
+            });
+        });
+    }
+
+    // Bulk actions (review/dismiss/undo) and row selector.
+    var bulkForm = document.getElementById('anomalies-bulk-form');
+    var actionsBar = document.getElementById('anomalies-actions-bar');
+    var selectAll = document.getElementById('select-all-anomalies');
+    var rowChecks = document.querySelectorAll('#anomaliesDetailModal .anomaly-row-check');
+
+    if (bulkForm && actionsBar && rowChecks) {
+        var selectedCountEl = document.getElementById('anomalies-selected-count');
+        var btnReview = document.getElementById('btn-anomalies-review');
+        var btnDismiss = document.getElementById('btn-anomalies-dismiss');
+        var btnUndo = document.getElementById('btn-anomalies-undo');
+
+        var reviewUrl = actionsBar.getAttribute('data-review-url');
+        var dismissUrl = actionsBar.getAttribute('data-dismiss-url');
+        var undismissUrl = actionsBar.getAttribute('data-undismiss-url');
+
+        function getSelectedIds() {
+            return Array.from(rowChecks).filter(function(cb) { return cb.checked; }).map(function(cb) { return cb.value; });
+        }
+
+        function updateBulkActions() {
+            var ids = getSelectedIds();
+            var n = ids.length;
+            if (selectedCountEl) selectedCountEl.textContent = n ? (n + ' selected') : '';
+            var disabled = n === 0;
+            [btnReview, btnDismiss, btnUndo].forEach(function(btn) {
+                if (!btn) return;
+                btn.disabled = disabled;
+                btn.classList.toggle('disabled', disabled);
+            });
+            if (selectAll) selectAll.checked = n > 0 && n === rowChecks.length;
+        }
+
+        if (selectAll) {
+            selectAll.addEventListener('change', function() {
+                rowChecks.forEach(function(cb) { cb.checked = selectAll.checked; });
+                updateBulkActions();
+            });
+        }
+
+        rowChecks.forEach(function(cb) {
+            cb.addEventListener('change', updateBulkActions);
+        });
+
+        function submitBulk(url) {
+            var ids = getSelectedIds();
+            if (!ids.length) return;
+            if (url) bulkForm.action = url;
+            bulkForm.submit();
+        }
+
+        if (btnReview) btnReview.addEventListener('click', function(e) {
+            e.preventDefault();
+            submitBulk(reviewUrl);
+        });
+        if (btnDismiss) btnDismiss.addEventListener('click', function(e) {
+            e.preventDefault();
+            submitBulk(dismissUrl);
+        });
+        if (btnUndo) btnUndo.addEventListener('click', function(e) {
+            e.preventDefault();
+            submitBulk(undismissUrl);
+        });
+
+        updateBulkActions();
+    }
+})();
 </script>
 
 <style>
@@ -1227,6 +2241,19 @@ window.addEventListener('resize', function() {
 .activity-anomalies-card .collapse .card-body {
     min-height: 340px;
 }
+
+/* Make the anomalies filter controls stay visible while you scroll */
+.anomalies-modal-filter-card {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: rgba(255,255,255,0.95);
+    backdrop-filter: blur(4px);
+}
+body.dark-mode .anomalies-modal-filter-card {
+    background: rgba(22,27,34,0.95);
+}
+
 
 .chart-container,
 .sma-sparkline-box {
