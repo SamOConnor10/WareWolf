@@ -86,15 +86,21 @@ Save. Render will **redeploy**.
 
 ---
 
-## 6. First visit and admin user
+## 6. First visit, roles, and admin user
 
 1. Open `https://YOUR-SERVICE.onrender.com`.
 2. If you see a **500** error, check **Logs** on Render for the traceback.
-3. Create a superuser: **Shell** on the web service (Render dashboard):
+3. In **Shell** on the web service, run **once** (order matters):
 
 ```bash
+python manage.py migrate --noinput
+python manage.py setup_roles
 python manage.py createsuperuser
 ```
+
+`setup_roles` creates the **Admin / Manager / Staff** groups and permissions. Without it, signup as Staff could fail or permissions may be wrong until this has run.
+
+4. Try **Sign up** again, or log in with the superuser you created.
 
 ---
 

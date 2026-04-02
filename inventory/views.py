@@ -77,7 +77,9 @@ def signup(request):
                 user.is_active = True
                 user.save()
 
-                staff_group = Group.objects.get(name="Staff")
+                # Groups are created by `manage.py setup_roles`; on a fresh DB use get_or_create
+                # so signup does not 500 before that command has been run (e.g. first Render deploy).
+                staff_group, _ = Group.objects.get_or_create(name="Staff")
                 user.groups.add(staff_group)
 
                 # Notify everyone in-app

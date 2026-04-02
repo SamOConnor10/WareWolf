@@ -181,6 +181,8 @@ EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "true").strip().lower() in ("1", "tru
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "WareWolf <noreply@example.com>")
+# Avoid long hangs when SMTP is wrong or blocked (Render / production).
+EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "15"))
 
 # Console backend only in DEBUG when no SMTP password is configured (avoids failed auth spam).
 if DEBUG and not EMAIL_HOST_PASSWORD:
