@@ -1,10 +1,19 @@
 {% extends "inventory/base_contacts.html" %}
 {% load static %}
-{% load querystring humanize %}
+{% load querystring humanize user_pref_format %}
 
 {% block extra_head %}
 <script>
 (function(){
+  function stripListPagination(search) {
+    if (!search || search === '?') return '';
+    var q = search.charAt(0) === '?' ? search.slice(1) : search;
+    var params = new URLSearchParams(q);
+    params.delete('per_page');
+    params.delete('page');
+    var s = params.toString();
+    return s ? '?' + s : '';
+  }
   var p = window.location.pathname;
   if (p !== '/contacts/' && p !== '/contacts') return;
   var search = window.location.search || '';
@@ -19,8 +28,12 @@
     try {
       var saved = localStorage.getItem('warewolf_contacts_list_params');
       if (saved && saved.length > 1) {
-        window.location.replace(baseUrl + (saved.startsWith('?') ? saved : '?' + saved));
-        return;
+        var norm = saved.startsWith('?') ? saved : ('?' + saved);
+        var restored = stripListPagination(norm);
+        if (restored && restored.length > 1) {
+          window.location.replace(baseUrl + restored);
+          return;
+        }
       }
     } catch (e) {}
   }
@@ -50,6 +63,11 @@
                 <a href="{% url 'contact_export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-outline-success" title="Export filtered contacts">
                     <i class="bi bi-download me-1"></i>Export CSV
                 </a>
+            {% endif %}
+            {% if has_contacts_map %}
+                <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#contactsListMapModal">
+                    <i class="bi bi-map me-1"></i>Map
+                </button>
             {% endif %}
             {% if type_filter == 'suppliers' and perms.inventory.add_supplier %}
                 <a href="{% url 'supplier_create' %}" class="btn btn-primary">
@@ -187,7 +205,7 @@
                 <div class="card-body d-flex flex-column justify-content-center py-3 text-center">
                     <h6 class="text-muted small text-uppercase fw-semibold mb-2"><i class="bi bi-trophy me-1"></i>Top customer</h6>
                     <div class="fw-bold text-dark">{{ top_customer.name }}</div>
-                    <div class="small text-muted mt-1">€{{ top_customer.total_value|floatformat:2|intcomma }} in orders</div>
+                    <div class="small text-muted mt-1">{% ww_money top_customer.total_value %} in orders</div>
                 </div>
             </div>
             </a>
@@ -403,7 +421,7 @@
                             {% endif %}
                         </td>
                         <td data-col="orders">{{ c.orders }}</td>
-                        <td data-col="total" class="text-end fw-medium">€{{ c.total_value|floatformat:2|intcomma }}</td>
+                        <td data-col="total" class="text-end fw-medium">{% ww_money c.total_value %}</td>
                     </tr>
                     {% empty %}
                     <tr><td colspan="9" class="text-center text-muted py-5">No {{ type_filter }} found.</td></tr>
@@ -448,6 +466,11 @@
 </div>
 {% endif %}
 
+{% if has_contacts_map %}
+{{ contacts_map_points|json_script:"contactsListMapData" }}
+{% include "inventory/includes/profile_leaflet_modal.html" with modal_id="contactsListMapModal" map_title=contacts_map_modal_title container_id="contacts-list-map-leaflet" script_id="contactsListMapData" %}
+{% endif %}
+
 <style>
 .contacts-page .sort-link { color: inherit; text-decoration: none; }
 .contacts-page .sort-link:hover { color: var(--bs-primary); }
@@ -460,10 +483,26 @@
 
 <script>
 (function() {
+    function stripListPagination(search) {
+        if (!search || search === '?') return '';
+        var q = search.charAt(0) === '?' ? search.slice(1) : search;
+        var params = new URLSearchParams(q);
+        params.delete('per_page');
+        params.delete('page');
+        var s = params.toString();
+        return s ? '?' + s : '';
+    }
     var PARAMS_KEY = 'warewolf_contacts_list_params';
     var search = window.location.search || '';
     if (search && search !== '?') {
-        try { localStorage.setItem(PARAMS_KEY, search); } catch (e) {}
+        try {
+            var toStore = stripListPagination(search);
+            if (toStore && toStore.length > 1) {
+                localStorage.setItem(PARAMS_KEY, toStore);
+            } else {
+                localStorage.removeItem(PARAMS_KEY);
+            }
+        } catch (e) {}
     }
 
     var form = document.getElementById('contacts-filter-form');
@@ -577,8 +616,11 @@
         });
     });
     try {
+        var serverD = (document.body.getAttribute('data-default-table-density') || 'comfortable').toLowerCase();
+        if (serverD !== 'compact' && serverD !== 'comfortable') serverD = 'comfortable';
         var savedD = localStorage.getItem(DENSITY_KEY);
-        if (savedD === 'compact') document.getElementById('contacts-table-card')?.classList.add('ww-table-compact');
+        var effectiveD = savedD || serverD;
+        if (effectiveD === 'compact') document.getElementById('contacts-table-card')?.classList.add('ww-table-compact');
     } catch (e) {}
 })();
 </script>

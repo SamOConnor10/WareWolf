@@ -1,4 +1,5 @@
 {% extends "inventory/base.html" %}
+{% load user_pref_format %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -52,7 +53,7 @@
                 {{ a.item.name }}
               </a>
             </td>
-            <td>{{ a.date|date:"d/m/Y" }}</td>
+            <td>{% ww_date a.date %}</td>
             <td>{{ a.quantity }}</td>
             <td>{{ a.score|floatformat:2 }}</td>
 

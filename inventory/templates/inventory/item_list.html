@@ -1,9 +1,18 @@
 {% extends "inventory/base_stock.html" %}
-{% load querystring %}
+{% load querystring user_pref_format %}
 
 {% block extra_head %}
 <script>
 (function(){
+  function stripListPagination(search) {
+    if (!search || search === '?') return '';
+    var q = search.charAt(0) === '?' ? search.slice(1) : search;
+    var params = new URLSearchParams(q);
+    params.delete('per_page');
+    params.delete('page');
+    var s = params.toString();
+    return s ? '?' + s : '';
+  }
   var p = window.location.pathname;
   if (p !== '/items/' && p !== '/items') return;
   var search = window.location.search || '';
@@ -18,8 +27,12 @@
     try {
       var saved = localStorage.getItem('warewolf_item_list_params');
       if (saved && saved.length > 1) {
-        window.location.replace(baseUrl + (saved.startsWith('?') ? saved : '?' + saved));
-        return;
+        var norm = saved.startsWith('?') ? saved : ('?' + saved);
+        var restored = stripListPagination(norm);
+        if (restored && restored.length > 1) {
+          window.location.replace(baseUrl + restored);
+          return;
+        }
       }
     } catch (e) {}
   }
@@ -252,9 +265,9 @@
                         <td data-col="expiry">
                             {% if item.expiry_date %}
                                 {% if item.expiry_date < today %}
-                                    <span class="text-danger small">{{ item.expiry_date|date:"d M Y" }}</span>
+                                    <span class="text-danger small">{% ww_date item.expiry_date %}</span>
                                 {% else %}
-                                    <span class="small">{{ item.expiry_date|date:"d M Y" }}</span>
+                                    <span class="small">{% ww_date item.expiry_date %}</span>
                                 {% endif %}
                             {% else %}
                                 <span class="text-muted">—</span>
@@ -394,12 +407,28 @@
 
 <script>
 (function() {
+    function stripListPagination(search) {
+        if (!search || search === '?') return '';
+        var q = search.charAt(0) === '?' ? search.slice(1) : search;
+        var params = new URLSearchParams(q);
+        params.delete('per_page');
+        params.delete('page');
+        var s = params.toString();
+        return s ? '?' + s : '';
+    }
     var PARAMS_KEY = 'warewolf_item_list_params';
     var STORAGE_KEY = 'warewolf_item_list_columns';
     var baseUrl = '{% url "item_list" %}';
     var search = window.location.search || '';
     if (search && search !== '?') {
-        try { localStorage.setItem(PARAMS_KEY, search); } catch (e) {}
+        try {
+            var toStore = stripListPagination(search);
+            if (toStore && toStore.length > 1) {
+                localStorage.setItem(PARAMS_KEY, toStore);
+            } else {
+                localStorage.removeItem(PARAMS_KEY);
+            }
+        } catch (e) {}
     }
 
     var form = document.getElementById('item-filter-form');
@@ -467,8 +496,11 @@
         });
     });
     try {
+        var serverD = (document.body.getAttribute('data-default-table-density') || 'comfortable').toLowerCase();
+        if (serverD !== 'compact' && serverD !== 'comfortable') serverD = 'comfortable';
         var savedD = localStorage.getItem(DENSITY_KEY);
-        if (savedD === 'compact') document.getElementById('item-table-card')?.classList.add('ww-table-compact');
+        var effectiveD = savedD || serverD;
+        if (effectiveD === 'compact') document.getElementById('item-table-card')?.classList.add('ww-table-compact');
     } catch (e) {}
 
     // Row selection & actions

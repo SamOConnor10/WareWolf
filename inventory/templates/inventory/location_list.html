@@ -523,26 +523,10 @@
 </div>
 {% endif %}
 
-<!-- MAP MODAL -->
-<div class="modal fade" id="locationMapModal" tabindex="-1" aria-labelledby="locationMapModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="locationMapModalLabel"><i class="bi bi-map me-2"></i>Location map</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-0 position-relative" style="height: 70vh; min-height: 400px;">
-                <div id="location-map-container" class="w-100 h-100"></div>
-                {% if not locations_with_coords %}
-                <div id="location-map-empty" class="position-absolute top-50 start-50 translate-middle text-center text-muted p-4">
-                    <i class="bi bi-geo-alt display-4 d-block mb-2 opacity-50"></i>
-                    <p class="mb-0">No locations with coordinates. Add latitude/longitude to locations to see them on the map.</p>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
+{% if has_locations_map %}
+{{ locations_with_coords|json_script:"locationsListMapData" }}
+{% include "inventory/includes/profile_leaflet_modal.html" with modal_id="locationMapModal" map_title="Warehouse locations" container_id="location-list-map-leaflet" script_id="locationsListMapData" %}
+{% endif %}
 
 <style>
 .locations-page .sort-link { color: inherit; text-decoration: none; }
@@ -568,7 +552,6 @@
 .locations-page .location-tree .location-row .location-type { font-size: 0.8rem; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 999px; }
 .locations-page .location-tree .location-children { list-style: none; padding-left: 0; margin: 0; margin-left: 20px; border-left: 1px solid #e2e8f0; }
 .locations-page .location-tree .location-children.collapsed { display: none; }
-#location-map-container { position: relative; }
 .leaflet-tooltip.location-marker-tooltip { font-weight: 600; font-size: 12px; background: rgba(13, 110, 253, 0.95); color: white; border: none; padding: 4px 8px; white-space: nowrap; }
 </style>
 
@@ -735,8 +718,11 @@
         });
     });
     try {
+        var serverD = (document.body.getAttribute('data-default-table-density') || 'comfortable').toLowerCase();
+        if (serverD !== 'compact' && serverD !== 'comfortable') serverD = 'comfortable';
         var savedD = localStorage.getItem(DENSITY_KEY);
-        if (savedD === 'compact') document.getElementById('location-table-card')?.classList.add('ww-table-compact');
+        var effectiveD = savedD || serverD;
+        if (effectiveD === 'compact') document.getElementById('location-table-card')?.classList.add('ww-table-compact');
     } catch (e) {}
 })();
 </script>
@@ -859,45 +845,6 @@
         children.classList.toggle('collapsed');
         toggle.classList.toggle('expanded');
         captureAndSaveTreeState();
-    });
-})();
-</script>
-{% endif %}
-
-{% if locations_with_coords %}
-{{ locations_with_coords|json_script:"locationsMapData" }}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-<script>
-(function() {
-    var modal = document.getElementById('locationMapModal');
-    var container = document.getElementById('location-map-container');
-    var dataEl = document.getElementById('locationsMapData');
-    if (!modal || !container || !dataEl) return;
-    var locations = JSON.parse(dataEl.textContent);
-        var map = null;
-        var allBounds = null;
-    modal.addEventListener('shown.bs.modal', function() {
-        if (map) return;
-        map = L.map('location-map-container').setView([53.3498, -6.2603], 12);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
-        allBounds = L.latLngBounds();
-        locations.forEach(function(loc) {
-            var m = L.marker([loc.latitude, loc.longitude]).addTo(map);
-            m.bindTooltip(loc.name || 'Location', { permanent: true, direction: 'top', className: 'location-marker-tooltip' });
-            var popup = '<div class="p-2"><strong>' + (loc.name || 'Location') + '</strong>';
-            if (loc.address) popup += '<br><small class="text-muted">' + (loc.address.substring ? loc.address.substring(0,100) : loc.address) + '</small>';
-            popup += '<br><a href="' + (loc.detail_url || '/locations/' + loc.id + '/view/') + '" class="btn btn-sm btn-outline-primary mt-1 me-1">View</a>';
-            if (loc.map_url) popup += '<a href="' + loc.map_url + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary mt-1">Open in Google Maps</a>';
-            popup += '</div>';
-            m.bindPopup(popup);
-            m.on('click', function() { map.setView([loc.latitude, loc.longitude], 17); });
-            m.on('popupclose', function() {
-                if (allBounds && locations.length > 0) map.fitBounds(allBounds, { padding: [30, 30] });
-            });
-            allBounds.extend([loc.latitude, loc.longitude]);
-        });
-        if (locations.length > 1) map.fitBounds(allBounds, { padding: [30, 30] });
     });
 })();
 </script>

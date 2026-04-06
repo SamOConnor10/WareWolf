@@ -19,9 +19,12 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
+from inventory.auth_views import WareWolfLoginView
+
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("accounts/", include("django.contrib.auth.urls")),  # login/logout built-ins
+    path("accounts/login/", WareWolfLoginView.as_view(), name="login"),
+    path("accounts/", include("django.contrib.auth.urls")),  # logout/password reset etc.
     path("", include("inventory.urls")),  # or your app urls
 ]
 if settings.DEBUG:

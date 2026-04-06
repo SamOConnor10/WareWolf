@@ -1,17 +1,29 @@
 {% extends "inventory/base_contacts.html" %}
 {% load humanize %}
+{% load user_pref_format %}
 
 {% block contacts_content %}
 <div class="supplier-detail-page">
     <!-- HEADER -->
     <div class="d-flex flex-wrap gap-4 mb-4">
-        <div class="flex-shrink-0">
+        <div class="item-detail-image-wrap flex-shrink-0 position-relative">
             {% if supplier.image %}
-                <img src="{{ supplier.image.url }}" alt="{{ supplier.name }}" class="rounded-3 shadow-sm" style="width: 80px; height: 80px; object-fit: cover;">
+                <a href="{{ supplier.image.url }}" target="_blank" rel="noopener" class="d-block h-100 rounded-3 shadow-sm overflow-hidden" title="View full size">
+                    <img src="{{ supplier.image.url }}" alt="{{ supplier.name }}" class="item-detail-image rounded-3 shadow-sm">
+                </a>
             {% else %}
-                <span class="rounded-3 bg-info bg-opacity-10 d-flex align-items-center justify-content-center shadow-sm" style="width: 80px; height: 80px;">
-                    <i class="bi bi-truck text-info" style="font-size: 2rem;"></i>
-                </span>
+                {% if perms.inventory.change_supplier %}
+                <a href="{% url 'supplier_edit' supplier.id %}" class="item-detail-placeholder rounded-3 bg-light d-flex align-items-center justify-content-center text-decoration-none" title="Add image">
+                    <div class="text-center px-2">
+                        <i class="bi bi-truck display-4 text-muted d-block"></i>
+                        <small class="text-muted">Add image</small>
+                    </div>
+                </a>
+                {% else %}
+                <div class="item-detail-placeholder rounded-3 bg-light d-flex align-items-center justify-content-center">
+                    <i class="bi bi-truck display-4 text-muted"></i>
+                </div>
+                {% endif %}
             {% endif %}
         </div>
         <div class="flex-grow-1 min-width-0">
@@ -23,7 +35,7 @@
             </nav>
             <h1 class="fw-bold mb-1">{{ supplier.name }}</h1>
             <p class="text-muted mb-2">{% if supplier.description %}{{ supplier.description|truncatewords:20 }}{% else %}Purchase order partner{% endif %}</p>
-            <div class="d-flex flex-wrap gap-2 mb-2">
+            <div class="d-flex flex-wrap gap-2 mb-3">
                 {% if supplier.is_active %}
                     <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Active</span>
                 {% else %}
@@ -31,10 +43,34 @@
                 {% endif %}
             </div>
             <div class="d-flex flex-wrap gap-2 align-items-center">
-                <a href="{% url 'contacts_list' %}?type=suppliers" class="btn btn-outline-secondary ms-auto">
-                    <i class="bi bi-arrow-left me-1"></i>Back to suppliers
-                </a>
+                {% if perms.inventory.change_supplier %}
+                    <a href="{% url 'supplier_edit' supplier.id %}" class="btn btn-primary"><i class="bi bi-pencil me-1"></i>Edit</a>
+                {% endif %}
+                {% if has_profile_map %}
+                    <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#supplierProfileMapModal"><i class="bi bi-map me-1"></i>Map</button>
+                {% elif supplier.get_map_url %}
+                    <a href="{{ supplier.get_map_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary"><i class="bi bi-geo-alt-fill me-1"></i>Open in map</a>
+                {% endif %}
+                {% if perms.inventory.add_order %}
+                    <a href="{% url 'order_create' %}?type=purchase&supplier={{ supplier.id }}" class="btn btn-outline-secondary"><i class="bi bi-cart-plus me-1"></i>Purchase order</a>
+                {% endif %}
+                {% if perms.inventory.delete_supplier %}
+                    <a href="{% url 'supplier_delete' supplier.id %}" class="btn btn-outline-danger"><i class="bi bi-trash me-1"></i>Delete</a>
+                {% endif %}
+                <a href="{% url 'contacts_list' %}?type=suppliers" class="btn btn-outline-secondary ms-auto"><i class="bi bi-arrow-left me-1"></i>Back to list</a>
             </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-2"><h6 class="mb-0 fw-semibold"><i class="bi bi-info-circle text-primary me-2"></i>Contact &amp; address</h6></div>
+        <div class="card-body small">
+            <dl class="row mb-0">
+                <dt class="col-sm-3 text-muted">Email</dt><dd class="col-sm-9">{{ supplier.email|default:"—" }}</dd>
+                <dt class="col-sm-3 text-muted">Phone</dt><dd class="col-sm-9">{{ supplier.phone|default:"—" }}</dd>
+                <dt class="col-sm-3 text-muted">Website</dt><dd class="col-sm-9">{% if supplier.website %}<a href="{{ supplier.website }}" target="_blank" rel="noopener">{{ supplier.website }}</a>{% else %}—{% endif %}</dd>
+                <dt class="col-sm-3 text-muted">Address</dt><dd class="col-sm-9">{{ supplier.address|linebreaksbr|default:"—" }}</dd>
+            </dl>
         </div>
     </div>
 
@@ -52,7 +88,7 @@
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body py-3 px-3 text-center">
                     <span class="text-muted small d-block">Total value</span>
-                    <span class="fw-bold text-success fs-4">€{{ total_value|floatformat:2|intcomma }}</span>
+                    <span class="fw-bold text-success fs-4">{% ww_money total_value %}</span>
                 </div>
             </div>
         </div>
@@ -142,7 +178,7 @@
                                 {% for o in orders %}
                                 {% for ln in o.lines.all %}
                                 <tr>
-                                    <td>{% if forloop.parentloop.first %}{{ o.order_date|date:"d M Y" }}{% endif %}</td>
+                                    <td>{% if forloop.parentloop.first %}{% ww_date o.order_date %}{% endif %}</td>
                                     <td>
                                         <a href="{% url 'item_detail' ln.item.id %}" class="d-flex align-items-center gap-2 text-decoration-none text-dark">
                                             {% if ln.item.image %}
@@ -168,7 +204,7 @@
                     <div class="text-center py-4 text-muted">
                         <i class="bi bi-cart display-6 d-block mb-2 opacity-50"></i>
                         <p class="mb-1 small">No purchase orders from this supplier</p>
-                        <a href="{% url 'order_create' %}?type=purchase" class="btn btn-sm btn-outline-primary">Create order</a>
+                        <a href="{% url 'order_create' %}?type=purchase&supplier={{ supplier.id }}" class="btn btn-sm btn-outline-primary">Create order</a>
                     </div>
                     {% endif %}
                 </div>
@@ -176,6 +212,17 @@
         </div>
     </div>
 </div>
+
+{% if has_profile_map %}
+{{ profile_map_points|json_script:"supplierProfileMapData" }}
+{% include "inventory/includes/profile_leaflet_modal.html" with modal_id="supplierProfileMapModal" map_title="Supplier location" container_id="supplier-profile-map-leaflet" script_id="supplierProfileMapData" %}
+{% endif %}
+
+<style>
+.item-detail-image-wrap { width: 220px; height: 220px; }
+.item-detail-image { width: 100%; height: 100%; object-fit: cover; }
+.item-detail-placeholder { width: 100%; height: 100%; object-fit: cover; border: 2px dashed #dee2e6; }
+</style>
 
 {% if chart_labels %}
 {{ chart_labels|json_script:"supplierChartLabels" }}
@@ -189,12 +236,13 @@
     if (!ctx || !labelsEl || !valuesEl) return;
     var labels = JSON.parse(labelsEl.textContent);
     var values = JSON.parse(valuesEl.textContent);
+    var cs = document.body.dataset.currencySymbol || '€';
     new Chart(ctx.getContext('2d'), {
         type: 'bar',
         data: {
             labels: labels,
             datasets: [{
-                label: 'Order value (€)',
+                label: 'Order value (' + cs + ')',
                 data: values,
                 backgroundColor: 'rgba(13, 110, 253, 0.6)',
                 borderColor: 'rgba(13, 110, 253, 0.9)',
@@ -206,7 +254,7 @@
             maintainAspectRatio: false,
             plugins: {
                 legend: { display: false },
-                tooltip: { callbacks: { label: function(ctx) { return '€' + ctx.parsed.y.toLocaleString(); } } }
+                tooltip: { callbacks: { label: function(ctx) { return cs + ctx.parsed.y.toLocaleString(); } } }
             },
             scales: {
                 y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },

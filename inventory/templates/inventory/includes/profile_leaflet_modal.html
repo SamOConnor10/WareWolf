@@ -1,0 +1,109 @@
+{# Expects: modal_id, map_title, container_id, script_id (matches json_script id) #}
+<div class="modal fade" id="{{ modal_id }}" tabindex="-1" aria-labelledby="{{ modal_id }}Label" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="{{ modal_id }}Label"><i class="bi bi-map me-2"></i>{{ map_title }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0 position-relative" style="height: 60vh; min-height: 360px;">
+                <div id="{{ container_id }}" class="w-100 h-100"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-sm btn-outline-primary" id="{{ modal_id }}-fit-btn">Fit view</button>
+                <a href="#" class="btn btn-sm btn-outline-secondary" id="{{ modal_id }}-gmaps-btn" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+(function() {
+    var modal = document.getElementById('{{ modal_id }}');
+    var container = document.getElementById('{{ container_id }}');
+    var dataEl = document.getElementById('{{ script_id }}');
+    var fitBtn = document.getElementById('{{ modal_id }}-fit-btn');
+    var gmapsBtn = document.getElementById('{{ modal_id }}-gmaps-btn');
+    if (!modal || !container || !dataEl) return;
+    var map = null;
+    var allBounds = null;
+    var locations = [];
+    var refitTimer = null;
+    var ZOOM_PIN = 16;
+    var ZOOM_SINGLE_DEFAULT = 14;
+    try { locations = JSON.parse(dataEl.textContent) || []; } catch (e) { locations = []; }
+    function centroidUrl() {
+        if (!locations.length) return 'https://www.google.com/maps?q=53.3498,-6.2603&z=12';
+        var slat = 0, slng = 0;
+        locations.forEach(function(loc) { slat += loc.latitude; slng += loc.longitude; });
+        var la = slat / locations.length, ln = slng / locations.length;
+        return 'https://www.google.com/maps?q=' + la + ',' + ln + '&z=12';
+    }
+    function cancelRefitTimer() {
+        if (refitTimer) {
+            clearTimeout(refitTimer);
+            refitTimer = null;
+        }
+    }
+    function fitAllMarkers() {
+        if (!map || !locations.length) return;
+        map.invalidateSize();
+        if (locations.length > 1 && allBounds && allBounds.isValid()) {
+            map.fitBounds(allBounds, { padding: [36, 36], maxZoom: 16, animate: true });
+        } else if (locations.length === 1) {
+            map.setView([locations[0].latitude, locations[0].longitude], ZOOM_SINGLE_DEFAULT, { animate: true });
+        }
+    }
+    function scheduleRefitAll() {
+        cancelRefitTimer();
+        refitTimer = setTimeout(function() {
+            refitTimer = null;
+            fitAllMarkers();
+        }, 150);
+    }
+    function initMapOnce() {
+        if (map || !locations.length) return;
+        map = L.map('{{ container_id }}').setView([53.3498, -6.2603], 11);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+        allBounds = L.latLngBounds();
+        locations.forEach(function(loc) {
+            var m = L.marker([loc.latitude, loc.longitude]).addTo(map);
+            m.bindTooltip(loc.name || 'Location', { permanent: true, direction: 'top', className: 'location-marker-tooltip' });
+            var popup = '<div class="p-2 small"><strong>' + (loc.name || '') + '</strong>';
+            if (loc.address) popup += '<br><span class="text-muted">' + String(loc.address).substring(0, 120) + '</span>';
+            popup += '<br><a href="' + (loc.detail_url || '#') + '" class="btn btn-sm btn-outline-primary mt-1 me-1">View</a>';
+            if (loc.map_url) popup += '<a href="' + loc.map_url + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary mt-1">Google Maps</a>';
+            popup += '</div>';
+            m.bindPopup(popup);
+            allBounds.extend([loc.latitude, loc.longitude]);
+            m.on('popupopen', function() {
+                cancelRefitTimer();
+                map.setView(m.getLatLng(), ZOOM_PIN, { animate: true });
+            });
+        });
+        map.on('popupclose', function() {
+            scheduleRefitAll();
+        });
+        if (gmapsBtn) {
+            if (locations.length === 1 && locations[0].map_url) gmapsBtn.href = locations[0].map_url;
+            else gmapsBtn.href = centroidUrl();
+        }
+        setTimeout(fitAllMarkers, 80);
+    }
+    modal.addEventListener('shown.bs.modal', function() {
+        if (!locations.length) return;
+        if (map) {
+            setTimeout(fitAllMarkers, 80);
+            return;
+        }
+        initMapOnce();
+    });
+    if (fitBtn) fitBtn.addEventListener('click', function() {
+        cancelRefitTimer();
+        fitAllMarkers();
+    });
+})();
+</script>
+<style>.leaflet-tooltip.location-marker-tooltip { font-weight: 600; font-size: 12px; background: rgba(13, 110, 253, 0.95); color: white; border: none; padding: 4px 8px; white-space: nowrap; }</style>

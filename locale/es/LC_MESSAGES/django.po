@@ -1,0 +1,273 @@
+# Spanish translations for WareWolf UI (nav, settings, modals).
+msgid ""
+msgstr ""
+"Project-Id-Version: WareWolf\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "WareWolf"
+msgstr "WareWolf"
+
+msgid "Dashboard"
+msgstr "Panel"
+
+msgid "Stock"
+msgstr "Inventario"
+
+msgid "Locations"
+msgstr "Ubicaciones"
+
+msgid "Orders"
+msgstr "Pedidos"
+
+msgid "Contacts"
+msgstr "Contactos"
+
+msgid "Search items, orders, suppliers…"
+msgstr "Buscar artículos, pedidos, proveedores…"
+
+msgid "Help and documentation"
+msgstr "Ayuda y documentación"
+
+msgid "Notifications"
+msgstr "Notificaciones"
+
+#, python-format
+msgid "%(n)s active"
+msgstr "%(n)s activas"
+
+msgid "View all"
+msgstr "Ver todo"
+
+msgid "Critical"
+msgstr "Crítico"
+
+msgid "Warnings"
+msgstr "Advertencias"
+
+msgid "Warning"
+msgstr "Advertencia"
+
+msgid "Dismiss"
+msgstr "Descartar"
+
+msgid "Approve"
+msgstr "Aprobar"
+
+msgid "Decline"
+msgstr "Rechazar"
+
+msgid "Info"
+msgstr "Información"
+
+msgid "No alerts"
+msgstr "Sin alertas"
+
+#, python-format
+msgid "Showing %(shown)s of %(total)s."
+msgstr "Mostrando %(shown)s de %(total)s."
+
+msgid "Account menu"
+msgstr "Menú de cuenta"
+
+msgid "Profile"
+msgstr "Perfil"
+
+msgid "Settings"
+msgstr "Configuración"
+
+msgid "Log out"
+msgstr "Cerrar sesión"
+
+msgid "WareWolf Help Centre"
+msgstr "Centro de ayuda de WareWolf"
+
+msgid "Close"
+msgstr "Cerrar"
+
+msgid "Getting Started"
+msgstr "Primeros pasos"
+
+msgid "How to add a stock item"
+msgstr "Cómo añadir un artículo al inventario"
+
+msgid "How to create a purchase order"
+msgstr "Cómo crear un pedido de compra"
+
+msgid "How to update stock quantities"
+msgstr "Cómo actualizar las cantidades en stock"
+
+msgid "Quick Tips"
+msgstr "Consejos rápidos"
+
+msgid "Use the search bar to find items instantly"
+msgstr "Use la barra de búsqueda para encontrar artículos al instante"
+
+msgid "Low stock alerts appear in notifications"
+msgstr "Las alertas de stock bajo aparecen en notificaciones"
+
+msgid "Managers can approve reorder requests"
+msgstr "Los gestores pueden aprobar solicitudes de reposición"
+
+msgid "Shortcuts"
+msgstr "Atajos"
+
+msgid "Press <kbd>/</kbd> to focus search (when shortcuts are on)"
+msgstr "Pulse <kbd>/</kbd> para enfocar la búsqueda (si los atajos están activos)"
+
+msgid "Press <kbd>?</kbd> for the full shortcut list, or use <kbd>g</kbd> then a letter to jump (e.g. <kbd>g</kbd> <kbd>i</kbd> for Stock)"
+msgstr "Pulse <kbd>?</kbd> para ver la lista de atajos, o use <kbd>g</kbd> y luego una letra para ir (p. ej. <kbd>g</kbd> <kbd>i</kbd> para Inventario)"
+
+msgid "Use the bell icon to view alerts"
+msgstr "Use el icono de campana para ver alertas"
+
+msgid "Adding Stock → Stock → Add Item"
+msgstr "Añadir inventario → Inventario → Añadir artículo"
+
+msgid "Managing Locations → Locations → Create Location"
+msgstr "Gestionar ubicaciones → Ubicaciones → Crear ubicación"
+
+msgid "Creating Orders → Orders → Create Order"
+msgstr "Crear pedidos → Pedidos → Crear pedido"
+
+msgid "Notifications → Low stock alerts appear here"
+msgstr "Notificaciones → Las alertas de stock bajo aparecen aquí"
+
+msgid "Confirm logout"
+msgstr "Confirmar cierre de sesión"
+
+#, python-format
+msgid "Are you sure you want to log out of account <strong>%(u)s</strong>?"
+msgstr "¿Seguro que desea cerrar sesión de la cuenta <strong>%(u)s</strong>?"
+
+msgid "You can sign back in at any time to continue managing inventory, orders, and alerts."
+msgstr "Puede volver a iniciar sesión en cualquier momento para seguir gestionando inventario, pedidos y alertas."
+
+msgid "Cancel"
+msgstr "Cancelar"
+
+msgid "Log out now"
+msgstr "Cerrar sesión ahora"
+
+msgid "Keyboard shortcuts"
+msgstr "Atajos de teclado"
+
+msgid "Shortcuts are inactive while focus is in a field. You can disable them under General settings."
+msgstr "Los atajos no están activos cuando el foco está en un campo. Puede desactivarlos en Configuración general."
+
+msgid "<kbd>/</kbd> — Focus global search"
+msgstr "<kbd>/</kbd> — Enfocar la búsqueda global"
+
+msgid "<kbd>?</kbd> — Show this list"
+msgstr "<kbd>?</kbd> — Mostrar esta lista"
+
+msgid "<kbd>g</kbd> then <kbd>d</kbd> — Dashboard"
+msgstr "<kbd>g</kbd> y luego <kbd>d</kbd> — Panel"
+
+msgid "<kbd>g</kbd> then <kbd>i</kbd> — Stock"
+msgstr "<kbd>g</kbd> y luego <kbd>i</kbd> — Inventario"
+
+msgid "<kbd>g</kbd> then <kbd>l</kbd> — Locations"
+msgstr "<kbd>g</kbd> y luego <kbd>l</kbd> — Ubicaciones"
+
+msgid "<kbd>g</kbd> then <kbd>o</kbd> — Orders"
+msgstr "<kbd>g</kbd> y luego <kbd>o</kbd> — Pedidos"
+
+msgid "<kbd>g</kbd> then <kbd>c</kbd> — Contacts"
+msgstr "<kbd>g</kbd> y luego <kbd>c</kbd> — Contactos"
+
+msgid "<kbd>g</kbd> then <kbd>a</kbd> — Alerts"
+msgstr "<kbd>g</kbd> y luego <kbd>a</kbd> — Alertas"
+
+msgid "<kbd>g</kbd> then <kbd>n</kbd> — Anomalies"
+msgstr "<kbd>g</kbd> y luego <kbd>n</kbd> — Anomalías"
+
+msgid "<kbd>g</kbd> then <kbd>s</kbd> — Settings"
+msgstr "<kbd>g</kbd> y luego <kbd>s</kbd> — Configuración"
+
+msgid "Configure notifications, appearance, and account preferences."
+msgstr "Configure notificaciones, apariencia y preferencias de la cuenta."
+
+msgid "General"
+msgstr "General"
+
+msgid "Appearance"
+msgstr "Apariencia"
+
+msgid "Data & Privacy"
+msgstr "Datos y privacidad"
+
+msgid "Go to Profile"
+msgstr "Ir al perfil"
+
+msgid "Could not save settings."
+msgstr "No se pudieron guardar los ajustes."
+
+msgid "Please review the fields below."
+msgstr "Revise los campos siguientes."
+
+msgid "General Preferences"
+msgstr "Preferencias generales"
+
+msgid "Defaults for lists, regional options, and confirmations. List screens may still override pagination and table spacing on this device."
+msgstr "Valores predeterminados para listas, opciones regionales y confirmaciones. Las pantallas de lista pueden seguir cambiando la paginación y el espaciado de tabla en este dispositivo."
+
+msgid "Lists & layout"
+msgstr "Listas y diseño"
+
+msgid "Language"
+msgstr "Idioma"
+
+msgid "Language for navigation, settings, and system messages."
+msgstr "Idioma de la navegación, la configuración y los mensajes del sistema."
+
+msgid "Notification Preferences"
+msgstr "Preferencias de notificaciones"
+
+msgid "Choose which alerts you want and how they are delivered."
+msgstr "Elija qué alertas desea y cómo recibirlas."
+
+msgid "Personalize your theme and accent colour. Accent updates buttons and highlights across the app."
+msgstr "Personalice el tema y el color de acento. El acento actualiza botones y resaltados en toda la aplicación."
+
+msgid "Theme"
+msgstr "Tema"
+
+msgid "Accent Colour"
+msgstr "Color de acento"
+
+msgid "Save Settings"
+msgstr "Guardar ajustes"
+
+msgid "Export activity, manage dismissed alerts, or reset preferences to defaults."
+msgstr "Exportar actividad, gestionar alertas descartadas o restablecer preferencias a los valores predeterminados."
+
+msgid "Export Activity Log"
+msgstr "Exportar registro de actividad"
+
+msgid "Download your recent account activity as CSV."
+msgstr "Descargue su actividad reciente en CSV."
+
+msgid "Export Activity"
+msgstr "Exportar actividad"
+
+msgid "Restore Dismissed Alerts"
+msgstr "Restaurar alertas descartadas"
+
+msgid "Restore alerts you dismissed from the notification list."
+msgstr "Restaurar las alertas que descartó de la lista de notificaciones."
+
+msgid "Restore Alerts"
+msgstr "Restaurar alertas"
+
+msgid "Reset All Preferences"
+msgstr "Restablecer todas las preferencias"
+
+msgid "Set all settings back to system defaults."
+msgstr "Volver a los valores predeterminados del sistema."
+
+msgid "Reset to Defaults"
+msgstr "Restablecer valores predeterminados"

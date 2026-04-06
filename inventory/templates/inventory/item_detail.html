@@ -1,5 +1,5 @@
 {% extends "inventory/base.html" %}
-{% load static %}
+{% load static user_pref_format %}
 
 {% block content %}
 
@@ -71,18 +71,12 @@
                         <i class="bi bi-cart-plus me-1"></i>Create order ({{ rec.reorder_qty }})
                     </a>
                 {% endif %}
-                <div class="btn-group ms-1">
-                    <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">More</button>
-                    <ul class="dropdown-menu dropdown-menu-end">
-                        {% if perms.inventory.change_item %}
-                        <li><a class="dropdown-item" href="{% url 'item_toggle_archive' item.id %}"><i class="bi bi-archive me-2"></i>{% if item.is_active %}Archive{% else %}Unarchive{% endif %}</a></li>
-                        {% endif %}
-                        {% if perms.inventory.delete_item %}
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item text-danger" href="{% url 'item_delete' item.id %}"><i class="bi bi-trash me-2"></i>Delete</a></li>
-                        {% endif %}
-                    </ul>
-                </div>
+                {% if perms.inventory.change_item %}
+                    <a href="{% url 'item_toggle_archive' item.id %}" class="btn btn-outline-secondary"><i class="bi bi-archive me-1"></i>{% if item.is_active %}Archive{% else %}Unarchive{% endif %}</a>
+                {% endif %}
+                {% if perms.inventory.delete_item %}
+                    <a href="{% url 'item_delete' item.id %}" class="btn btn-outline-danger"><i class="bi bi-trash me-1"></i>Delete</a>
+                {% endif %}
                 <a href="{% url 'item_list' %}" class="btn btn-outline-secondary ms-auto">
                     <i class="bi bi-arrow-left me-1"></i>Back to list
                 </a>
@@ -149,7 +143,7 @@
                             {% endif %}
                             {% if item.expiry_date %}
                             <dt class="col-sm-4 text-muted">Expiry</dt>
-                            <dd class="col-sm-8 {% if item.expiry_date < today %}text-danger fw-semibold{% endif %}">{{ item.expiry_date|date:"d M Y" }}</dd>
+                            <dd class="col-sm-8 {% if item.expiry_date < today %}text-danger fw-semibold{% endif %}">{% ww_date item.expiry_date %}</dd>
                             {% endif %}
                             {% if item.external_link %}
                             <dt class="col-sm-4 text-muted">External link</dt>
@@ -251,7 +245,7 @@
                     <ul class="list-unstyled mb-0 small">
                         {% for a in anomalies %}
                         <li class="d-flex justify-content-between py-1">
-                            <span>{{ a.date|date:"d M Y" }} – {{ a.severity }}</span>
+                            <span>{% ww_date a.date %} – {{ a.severity }}</span>
                             <a href="{% url 'item_forecast' item.id %}">Forecast</a>
                         </li>
                         {% endfor %}
@@ -282,7 +276,7 @@
                             <tbody>
                                 {% for ln in order_lines %}
                                 <tr>
-                                    <td>{{ ln.order.order_date|date:"d M Y" }}</td>
+                                    <td>{% ww_date ln.order.order_date %}</td>
                                     <td><span class="badge {% if ln.order.order_type == 'PURCHASE' %}bg-info{% else %}bg-success{% endif %}">{{ ln.order.get_order_type_display }}</span></td>
                                     <td class="text-end">{{ ln.quantity }}</td>
                                     <td>{{ ln.order.get_status_display }}</td>
@@ -316,7 +310,7 @@
                     <thead><tr><th>Date</th><th class="text-end">Quantity</th></tr></thead>
                     <tbody>
                         {% for h in recent_history %}
-                        <tr><td>{{ h.date|date:"d M Y" }}</td><td class="text-end">{{ h.quantity }}</td></tr>
+                        <tr><td>{% ww_date h.date %}</td><td class="text-end">{{ h.quantity }}</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>

@@ -4,6 +4,7 @@ from decimal import Decimal
 from datetime import date
 from django.conf import settings
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
 class ManagerRequest(models.Model):
     STATUS_CHOICES = [
@@ -34,6 +35,14 @@ class Supplier(models.Model):
     email = models.EmailField(blank=True)
     phone = models.CharField(max_length=50, blank=True)
     address = models.TextField(blank=True)
+    latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True,
+        help_text="GPS latitude (e.g. for maps)",
+    )
+    longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True,
+        help_text="GPS longitude (e.g. for maps)",
+    )
     description = models.TextField(blank=True, help_text="Description of the company")
     website = models.URLField(blank=True, help_text="Company website URL")
     image = models.ImageField(upload_to="suppliers/", blank=True, null=True, help_text="Company logo or image")
@@ -45,12 +54,28 @@ class Supplier(models.Model):
     def __str__(self):
         return self.name
 
+    def get_map_url(self):
+        from urllib.parse import quote
+        if self.latitude is not None and self.longitude is not None:
+            return f"https://www.google.com/maps?q={self.latitude},{self.longitude}&z=17"
+        if self.address and str(self.address).strip():
+            return f"https://www.google.com/maps/search/?api=1&query={quote(str(self.address).strip())}"
+        return None
+
 
 class Client(models.Model):
     name = models.CharField(max_length=255)
     email = models.EmailField(blank=True)
     phone = models.CharField(max_length=50, blank=True)
     address = models.TextField(blank=True)
+    latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True,
+        help_text="GPS latitude (e.g. for maps)",
+    )
+    longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True,
+        help_text="GPS longitude (e.g. for maps)",
+    )
     description = models.TextField(blank=True, help_text="Description of the company")
     website = models.URLField(blank=True, help_text="Company website URL")
     image = models.ImageField(upload_to="customers/", blank=True, null=True, help_text="Company logo or image")
@@ -61,6 +86,14 @@ class Client(models.Model):
 
     def __str__(self):
         return self.name
+
+    def get_map_url(self):
+        from urllib.parse import quote
+        if self.latitude is not None and self.longitude is not None:
+            return f"https://www.google.com/maps?q={self.latitude},{self.longitude}&z=17"
+        if self.address and str(self.address).strip():
+            return f"https://www.google.com/maps/search/?api=1&query={quote(str(self.address).strip())}"
+        return None
 
 
 class Location(models.Model):
@@ -371,9 +404,6 @@ class Order(models.Model):
             return
 
         delivery_date = timezone.now().date()
-        from django.apps import apps
-        Activity = apps.get_model("inventory", "Activity")
-
         for line in self.lines.select_related("item").all():
             item = line.item
 
@@ -411,6 +441,7 @@ class Order(models.Model):
             Activity.objects.create(
                 message=f"Order #{self.id} delivered — updated stock for {item.name}",
                 user=actor if actor and getattr(actor, "is_authenticated", False) else None,
+                kind=Activity.KIND_ORDER_STOCK,
             )
 
         # Mark order as applied to avoid duplicates
@@ -455,8 +486,51 @@ class StockHistory(models.Model):
     
 
 class Activity(models.Model):
+    KIND_OTHER = "other"
+    KIND_ITEM_CREATE = "item_create"
+    KIND_ITEM_UPDATE = "item_update"
+    KIND_ITEM_ADJUST = "item_adjust"
+    KIND_ITEM_ARCHIVE = "item_archive"
+    KIND_ITEM_UNARCHIVE = "item_unarchive"
+    KIND_ITEM_DELETE = "item_delete"
+    KIND_ITEM_HARD_DELETE = "item_hard_delete"
+    KIND_ITEM_AUTO_ARCHIVE = "item_auto_archive"
+    KIND_ORDER_STOCK = "order_stock"
+
+    KIND_CHOICES = [
+        (KIND_ITEM_CREATE, "New item"),
+        (KIND_ITEM_UPDATE, "Item updated"),
+        (KIND_ITEM_ADJUST, "Quantity"),
+        (KIND_ITEM_ARCHIVE, "Archived"),
+        (KIND_ITEM_UNARCHIVE, "Unarchived"),
+        (KIND_ITEM_DELETE, "Deleted"),
+        (KIND_ITEM_HARD_DELETE, "Permanent delete"),
+        (KIND_ITEM_AUTO_ARCHIVE, "Auto-archived"),
+        (KIND_ORDER_STOCK, "Order & stock"),
+        (KIND_OTHER, "Other"),
+    ]
+
+    BADGE_CLASSES = {
+        KIND_ITEM_CREATE: "text-bg-success",
+        KIND_ITEM_UPDATE: "text-bg-primary",
+        KIND_ITEM_ADJUST: "text-bg-info",
+        KIND_ITEM_ARCHIVE: "text-bg-warning text-dark",
+        KIND_ITEM_UNARCHIVE: "text-bg-secondary",
+        KIND_ITEM_DELETE: "text-bg-danger",
+        KIND_ITEM_HARD_DELETE: "text-bg-danger",
+        KIND_ITEM_AUTO_ARCHIVE: "text-bg-warning text-dark",
+        KIND_ORDER_STOCK: "text-bg-primary",
+        KIND_OTHER: "text-bg-light border text-dark",
+    }
+
     message = models.CharField(max_length=255)
     timestamp = models.DateTimeField(auto_now_add=True)
+    kind = models.CharField(
+        max_length=32,
+        choices=KIND_CHOICES,
+        default=KIND_OTHER,
+        db_index=True,
+    )
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -471,6 +545,11 @@ class Activity(models.Model):
     def __str__(self):
         who = self.user.username if self.user else "System"
         return f"{self.timestamp}: {self.message} ({who})"
+
+    @property
+    def kind_badge_class(self):
+        cls = type(self)
+        return cls.BADGE_CLASSES.get(self.kind, cls.BADGE_CLASSES[cls.KIND_OTHER])
     
 class Notification(models.Model):
     user = models.ForeignKey(
@@ -671,9 +750,129 @@ class UserPreference(models.Model):
     ]
     accent_color = models.CharField(max_length=10, choices=ACCENT_CHOICES, default=ACCENT_BLUE)
 
+    FONT_SIZE_SMALL = "small"
+    FONT_SIZE_MEDIUM = "medium"
+    FONT_SIZE_LARGE = "large"
+    FONT_SIZE_CHOICES = [
+        (FONT_SIZE_SMALL, "Small"),
+        (FONT_SIZE_MEDIUM, "Medium"),
+        (FONT_SIZE_LARGE, "Large"),
+    ]
+    font_size = models.CharField(
+        max_length=10,
+        choices=FONT_SIZE_CHOICES,
+        default=FONT_SIZE_MEDIUM,
+    )
+
     compact_mode = models.BooleanField(default=False)
 
     items_per_page = models.PositiveIntegerField(default=20)
+
+    TABLE_DENSITY_COMFORTABLE = "comfortable"
+    TABLE_DENSITY_COMPACT = "compact"
+    TABLE_DENSITY_CHOICES = [
+        (TABLE_DENSITY_COMFORTABLE, "Comfortable"),
+        (TABLE_DENSITY_COMPACT, "Compact"),
+    ]
+    default_table_density = models.CharField(
+        max_length=12,
+        choices=TABLE_DENSITY_CHOICES,
+        default=TABLE_DENSITY_COMFORTABLE,
+    )
+
+    LANDING_DASHBOARD = "dashboard"
+    LANDING_ITEM_LIST = "item_list"
+    LANDING_LOCATION_LIST = "location_list"
+    LANDING_ORDER_LIST = "order_list"
+    LANDING_CONTACTS_LIST = "contacts_list"
+    LANDING_ALERTS_LIST = "alerts_list"
+    LANDING_ANOMALY_LIST = "anomaly_list"
+    LANDING_SETTINGS = "settings"
+    DEFAULT_LANDING_CHOICES = [
+        (LANDING_DASHBOARD, "Dashboard"),
+        (LANDING_ITEM_LIST, "Stock"),
+        (LANDING_LOCATION_LIST, "Locations"),
+        (LANDING_ORDER_LIST, "Orders"),
+        (LANDING_CONTACTS_LIST, "Contacts"),
+        (LANDING_ALERTS_LIST, "Alerts"),
+        (LANDING_ANOMALY_LIST, "Anomalies"),
+        (LANDING_SETTINGS, "Settings"),
+    ]
+    default_landing = models.CharField(
+        max_length=32,
+        choices=DEFAULT_LANDING_CHOICES,
+        default=LANDING_DASHBOARD,
+    )
+
+    CLOCK_12 = "12h"
+    CLOCK_24 = "24h"
+    CLOCK_FORMAT_CHOICES = [
+        (CLOCK_12, "12-hour (e.g. 1:30 PM)"),
+        (CLOCK_24, "24-hour (e.g. 13:30)"),
+    ]
+    clock_format = models.CharField(
+        max_length=4,
+        choices=CLOCK_FORMAT_CHOICES,
+        default=CLOCK_24,
+    )
+
+    DATE_DMY = "dmy"
+    DATE_MDY = "mdy"
+    DATE_ISO = "iso"
+    DATE_FORMAT_CHOICES = [
+        (DATE_DMY, "4 Jan 2026 (day month year)"),
+        (DATE_MDY, "Jan 4, 2026 (month day year)"),
+        (DATE_ISO, "2026-01-04 (ISO)"),
+    ]
+    date_format_style = models.CharField(
+        max_length=8,
+        choices=DATE_FORMAT_CHOICES,
+        default=DATE_DMY,
+    )
+
+    timezone_name = models.CharField(max_length=64, default="UTC")
+
+    language_code = models.CharField(max_length=10, default="en")
+
+    default_currency = models.CharField(
+        max_length=3,
+        choices=Item.CURRENCY_CHOICES,
+        default="EUR",
+    )
+    default_unit_of_measure = models.CharField(max_length=20, default="pcs", blank=True)
+
+    confirm_destructive_actions = models.BooleanField(default=True)
+    keyboard_shortcuts_enabled = models.BooleanField(default=True)
+
+    reduce_motion = models.BooleanField(
+        default=False,
+        help_text="Minimise transitions and animations (also respects system reduced-motion).",
+    )
+    underline_links = models.BooleanField(
+        default=False,
+        help_text="Underline body content links for easier spotting.",
+    )
+
+    ACCESSIBILITY_BASIC = "basic"
+    ACCESSIBILITY_ENHANCED = "enhanced"
+    ACCESSIBILITY_ASSISTIVE = "assistive"
+    ACCESSIBILITY_AUTO = "auto"
+    ACCESSIBILITY_MODE_CHOICES = [
+        (ACCESSIBILITY_AUTO, _("Auto — adapt from device (motion & contrast)")),
+        (ACCESSIBILITY_BASIC, _("Basic — standard layout")),
+        (ACCESSIBILITY_ENHANCED, _("Enhanced — larger controls, clearer focus")),
+        (ACCESSIBILITY_ASSISTIVE, _("Assistive — simplified panels, maximum spacing")),
+    ]
+    accessibility_mode = models.CharField(
+        max_length=16,
+        choices=ACCESSIBILITY_MODE_CHOICES,
+        default=ACCESSIBILITY_BASIC,
+        help_text="Adaptive UX tier; Auto uses prefers-reduced-motion and prefers-contrast.",
+    )
+    voice_feedback_enabled = models.BooleanField(
+        default=False,
+        help_text="Allow speech synthesis for page content and alerts (browser Web Speech API).",
+    )
 
     def __str__(self):
         return f"Preferences for {self.user}"
@@ -681,6 +880,13 @@ class UserPreference(models.Model):
 
 class UserProfile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile")
+
+    avatar = models.ImageField(
+        upload_to="profile_avatars/",
+        blank=True,
+        null=True,
+        help_text="Shown in the header menu and on your profile.",
+    )
 
     job_title = models.CharField(max_length=80, blank=True)
     department = models.CharField(max_length=80, blank=True)

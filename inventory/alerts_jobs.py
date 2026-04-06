@@ -106,6 +106,8 @@ def run_anomaly_scan_and_notify(
                 pref, _ = UserPreference.objects.get_or_create(user=u)
                 if not pref.notify_anomalies:
                     continue
+                if Notification.objects.filter(user=u, message=msg, url=link).exists():
+                    continue
                 Notification.objects.create(user=u, message=msg, url=link)
                 if pref.email_notifications and a.severity == "HIGH":
                     email_lines_by_user.setdefault(u.id, {"user": u, "lines": []})
@@ -169,7 +171,7 @@ def sync_recommendation_notifications(*, limit=50):
 
     for u in recipients:
         pref, _ = UserPreference.objects.get_or_create(user=u)
-        if not (pref.notify_anomalies or pref.notify_low_stock):
+        if not pref.notify_anomalies:
             continue
         critical_lines = []
 
@@ -214,44 +216,3 @@ def sync_recommendation_notifications(*, limit=50):
         "created_notifications": created_count,
         "critical_emails_sent": critical_emails_sent,
     }
-
-
-def send_weekly_alert_digest(*, days=7):
-    Notification = apps.get_model("inventory", "Notification")
-    User = get_user_model()
-
-    since = timezone.now() - datetime.timedelta(days=days)
-    users = User.objects.filter(is_active=True).exclude(email="")
-    sent = 0
-
-    for u in users:
-        pref, _ = UserPreference.objects.get_or_create(user=u)
-        if not pref.weekly_reports:
-            continue
-
-        qs = Notification.objects.filter(
-            user=u,
-            created_at__gte=since,
-        ).order_by("-created_at")
-        total = qs.count()
-        if total == 0:
-            continue
-
-        critical = qs.filter(message__iregex=r"(CRITICAL|HIGH)").count()
-        unread = qs.filter(is_read=False, dismissed=False).count()
-        top_lines = list(qs.values_list("message", flat=True)[:20])
-
-        intro = (
-            f"Here is your weekly alert digest for the last {days} days.\n"
-            f"Total alerts: {total} | Critical/High: {critical} | Unread: {unread}"
-        )
-        ok = _send_grouped_alert_email(
-            user=u,
-            subject="WareWolf: Weekly alerts digest",
-            intro=intro,
-            lines=top_lines,
-        )
-        if ok:
-            sent += 1
-
-    return {"emails_sent": sent}

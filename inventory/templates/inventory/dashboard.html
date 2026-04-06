@@ -1,5 +1,5 @@
 {% extends "inventory/base.html" %}
-{% load static %}
+{% load static user_pref_format %}
 
 {% block content %}
 
@@ -299,12 +299,12 @@
                     <div class="col-lg-5">
                         <div class="card border-0 bg-light-subtle h-100">
                             <div class="card-body">
-                                <h6 class="fw-semibold mb-2">How this series is built</h6>
-                                <p class="small text-muted mb-2">Figures are computed when you load the dashboard from your live database — not static placeholders.</p>
+                                <h6 class="fw-semibold mb-2">Data basis</h6>
+                                <p class="small text-muted mb-2">This series is calculated from your live inventory when the dashboard loads.</p>
                                 <ul class="mb-0 text-muted small">
-                                    <li>Daily totals use stock snapshots where available, otherwise movements and adjustments are reconstructed into an end-of-day series.</li>
-                                    <li>The latest point is aligned with the current sum of item quantities so the chart matches warehouse reality.</li>
-                                    <li>This view is descriptive history only; projections use the separate model on the adjacent card.</li>
+                                    <li>Daily values use recorded stock snapshots where available; otherwise movements and adjustments are rolled up to an end-of-day total.</li>
+                                    <li>The latest point reflects current on-hand quantities so the chart matches the warehouse.</li>
+                                    <li>This chart is historical only; forward projections are shown on the adjacent card.</li>
                                 </ul>
                             </div>
                         </div>
@@ -854,7 +854,7 @@
                     {% csrf_token %}
                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
 
-                    <div class="card shadow-sm border-0 ww-table-compact" id="anomalies-table-card">
+                    <div class="card shadow-sm border-0" id="anomalies-table-card">
                         <div class="table-responsive ww-table-responsive">
                             <table class="table table-hover align-middle mb-0 ww-sticky-header" id="anomalies-table">
                                 <thead class="table-light">
@@ -880,7 +880,7 @@
                                         <td data-col="item" class="text-truncate" style="max-width: 280px;">
                                             <a href="{% url 'item_forecast' a.item.id %}" class="text-decoration-none">{{ a.item.name }}</a>
                                         </td>
-                                        <td data-col="date">{{ a.date|date:"d/m/Y" }}</td>
+                                        <td data-col="date">{% ww_date a.date %}</td>
                                         <td data-col="qty" class="text-end">{{ a.quantity }}</td>
                                         <td data-col="score" class="text-end">{{ a.score|floatformat:2 }}</td>
                                         <td data-col="severity">
@@ -1111,7 +1111,7 @@
                         {{ a.item.name }}
                         </a>
                     </td>
-                    <td>{{ a.date|date:"d/m/Y" }}</td>
+                    <td>{% ww_date a.date %}</td>
                     <td>{{ a.quantity }}</td>
                     <td>{{ a.score|floatformat:2 }}</td>
                     <td>
@@ -1222,6 +1222,16 @@ let pieChart = null;
 let pieModalChartInstance = null;
 let inventoryChart = null;
 
+function wwDashboardChartsDark() {
+    const t = document.body.getAttribute("data-theme") || "light";
+    if (t === "dark") return true;
+    if (t === "auto" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) return true;
+    return false;
+}
+const WW_CHART_GRID = wwDashboardChartsDark() ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
+const WW_CHART_TICK = wwDashboardChartsDark() ? "#9ca3af" : "#64748b";
+const WW_CHART_GRID_SOFT = wwDashboardChartsDark() ? "rgba(255,255,255,0.1)" : "rgba(148,163,184,0.16)";
+
 function expandPieColors(count) {
     const palette = [
         'rgba(59,130,246,0.85)','rgba(16,185,129,0.85)','rgba(245,158,11,0.85)','rgba(239,68,68,0.85)','rgba(139,92,246,0.85)',
@@ -1256,12 +1266,13 @@ function buildOrdersStackedChart(ctx, detailed) {
             ]
         },
         options: {
+            color: WW_CHART_TICK,
             responsive: true,
             maintainAspectRatio: false,
             animation: { duration: detailed ? 600 : 1000, easing: detailed ? 'easeOutQuart' : 'easeOutBounce' },
             scales: {
-                x: { stacked: true, grid: { display: false } },
-                y: { stacked: true, beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { precision: 0 } }
+                x: { stacked: true, grid: { display: false }, ticks: { color: WW_CHART_TICK } },
+                y: { stacked: true, beginAtZero: true, grid: { color: WW_CHART_GRID }, ticks: { precision: 0, color: WW_CHART_TICK } }
             },
             plugins: {
                 legend: { display: true, position: 'top', labels: { boxWidth: 12, padding: 8 } },
@@ -1324,6 +1335,7 @@ inventoryChart = new Chart(inventoryCtx, {
         }]
     },
     options: {
+        color: WW_CHART_TICK,
         responsive: true,
         maintainAspectRatio: false,
         animation: {
@@ -1345,6 +1357,7 @@ inventoryChart = new Chart(inventoryCtx, {
                     autoSkip: false,
                     maxRotation: 0,
                     minRotation: 0,
+                    color: WW_CHART_TICK,
                     callback: function(value, index) {
                         const label = this.getLabelForValue(value);
                         return showFixedStepTickFromToday(index, trendTodayIndex, trendDayStep) ? label : "";
@@ -1355,7 +1368,8 @@ inventoryChart = new Chart(inventoryCtx, {
                 beginAtZero: true,
                 min: unifiedYAxisMin,
                 max: unifiedYAxisMax,
-                grid: { color: "rgba(0,0,0,0.05)" }
+                grid: { color: WW_CHART_GRID },
+                ticks: { color: WW_CHART_TICK }
             }
         }
     }
@@ -1391,6 +1405,7 @@ if (trendDetailModal) {
                 }]
             },
             options: {
+                color: WW_CHART_TICK,
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => " Qty: " + ctx.parsed.y } } },
@@ -1400,13 +1415,14 @@ if (trendDetailModal) {
                         ticks: {
                             autoSkip: false,
                             maxRotation: 0,
+                            color: WW_CHART_TICK,
                             callback: function(value, index) {
                                 const label = this.getLabelForValue(value);
                                 return showFixedStepTickFromToday(index, trendTodayIndex, trendDayStep) ? label : "";
                             }
                         }
                     },
-                    y: { beginAtZero: true, min: unifiedYAxisMin, max: unifiedYAxisMax, grid: { color: "rgba(0,0,0,0.05)" }, ticks: { precision: 0 } }
+                    y: { beginAtZero: true, min: unifiedYAxisMin, max: unifiedYAxisMax, grid: { color: WW_CHART_GRID }, ticks: { precision: 0, color: WW_CHART_TICK } }
                 }
             }
         });
@@ -1506,6 +1522,7 @@ function buildTopDemandChart(ctx2d, detailed) {
             }]
         },
         options: {
+            color: WW_CHART_TICK,
             indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
@@ -1521,10 +1538,10 @@ function buildTopDemandChart(ctx2d, detailed) {
             scales: {
                 x: {
                     beginAtZero: true,
-                    grid: { color: 'rgba(0,0,0,0.05)' },
-                    ticks: { precision: 0 }
+                    grid: { color: WW_CHART_GRID },
+                    ticks: { precision: 0, color: WW_CHART_TICK }
                 },
-                y: { grid: { display: false } }
+                y: { grid: { display: false }, ticks: { color: WW_CHART_TICK } }
             }
         }
     });
@@ -1588,6 +1605,7 @@ function buildPieChart(ctx2d) {
             }]
         },
         options: {
+            color: WW_CHART_TICK,
             responsive: true,
             maintainAspectRatio: false,
             plugins: { legend: { position: 'right' } }
@@ -1652,6 +1670,7 @@ function buildLocationChart(ctx2d, detailed) {
             }]
         },
         options: {
+            color: WW_CHART_TICK,
             indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
@@ -1667,10 +1686,10 @@ function buildLocationChart(ctx2d, detailed) {
             scales: {
                 x: {
                     beginAtZero: true,
-                    grid: { color: 'rgba(0,0,0,0.05)' },
-                    ticks: { precision: 0 }
+                    grid: { color: WW_CHART_GRID },
+                    ticks: { precision: 0, color: WW_CHART_TICK }
                 },
-                y: { grid: { display: false } }
+                y: { grid: { display: false }, ticks: { color: WW_CHART_TICK } }
             }
         }
     });
@@ -1736,16 +1755,17 @@ const todayMarkerPlugin = {
         const nextX = xScale.getPixelForValue(forecastTodayIndex + 1);
         const x = rawX + ((nextX - rawX) / 2 || 0);
         const ctx = chart.ctx;
+        const dark = wwDashboardChartsDark();
         ctx.save();
         ctx.beginPath();
         ctx.setLineDash([5, 4]);
-        ctx.strokeStyle = 'rgba(107,114,128,0.65)';
+        ctx.strokeStyle = dark ? 'rgba(203,213,225,0.45)' : 'rgba(107,114,128,0.65)';
         ctx.lineWidth = 1;
         ctx.moveTo(x, yScale.top);
         ctx.lineTo(x, yScale.bottom);
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle = 'rgba(107,114,128,0.9)';
+        ctx.fillStyle = dark ? 'rgba(226,232,240,0.9)' : 'rgba(107,114,128,0.9)';
         ctx.font = '11px sans-serif';
         ctx.fillText('Today', x + 6, yScale.top + 12);
         ctx.restore();
@@ -1771,6 +1791,7 @@ function buildProjectedChart(canvasEl, options = {}) {
             ]
         },
         options: {
+            color: WW_CHART_TICK,
             responsive: true,
             maintainAspectRatio: false,
             animation: { duration: 650 },
@@ -1782,13 +1803,14 @@ function buildProjectedChart(canvasEl, options = {}) {
                     ticks: {
                         autoSkip: false,
                         maxRotation: 0,
+                        color: WW_CHART_TICK,
                         callback: function(value, index) {
                             const label = this.getLabelForValue(value);
                             return showFixedStepTickFromToday(index, forecastTodayIndex, forecastDayStep) ? label : "";
                         }
                     }
                 },
-                y: { beginAtZero: true, min: unifiedYAxisMin, max: unifiedYAxisMax, grid: { color: "rgba(148,163,184,0.16)" }, border: { display: false }, ticks: { precision: 0 } }
+                y: { beginAtZero: true, min: unifiedYAxisMin, max: unifiedYAxisMax, grid: { color: WW_CHART_GRID_SOFT }, border: { display: false }, ticks: { precision: 0, color: WW_CHART_TICK } }
             }
         }
     });
@@ -1952,8 +1974,11 @@ window.addEventListener('resize', function() {
         });
 
         try {
+            var serverD = (document.body.getAttribute('data-default-table-density') || 'comfortable').toLowerCase();
+            if (serverD !== 'compact' && serverD !== 'comfortable') serverD = 'comfortable';
             var savedD = localStorage.getItem(densityKey);
-            if (savedD === 'compact') anomaliesCard.classList.add('ww-table-compact');
+            var effectiveD = savedD || serverD;
+            if (effectiveD === 'compact') anomaliesCard.classList.add('ww-table-compact');
         } catch (e) {}
     }
 
@@ -2217,9 +2242,9 @@ window.addEventListener('resize', function() {
     color: #1e3a8a !important;
 }
 .trend-pill.active {
-    background: #2563eb !important;
+    background: var(--bs-primary) !important;
     color: #fff !important;
-    box-shadow: 0 1px 4px rgba(37, 99, 235, 0.35);
+    box-shadow: 0 1px 4px rgba(var(--bs-primary-rgb), 0.35);
 }
 .chart-box-modal {
     height: 480px !important;
@@ -2285,6 +2310,53 @@ body.dark-mode .anomalies-modal-filter-card {
     position: relative;
     width: 100%;
 }
+
+/* Dashboard: hard-coded light greys → readable on dark surfaces */
+body.dark-mode .kpi-value {
+    color: #f0f6fc !important;
+}
+body.dark-mode .kpi-value.text-danger {
+    color: var(--bs-danger) !important;
+}
+body.dark-mode .kpi-meta {
+    color: #8b949e !important;
+}
+body.dark-mode .kpi-link:hover {
+    background: rgba(255, 255, 255, 0.04);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+body.dark-mode .dashboard-chevron {
+    color: #8b949e;
+}
+body.dark-mode .forecast-metric-tile {
+    background: rgba(22, 27, 34, 0.95);
+    border-color: #30363d;
+}
+body.dark-mode .forecast-metric-tile .h5,
+body.dark-mode .forecast-metric-tile .h6 {
+    color: #e6edf3;
+}
+body.dark-mode .trend-range-pills {
+    background: #21262d;
+}
+body.dark-mode .trend-pill {
+    color: #c9d1d9 !important;
+}
+body.dark-mode .trend-pill:hover {
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: #f0f6fc !important;
+}
+body.dark-mode .card-meta-text {
+    color: #8b949e !important;
+}
+body.dark-mode .card-primary-value {
+    color: #f0f6fc !important;
+}
+body.dark-mode .dashboard-card hr {
+    border-color: #30363d;
+    opacity: 1;
+}
+
 @media (max-width: 767px) {
     .summary-kpi-card .card-header.btn-toggle {
         padding-top: 0.7rem !important;

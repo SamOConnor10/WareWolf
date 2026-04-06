@@ -140,8 +140,8 @@
 }
 
 #sidebar .sidebar-link:hover {
-    background: #eff6ff;
-    color: #1d4ed8 !important;
+    background: var(--bs-primary-bg-subtle);
+    color: var(--bs-primary) !important;
 }
 
 #sidebar .sidebar-link:hover i {
@@ -149,7 +149,7 @@
 }
 
 #sidebar .sidebar-link.active {
-    background: #1d4ed8;
+    background: var(--bs-primary);
     color: #ffffff !important;
 }
 
@@ -202,11 +202,11 @@ body.dark-mode #sidebar .sidebar-link {
 
 body.dark-mode #sidebar .sidebar-link:hover {
     background: #374151;
-    color: #93c5fd !important;
+    color: color-mix(in srgb, var(--bs-primary) 72%, white) !important;
 }
 
 body.dark-mode #sidebar .sidebar-link.active {
-    background: #2563eb;
+    background: var(--bs-primary);
     color: #ffffff !important;
 }
 </style>

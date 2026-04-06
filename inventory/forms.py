@@ -1,12 +1,24 @@
 from django import forms
+from django.conf import settings
 from .models import Item, Supplier, Client, Location, Order, OrderLine, Category
-from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.forms import AuthenticationForm, UserCreationForm, PasswordChangeForm
+from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.forms import inlineformset_factory
 from django.contrib.auth import get_user_model
 from .models import UserPreference
 from .models import UserProfile
+
+
+class WareWolfPasswordChangeForm(PasswordChangeForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["old_password"].widget.attrs.setdefault("class", "form-control")
+        self.fields["old_password"].widget.attrs.setdefault("autocomplete", "current-password")
+        for key in ("new_password1", "new_password2"):
+            self.fields[key].widget.attrs.setdefault("class", "form-control")
+            self.fields[key].widget.attrs.setdefault("autocomplete", "new-password")
 
 
 class SignUpForm(UserCreationForm):
@@ -42,6 +54,51 @@ class SignUpForm(UserCreationForm):
         return username
 
 
+class EmailOrUsernameAuthenticationForm(AuthenticationForm):
+    """Allow signing in with email in the username field; clearer error when account exists but is inactive."""
+
+    def clean(self):
+        username = self.cleaned_data.get("username")
+        password = self.cleaned_data.get("password")
+
+        if username is None or not password:
+            return self.cleaned_data
+
+        User = get_user_model()
+        key = username.strip()
+
+        self.user_cache = authenticate(self.request, username=key, password=password)
+        if self.user_cache is None:
+            try:
+                u = User.objects.get(email__iexact=key)
+            except User.DoesNotExist:
+                pass
+            else:
+                self.user_cache = authenticate(
+                    self.request, username=u.get_username(), password=password
+                )
+
+        if self.user_cache is None:
+            user = None
+            try:
+                user = User.objects.get(username__iexact=key)
+            except User.DoesNotExist:
+                try:
+                    user = User.objects.get(email__iexact=key)
+                except User.DoesNotExist:
+                    raise self.get_invalid_login_error() from None
+            if user.check_password(password) and not user.is_active:
+                raise ValidationError(
+                    "This account is not active yet. Manager accounts must be approved by an "
+                    "administrator in Django admin before you can log in.",
+                    code="inactive",
+                )
+            raise self.get_invalid_login_error() from None
+
+        self.confirm_login_allowed(self.user_cache)
+        return self.cleaned_data
+
+
 # -------------------------------------------------
 # ITEM FORM
 # -------------------------------------------------
@@ -52,10 +109,21 @@ class ItemForm(forms.ModelForm):
         widget=forms.Select(attrs={"class": "form-select"})
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user_pref=None, **kwargs):
         super().__init__(*args, **kwargs)
         if not self.instance.pk:
-            self.fields["unit_of_measure"].initial = "pcs"
+            uom = "pcs"
+            cur = "EUR"
+            if user_pref is not None:
+                valid_uom = {c[0] for c in self.fields["unit_of_measure"].choices}
+                cand = (user_pref.default_unit_of_measure or "").strip()
+                if cand in valid_uom and cand:
+                    uom = cand
+                cc = (user_pref.default_currency or "").strip()
+                if cc in {"EUR", "USD", "GBP"}:
+                    cur = cc
+            self.fields["unit_of_measure"].initial = uom
+            self.fields["currency"].initial = cur
 
     unit_of_measure = forms.ChoiceField(
         choices=[
@@ -331,7 +399,7 @@ class SupplierForm(forms.ModelForm):
         model = Supplier
         fields = [
             "name", "description", "website", "email", "phone",
-            "address", "currency", "tax_id", "notes", "image", "is_active",
+            "address", "latitude", "longitude", "currency", "tax_id", "notes", "image", "is_active",
         ]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Company name"}),
@@ -340,6 +408,8 @@ class SupplierForm(forms.ModelForm):
             "email": forms.EmailInput(attrs={"class": "form-control", "placeholder": "Contact email address"}),
             "phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "Contact phone number"}),
             "address": forms.Textarea(attrs={"class": "form-control", "rows": 2, "placeholder": "Full address"}),
+            "latitude": forms.NumberInput(attrs={"class": "form-control", "placeholder": "e.g. 53.3498", "step": "any"}),
+            "longitude": forms.NumberInput(attrs={"class": "form-control", "placeholder": "e.g. -6.2603", "step": "any"}),
             "tax_id": forms.TextInput(attrs={"class": "form-control", "placeholder": "Company Tax ID"}),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2, "placeholder": "Internal notes"}),
             "image": forms.FileInput(attrs={"class": "form-control", "accept": "image/*"}),
@@ -358,7 +428,7 @@ class ClientForm(forms.ModelForm):
         model = Client
         fields = [
             "name", "description", "website", "email", "phone",
-            "address", "currency", "tax_id", "notes", "image", "is_active",
+            "address", "latitude", "longitude", "currency", "tax_id", "notes", "image", "is_active",
         ]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Company name"}),
@@ -367,6 +437,8 @@ class ClientForm(forms.ModelForm):
             "email": forms.EmailInput(attrs={"class": "form-control", "placeholder": "Contact email address"}),
             "phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "Contact phone number"}),
             "address": forms.Textarea(attrs={"class": "form-control", "rows": 2, "placeholder": "Full address"}),
+            "latitude": forms.NumberInput(attrs={"class": "form-control", "placeholder": "e.g. 53.3498", "step": "any"}),
+            "longitude": forms.NumberInput(attrs={"class": "form-control", "placeholder": "e.g. -6.2603", "step": "any"}),
             "tax_id": forms.TextInput(attrs={"class": "form-control", "placeholder": "Company Tax ID"}),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2, "placeholder": "Internal notes"}),
             "image": forms.FileInput(attrs={"class": "form-control", "accept": "image/*"}),
@@ -379,23 +451,41 @@ User = get_user_model()
 class ProfileForm(forms.ModelForm):
     class Meta:
         model = User
-        fields = ["first_name", "last_name", "email"]
+        fields = ["username", "first_name", "last_name", "email"]
         widgets = {
-            "first_name": forms.TextInput(attrs={"class": "form-control"}),
-            "last_name": forms.TextInput(attrs={"class": "form-control"}),
-            "email": forms.EmailInput(attrs={"class": "form-control"}),
+            "username": forms.TextInput(
+                attrs={"class": "form-control ww-profile-input", "autocomplete": "username"}
+            ),
+            "first_name": forms.TextInput(attrs={"class": "form-control ww-profile-input"}),
+            "last_name": forms.TextInput(attrs={"class": "form-control ww-profile-input"}),
+            "email": forms.EmailInput(attrs={"class": "form-control ww-profile-input"}),
         }
+
+    def clean_username(self):
+        name = (self.cleaned_data.get("username") or "").strip()
+        if not name:
+            raise ValidationError("Username is required.")
+        if User.objects.filter(username__iexact=name).exclude(pk=self.instance.pk).exists():
+            raise ValidationError("That username is already taken.")
+        return name
 
 class UserProfileDetailsForm(forms.ModelForm):
     class Meta:
         model = UserProfile
-        fields = ["job_title", "department", "phone_number", "employee_id", "bio"]
+        fields = ["avatar", "job_title", "department", "phone_number", "employee_id", "bio"]
         widgets = {
-            "job_title": forms.TextInput(attrs={"class": "form-control"}),
-            "department": forms.TextInput(attrs={"class": "form-control"}),
-            "phone_number": forms.TextInput(attrs={"class": "form-control"}),
-            "employee_id": forms.TextInput(attrs={"class": "form-control"}),
-            "bio": forms.Textarea(attrs={"class": "form-control", "rows": 4}),
+            "avatar": forms.FileInput(
+                attrs={
+                    "class": "d-none",
+                    "accept": "image/*",
+                    "id": "ww-profile-avatar-input",
+                }
+            ),
+            "job_title": forms.TextInput(attrs={"class": "form-control ww-profile-input"}),
+            "department": forms.TextInput(attrs={"class": "form-control ww-profile-input"}),
+            "phone_number": forms.TextInput(attrs={"class": "form-control ww-profile-input"}),
+            "employee_id": forms.TextInput(attrs={"class": "form-control ww-profile-input"}),
+            "bio": forms.Textarea(attrs={"class": "form-control ww-profile-input", "rows": 4}),
         }
 
 class UserPreferenceForm(forms.ModelForm):
@@ -405,11 +495,10 @@ class UserPreferenceForm(forms.ModelForm):
             "notify_anomalies",
             "notify_low_stock",
             "email_notifications",
-            "push_notifications",
-            "weekly_reports",
             "low_stock_threshold",
             "theme",
             "accent_color",
+            "font_size",
             "compact_mode",
             "items_per_page",
         ]
@@ -417,11 +506,10 @@ class UserPreferenceForm(forms.ModelForm):
             "notify_anomalies": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "notify_low_stock": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "email_notifications": forms.CheckboxInput(attrs={"class": "form-check-input"}),
-            "push_notifications": forms.CheckboxInput(attrs={"class": "form-check-input"}),
-            "weekly_reports": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "low_stock_threshold": forms.NumberInput(attrs={"class": "form-control", "min": 0}),
             "theme": forms.RadioSelect(),
             "accent_color": forms.RadioSelect(),
+            "font_size": forms.RadioSelect(),
             "compact_mode": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "items_per_page": forms.Select(attrs={"class": "form-select"}),
         }
@@ -434,15 +522,68 @@ class UserPreferenceForm(forms.ModelForm):
             (50, "50"),
             (100, "100"),
         ]
+
+
+COMMON_TIMEZONE_CHOICES = [
+    ("UTC", "UTC"),
+    ("Europe/Dublin", "Europe — Dublin"),
+    ("Europe/London", "Europe — London"),
+    ("Europe/Paris", "Europe — Paris"),
+    ("Europe/Berlin", "Europe — Berlin"),
+    ("America/New_York", "Americas — New York"),
+    ("America/Chicago", "Americas — Chicago"),
+    ("America/Denver", "Americas — Denver"),
+    ("America/Los_Angeles", "Americas — Los Angeles"),
+    ("America/Toronto", "Americas — Toronto"),
+    ("America/Sao_Paulo", "Americas — São Paulo"),
+    ("Asia/Dubai", "Asia — Dubai"),
+    ("Asia/Kolkata", "Asia — Kolkata"),
+    ("Asia/Shanghai", "Asia — Shanghai"),
+    ("Asia/Singapore", "Asia — Singapore"),
+    ("Asia/Tokyo", "Asia — Tokyo"),
+    ("Australia/Sydney", "Australia — Sydney"),
+    ("Pacific/Auckland", "Pacific — Auckland"),
+]
 
 
 class GeneralPreferenceForm(forms.ModelForm):
     class Meta:
         model = UserPreference
-        fields = ["compact_mode", "items_per_page"]
+        fields = [
+            "items_per_page",
+            "default_table_density",
+            "compact_mode",
+            "default_landing",
+            "timezone_name",
+            "language_code",
+            "date_format_style",
+            "clock_format",
+            "default_currency",
+            "default_unit_of_measure",
+            "confirm_destructive_actions",
+            "keyboard_shortcuts_enabled",
+            "accessibility_mode",
+            "voice_feedback_enabled",
+            "reduce_motion",
+            "underline_links",
+        ]
         widgets = {
-            "compact_mode": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "items_per_page": forms.Select(attrs={"class": "form-select"}),
+            "default_table_density": forms.Select(attrs={"class": "form-select"}),
+            "compact_mode": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "default_landing": forms.Select(attrs={"class": "form-select"}),
+            "timezone_name": forms.Select(attrs={"class": "form-select"}),
+            "language_code": forms.Select(attrs={"class": "form-select"}),
+            "date_format_style": forms.Select(attrs={"class": "form-select"}),
+            "clock_format": forms.Select(attrs={"class": "form-select"}),
+            "default_currency": forms.Select(attrs={"class": "form-select"}),
+            "default_unit_of_measure": forms.Select(attrs={"class": "form-select"}),
+            "confirm_destructive_actions": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "keyboard_shortcuts_enabled": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "accessibility_mode": forms.Select(attrs={"class": "form-select"}),
+            "voice_feedback_enabled": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "reduce_motion": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "underline_links": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -453,6 +594,21 @@ class GeneralPreferenceForm(forms.ModelForm):
             (50, "50"),
             (100, "100"),
         ]
+        self.fields["timezone_name"].widget.choices = list(COMMON_TIMEZONE_CHOICES)
+        self.fields["language_code"].widget.choices = list(settings.LANGUAGES)
+        uom_choices = [
+            ("pcs", "Pieces (pcs)"),
+            ("kg", "Kilograms (kg)"),
+            ("g", "Grams (g)"),
+            ("L", "Liters (L)"),
+            ("ml", "Milliliters (ml)"),
+            ("m", "Meters (m)"),
+            ("cm", "Centimeters (cm)"),
+            ("box", "Box"),
+            ("pack", "Pack"),
+            ("unit", "Unit"),
+        ]
+        self.fields["default_unit_of_measure"].widget.choices = uom_choices
 
 
 class NotificationPreferenceForm(forms.ModelForm):
@@ -462,16 +618,12 @@ class NotificationPreferenceForm(forms.ModelForm):
             "notify_anomalies",
             "notify_low_stock",
             "email_notifications",
-            "push_notifications",
-            "weekly_reports",
             "low_stock_threshold",
         ]
         widgets = {
             "notify_anomalies": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "notify_low_stock": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "email_notifications": forms.CheckboxInput(attrs={"class": "form-check-input"}),
-            "push_notifications": forms.CheckboxInput(attrs={"class": "form-check-input"}),
-            "weekly_reports": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "low_stock_threshold": forms.NumberInput(attrs={"class": "form-control", "min": 0}),
         }
 
@@ -479,8 +631,9 @@ class NotificationPreferenceForm(forms.ModelForm):
 class AppearancePreferenceForm(forms.ModelForm):
     class Meta:
         model = UserPreference
-        fields = ["theme", "accent_color"]
+        fields = ["theme", "accent_color", "font_size"]
         widgets = {
             "theme": forms.RadioSelect(),
             "accent_color": forms.RadioSelect(),
+            "font_size": forms.RadioSelect(),
         }

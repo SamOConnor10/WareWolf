@@ -1,226 +1,910 @@
 {% extends "inventory/base.html" %}
+{% load i18n %}
+{% block extra_head %}
+<style>
+  .ww-gen-pref .ww-gen-section-head .bi { font-size: 1.15rem; line-height: 1; }
+  .ww-gen-pref .ww-pref-tile { transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+  .ww-gen-pref .ww-pref-tile:hover { border-color: var(--bs-primary-border-subtle) !important; box-shadow: 0 0.25rem 0.75rem rgba(15, 23, 42, 0.06) !important; }
+  .ww-gen-pref .ww-pref-tile-icon { width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; border-radius: 0.65rem; background: var(--bs-primary-bg-subtle); color: var(--bs-primary); }
+  .ww-gen-pref .ww-pref-tile-icon .bi { font-size: 1.25rem; }
+  /* Keep switch on the same row as copy; stack only on very narrow screens */
+  .ww-gen-pref .ww-pref-toggle-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 1rem;
+    row-gap: 0.5rem;
+  }
+  @media (max-width: 575.98px) {
+    .ww-gen-pref .ww-pref-toggle-row { grid-template-columns: 1fr; }
+    .ww-gen-pref .ww-pref-toggle-row .ww-pref-toggle-switch { justify-self: start; }
+  }
+  .ww-notif-pref .ww-pref-tile { transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+  .ww-notif-pref .ww-pref-tile:hover { border-color: var(--bs-primary-border-subtle) !important; box-shadow: 0 0.25rem 0.75rem rgba(15, 23, 42, 0.06) !important; }
+  .ww-notif-pref .ww-pref-tile-icon { width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; border-radius: 0.65rem; background: var(--bs-primary-bg-subtle); color: var(--bs-primary); }
+  .ww-notif-pref .ww-pref-tile-icon .bi { font-size: 1.25rem; }
+  .ww-notif-pref .ww-pref-toggle-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 1rem;
+    row-gap: 0.5rem;
+  }
+  @media (max-width: 575.98px) {
+    .ww-notif-pref .ww-pref-toggle-row { grid-template-columns: 1fr; }
+    .ww-notif-pref .ww-pref-toggle-row .ww-pref-toggle-switch { justify-self: start; }
+  }
+  .ww-appearance-pref .ww-pref-tile { transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+  .ww-appearance-pref .ww-pref-tile:hover { border-color: var(--bs-primary-border-subtle) !important; box-shadow: 0 0.25rem 0.75rem rgba(15, 23, 42, 0.06) !important; }
+  .ww-appearance-pref .ww-pref-tile-icon { width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; border-radius: 0.65rem; background: var(--bs-primary-bg-subtle); color: var(--bs-primary); }
+  .ww-appearance-pref .ww-pref-tile-icon .bi { font-size: 1.25rem; }
+  /* Django 5+ RadioSelect: wrapper > div#id_* > div rows (not ul/li) */
+  .ww-appearance-pref .ww-appearance-options > div > div { margin-bottom: 0.5rem; }
+  .ww-appearance-pref .ww-appearance-options > div > div:last-child { margin-bottom: 0; }
+  .ww-appearance-pref .ww-appearance-theme > div > div label,
+  .ww-appearance-pref .ww-appearance-accent > div > div label,
+  .ww-appearance-pref .ww-appearance-font > div > div label {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-weight: 500;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.65rem;
+    padding: 0.65rem 0.85rem;
+    margin: 0;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+  }
+  .ww-appearance-pref .ww-appearance-theme > div > div label:hover,
+  .ww-appearance-pref .ww-appearance-accent > div > div label:hover,
+  .ww-appearance-pref .ww-appearance-font > div > div label:hover { background: var(--bs-light); }
+  /* Leading visuals: first flex item before the radio (order matches model choices) */
+  .ww-appearance-pref .ww-appearance-theme > div > div label::before,
+  .ww-appearance-pref .ww-appearance-accent > div > div label::before,
+  .ww-appearance-pref .ww-appearance-font > div > div label::before {
+    content: "";
+    flex-shrink: 0;
+    width: 1.375rem;
+    height: 1.375rem;
+    border-radius: 50%;
+    box-sizing: border-box;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  }
+  /* Theme: light, dark, auto */
+  .ww-appearance-pref .ww-appearance-theme > div > div:nth-child(1) label::before {
+    background: radial-gradient(circle at 35% 35%, #fffef5 0%, #fde68a 45%, #f59e0b 100%);
+  }
+  .ww-appearance-pref .ww-appearance-theme > div > div:nth-child(2) label::before {
+    background: radial-gradient(circle at 30% 30%, #475569 0%, #0f172a 70%);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+  .ww-appearance-pref .ww-appearance-theme > div > div:nth-child(3) label::before {
+    background: linear-gradient(90deg, #f1f5f9 50%, #1e293b 50%);
+  }
+  /* Accent swatches: blue … pink (model order) */
+  .ww-appearance-pref .ww-appearance-accent > div > div:nth-child(1) label::before { background: #0d6efd; }
+  .ww-appearance-pref .ww-appearance-accent > div > div:nth-child(2) label::before { background: #198754; }
+  .ww-appearance-pref .ww-appearance-accent > div > div:nth-child(3) label::before { background: #6f42c1; }
+  .ww-appearance-pref .ww-appearance-accent > div > div:nth-child(4) label::before { background: #dc3545; }
+  .ww-appearance-pref .ww-appearance-accent > div > div:nth-child(5) label::before { background: #fd7e14; }
+  .ww-appearance-pref .ww-appearance-accent > div > div:nth-child(6) label::before { background: #d63384; }
+  /* :has() fallback where nth-child order matches value (e.g. dynamic forms) */
+  .ww-appearance-pref .ww-appearance-accent > div > div label:has(input[value="blue"])::before { background: #0d6efd; }
+  .ww-appearance-pref .ww-appearance-accent > div > div label:has(input[value="green"])::before { background: #198754; }
+  .ww-appearance-pref .ww-appearance-accent > div > div label:has(input[value="purple"])::before { background: #6f42c1; }
+  .ww-appearance-pref .ww-appearance-accent > div > div label:has(input[value="red"])::before { background: #dc3545; }
+  .ww-appearance-pref .ww-appearance-accent > div > div label:has(input[value="orange"])::before { background: #fd7e14; }
+  .ww-appearance-pref .ww-appearance-accent > div > div label:has(input[value="pink"])::before { background: #d63384; }
+  /* Font size: small, medium, large — “Aa” glyph, decorative only (label text still read) */
+  .ww-appearance-pref .ww-appearance-font > div > div label::before {
+    border-radius: 0.35rem;
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    line-height: 1;
+    font-family: system-ui, sans-serif;
+    background: var(--bs-secondary-bg);
+    color: var(--bs-body-color);
+    box-shadow: none;
+  }
+  .ww-appearance-pref .ww-appearance-font > div > div:nth-child(1) label::before { content: "Aa"; font-size: 0.7rem; }
+  .ww-appearance-pref .ww-appearance-font > div > div:nth-child(2) label::before { content: "Aa"; font-size: 0.9rem; }
+  .ww-appearance-pref .ww-appearance-font > div > div:nth-child(3) label::before { content: "Aa"; font-size: 1.1rem; }
+  body.dark-mode .ww-appearance-pref .ww-appearance-theme > div > div label:hover,
+  body.dark-mode .ww-appearance-pref .ww-appearance-accent > div > div label:hover,
+  body.dark-mode .ww-appearance-pref .ww-appearance-font > div > div label:hover {
+    background: rgba(255, 255, 255, 0.06) !important;
+  }
+  body.dark-mode .ww-appearance-pref .ww-appearance-theme > div > div label::before,
+  body.dark-mode .ww-appearance-pref .ww-appearance-accent > div > div label::before {
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+  .ww-appearance-preview .nav-link.active {
+    cursor: default;
+    pointer-events: none;
+  }
+  .ww-privacy-pref .ww-pref-tile { transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+  .ww-privacy-pref .ww-pref-tile:hover { border-color: var(--bs-primary-border-subtle) !important; box-shadow: 0 0.25rem 0.75rem rgba(15, 23, 42, 0.06) !important; }
+  .ww-privacy-pref .ww-pref-tile-icon { width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; border-radius: 0.65rem; background: var(--bs-primary-bg-subtle); color: var(--bs-primary); flex-shrink: 0; }
+  .ww-privacy-pref .ww-pref-tile-icon .bi { font-size: 1.25rem; }
+  .ww-privacy-pref .ww-privacy-section-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+    margin-bottom: 0.75rem;
+    margin-top: 0.25rem;
+  }
+  .ww-privacy-pref .ww-privacy-info { font-size: 0.9rem; }
+  .ww-privacy-pref .ww-privacy-info ul { margin-bottom: 0; padding-left: 1.15rem; }
+  .ww-privacy-pref .ww-privacy-info li { margin-bottom: 0.35rem; }
+  .ww-privacy-pref .ww-privacy-info li:last-child { margin-bottom: 0; }
+  body.dark-mode .ww-privacy-pref .ww-pref-tile:hover { box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.25) !important; }
+</style>
+{% endblock %}
 {% block content %}
-<div class="container mt-4">
-  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
-    <div>
-      <h1 class="fw-bold mb-1">Settings</h1>
-      <div class="text-muted">Configure notifications, appearance, and account preferences.</div>
-    </div>
-    <a class="btn btn-outline-secondary" href="{% url 'profile' %}?tab=profile">
-      <i class="bi bi-person me-1"></i> Go to Profile
-    </a>
-  </div>
+<div class="pb-3">
+  <h1 class="fw-bold mb-1 d-flex align-items-center gap-2 flex-wrap">
+    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-3 p-2"><i class="bi bi-gear fs-5"></i></span>
+    {% trans "Settings" %}
+  </h1>
+  <p class="text-muted mb-0">{% trans "Configure notifications, appearance, account preferences, and data & privacy." %}</p>
+</div>
 
-  <ul class="nav nav-pills gap-2 mb-4">
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+  <ul class="nav nav-pills gap-2 ww-subnav mb-0 flex-wrap">
     <li class="nav-item">
       <a class="nav-link {% if active_tab == 'general' %}active{% endif %}" href="{% url 'settings' %}?tab=general">
-        <i class="bi bi-sliders me-1"></i> General
+        <i class="bi bi-sliders me-1"></i> {% trans "General" %}
       </a>
     </li>
     <li class="nav-item">
       <a class="nav-link {% if active_tab == 'notifications' %}active{% endif %}" href="{% url 'settings' %}?tab=notifications">
-        <i class="bi bi-bell me-1"></i> Notifications
+        <i class="bi bi-bell me-1"></i> {% trans "Notifications" %}
       </a>
     </li>
     <li class="nav-item">
       <a class="nav-link {% if active_tab == 'appearance' %}active{% endif %}" href="{% url 'settings' %}?tab=appearance">
-        <i class="bi bi-palette me-1"></i> Appearance
+        <i class="bi bi-palette me-1"></i> {% trans "Appearance" %}
       </a>
     </li>
     <li class="nav-item">
       <a class="nav-link {% if active_tab == 'privacy' %}active{% endif %}" href="{% url 'settings' %}?tab=privacy">
-        <i class="bi bi-shield-check me-1"></i> Data &amp; Privacy
+        <i class="bi bi-shield-check me-1"></i> {% trans "Data & Privacy" %}
       </a>
     </li>
   </ul>
+  <a class="btn btn-outline-secondary flex-shrink-0 text-nowrap" href="{% url 'profile' %}?tab=profile">
+    <i class="bi bi-person me-1"></i> {% trans "Go to Profile" %}
+  </a>
+</div>
 
-  <div class="card shadow-sm border-0">
-    <div class="card-body p-4 p-lg-5">
-      {% if active_tab != "privacy" %}
-        <form method="post" action="{% url 'settings' %}?tab={{ active_tab }}">
-          {% csrf_token %}
-          <input type="hidden" name="tab" value="{{ active_tab }}">
-          <input type="hidden" name="action" value="save">
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4 p-lg-5">
+    {% if active_tab != "privacy" %}
+      <form method="post" action="{% url 'settings' %}?tab={{ active_tab }}">
+        {% csrf_token %}
+        <input type="hidden" name="tab" value="{{ active_tab }}">
+        <input type="hidden" name="action" value="save">
 
-          {% if form.errors %}
-            <div class="alert alert-danger">
-              <strong>Could not save settings.</strong> Please review the fields below.
+        {% if form.errors %}
+          <div class="alert alert-danger">
+            <strong>{% trans "Could not save settings." %}</strong> {% trans "Please review the fields below." %}
+          </div>
+        {% endif %}
+
+        {% if active_tab == "general" %}
+          <div class="ww-gen-pref">
+          <div class="d-flex flex-wrap align-items-start gap-3 mb-4 pb-3 border-bottom border-light-subtle">
+            <span class="rounded-3 bg-primary-subtle text-primary border border-primary-subtle p-3 d-flex align-items-center justify-content-center flex-shrink-0">
+              <i class="bi bi-sliders2-vertical fs-3"></i>
+            </span>
+            <div class="min-w-0 flex-grow-1">
+              <h5 class="fw-bold mb-1">{% trans "General Preferences" %}</h5>
+              <p class="text-muted mb-0 small">
+                <i class="bi bi-info-circle me-1 text-primary" aria-hidden="true"></i>
+                {% trans "Defaults for lists, regional preferences, accessibility options, and confirmations." %}
+              </p>
             </div>
+          </div>
+
+          <div class="d-flex align-items-center gap-2 mb-3 ww-gen-section-head">
+            <span class="rounded-3 bg-primary-subtle text-primary p-2 d-inline-flex"><i class="bi bi-layout-text-window-reverse" aria-hidden="true"></i></span>
+            <h6 class="text-uppercase text-muted small fw-bold mb-0" style="letter-spacing: .04em;">{% trans "Lists & layout" %}</h6>
+          </div>
+          <div class="row g-3 mb-4">
+            <div class="col-12 col-md-6">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile">
+                <div class="d-flex gap-3">
+                  <div class="ww-pref-tile-icon flex-shrink-0" aria-hidden="true"><i class="bi bi-list-ol"></i></div>
+                  <div class="flex-grow-1 min-w-0 d-flex flex-column">
+                    <label class="fw-semibold mb-1" for="{{ form.items_per_page.id_for_label }}">{% trans "Items per page" %}</label>
+                    <div class="text-muted small mb-3">{% trans "Default page size for inventory, orders, locations, and activity views." %}</div>
+                    <div class="mt-auto">
+                      {{ form.items_per_page }}
+                      <div class="text-danger small mt-1">{{ form.items_per_page.errors|striptags }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-md-6">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile">
+                <div class="d-flex gap-3">
+                  <div class="ww-pref-tile-icon flex-shrink-0" aria-hidden="true"><i class="bi bi-ui-radios-grid"></i></div>
+                  <div class="flex-grow-1 min-w-0 d-flex flex-column">
+                    <label class="fw-semibold mb-1" for="{{ form.default_table_density.id_for_label }}">{% trans "Default table row density" %}</label>
+                    <div class="text-muted small mb-3">{% trans "Initial row spacing for list grids until changed from the view options." %}</div>
+                    <div class="mt-auto">
+                      {{ form.default_table_density }}
+                      <div class="text-danger small mt-1">{{ form.default_table_density.errors|striptags }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-12">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile ww-pref-toggle-row">
+                <div class="d-flex gap-3 min-w-0">
+                  <div class="ww-pref-tile-icon flex-shrink-0 align-self-start" aria-hidden="true"><i class="bi bi-arrows-collapse-vertical"></i></div>
+                  <div class="min-w-0">
+                    <div class="fw-semibold">{% trans "Compact mode" %}</div>
+                    <div class="text-muted small mb-0">{% trans "Reduces padding in panels and spacing between major sections." %}</div>
+                  </div>
+                </div>
+                <div class="form-check form-switch m-0 ww-pref-toggle-switch flex-shrink-0 align-self-center">
+                  {{ form.compact_mode }}
+                </div>
+              </div>
+              {% if form.compact_mode.errors %}
+                <div class="text-danger small mt-1">{{ form.compact_mode.errors|striptags }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="d-flex align-items-center gap-2 mb-3 ww-gen-section-head">
+            <span class="rounded-3 bg-primary-subtle text-primary p-2 d-inline-flex"><i class="bi bi-globe2" aria-hidden="true"></i></span>
+            <h6 class="text-uppercase text-muted small fw-bold mb-0" style="letter-spacing: .04em;">{% trans "Navigation & region" %}</h6>
+          </div>
+          <div class="row g-3 mb-4">
+            <div class="col-12 col-lg-4">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile">
+                <div class="d-flex gap-3">
+                  <div class="ww-pref-tile-icon flex-shrink-0" aria-hidden="true"><i class="bi bi-house-door"></i></div>
+                  <div class="flex-grow-1 min-w-0 d-flex flex-column">
+                    <label class="fw-semibold mb-1" for="{{ form.default_landing.id_for_label }}">{% trans "After sign-in, open" %}</label>
+                    <div class="text-muted small mb-3">{% trans "Default home page after sign-in." %}</div>
+                    <div class="mt-auto">
+                      {{ form.default_landing }}
+                      <div class="text-danger small mt-1">{{ form.default_landing.errors|striptags }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-lg-4">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile">
+                <div class="d-flex gap-3">
+                  <div class="ww-pref-tile-icon flex-shrink-0" aria-hidden="true"><i class="bi bi-clock-history"></i></div>
+                  <div class="flex-grow-1 min-w-0 d-flex flex-column">
+                    <label class="fw-semibold mb-1" for="{{ form.timezone_name.id_for_label }}">{% trans "Time zone" %}</label>
+                    <div class="text-muted small mb-3">{% trans "Applies to dates and times shown during your session." %}</div>
+                    <div class="mt-auto">
+                      {{ form.timezone_name }}
+                      <div class="text-danger small mt-1">{{ form.timezone_name.errors|striptags }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-lg-4">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile">
+                <div class="d-flex gap-3">
+                  <div class="ww-pref-tile-icon flex-shrink-0" aria-hidden="true"><i class="bi bi-translate"></i></div>
+                  <div class="flex-grow-1 min-w-0 d-flex flex-column">
+                    <label class="fw-semibold mb-1" for="{{ form.language_code.id_for_label }}">{% trans "Language" %}</label>
+                    <div class="text-muted small mb-3">{% trans "Language for navigation, settings, and system messages." %}</div>
+                    <div class="mt-auto">
+                      {{ form.language_code }}
+                      <div class="text-danger small mt-1">{{ form.language_code.errors|striptags }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-md-6">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile">
+                <div class="d-flex gap-3">
+                  <div class="ww-pref-tile-icon flex-shrink-0" aria-hidden="true"><i class="bi bi-calendar3"></i></div>
+                  <div class="flex-grow-1 min-w-0 d-flex flex-column">
+                    <label class="fw-semibold mb-1" for="{{ form.date_format_style.id_for_label }}">{% trans "Date format" %}</label>
+                    <div class="text-muted small mb-3">{% trans "How dates are shown in lists and detail views." %}</div>
+                    <div class="mt-auto">
+                      {{ form.date_format_style }}
+                      <div class="text-danger small mt-1">{{ form.date_format_style.errors|striptags }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-md-6">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile">
+                <div class="d-flex gap-3">
+                  <div class="ww-pref-tile-icon flex-shrink-0" aria-hidden="true"><i class="bi bi-clock"></i></div>
+                  <div class="flex-grow-1 min-w-0 d-flex flex-column">
+                    <label class="fw-semibold mb-1" for="{{ form.clock_format.id_for_label }}">{% trans "Clock format" %}</label>
+                    <div class="text-muted small mb-3">{% trans "12- or 24-hour format for times that include a clock." %}</div>
+                    <div class="mt-auto">
+                      {{ form.clock_format }}
+                      <div class="text-danger small mt-1">{{ form.clock_format.errors|striptags }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex align-items-center gap-2 mb-3 ww-gen-section-head">
+            <span class="rounded-3 bg-primary-subtle text-primary p-2 d-inline-flex"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
+            <h6 class="text-uppercase text-muted small fw-bold mb-0" style="letter-spacing: .04em;">{% trans "New stock items" %}</h6>
+          </div>
+          <div class="row g-3 mb-4">
+            <div class="col-12 col-md-6">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile">
+                <div class="d-flex gap-3">
+                  <div class="ww-pref-tile-icon flex-shrink-0" aria-hidden="true"><i class="bi bi-currency-exchange"></i></div>
+                  <div class="flex-grow-1 min-w-0 d-flex flex-column">
+                    <label class="fw-semibold mb-1" for="{{ form.default_currency.id_for_label }}">{% trans "Default currency" %} <span class="text-muted fw-normal">(€ $ £ …)</span></label>
+                    <div class="text-muted small mb-3">{% trans "Default for new stock records and for single-currency totals in summary views." %}</div>
+                    <div class="mt-auto">
+                      {{ form.default_currency }}
+                      <div class="text-danger small mt-1">{{ form.default_currency.errors|striptags }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-md-6">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile">
+                <div class="d-flex gap-3">
+                  <div class="ww-pref-tile-icon flex-shrink-0" aria-hidden="true"><i class="bi bi-rulers"></i></div>
+                  <div class="flex-grow-1 min-w-0 d-flex flex-column">
+                    <label class="fw-semibold mb-1" for="{{ form.default_unit_of_measure.id_for_label }}">{% trans "Default unit of measure" %} <span class="text-muted fw-normal">(pcs, kg, L…)</span></label>
+                    <div class="text-muted small mb-3">{% trans "Default unit when creating a new stock record." %}</div>
+                    <div class="mt-auto">
+                      {{ form.default_unit_of_measure }}
+                      <div class="text-danger small mt-1">{{ form.default_unit_of_measure.errors|striptags }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex align-items-center gap-2 mb-3 ww-gen-section-head">
+            <span class="rounded-3 bg-primary-subtle text-primary p-2 d-inline-flex"><i class="bi bi-shield-lock" aria-hidden="true"></i></span>
+            <h6 class="text-uppercase text-muted small fw-bold mb-0" style="letter-spacing: .04em;">{% trans "Safety & keyboard" %}</h6>
+          </div>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile ww-pref-toggle-row">
+                <div class="d-flex gap-3 min-w-0">
+                  <div class="ww-pref-tile-icon flex-shrink-0 align-self-start" aria-hidden="true"><i class="bi bi-exclamation-triangle"></i></div>
+                  <div class="min-w-0">
+                    <div class="fw-semibold">{% trans "Confirm destructive links" %}</div>
+                    <div class="text-muted small mb-0">{% trans "Require confirmation before delete, archive, or permanent removal." %}</div>
+                  </div>
+                </div>
+                <div class="form-check form-switch m-0 ww-pref-toggle-switch flex-shrink-0">{{ form.confirm_destructive_actions }}</div>
+              </div>
+              {% if form.confirm_destructive_actions.errors %}
+                <div class="text-danger small mt-1">{{ form.confirm_destructive_actions.errors|striptags }}</div>
+              {% endif %}
+            </div>
+            <div class="col-12 col-md-6">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile ww-pref-toggle-row">
+                <div class="d-flex gap-3 min-w-0">
+                  <div class="ww-pref-tile-icon flex-shrink-0 align-self-start" aria-hidden="true"><i class="bi bi-keyboard"></i></div>
+                  <div class="min-w-0">
+                    <div class="fw-semibold">{% trans "Keyboard shortcuts" %}</div>
+                    <div class="text-muted small mb-0">{% blocktrans %}Use <kbd>/</kbd> for search, <kbd>g</kbd> plus a letter to navigate, and <kbd>?</kbd> for the shortcut list.{% endblocktrans %}</div>
+                  </div>
+                </div>
+                <div class="form-check form-switch m-0 ww-pref-toggle-switch flex-shrink-0">{{ form.keyboard_shortcuts_enabled }}</div>
+              </div>
+              {% if form.keyboard_shortcuts_enabled.errors %}
+                <div class="text-danger small mt-1">{{ form.keyboard_shortcuts_enabled.errors|striptags }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="d-flex align-items-center gap-2 mb-3 mt-4 ww-gen-section-head">
+            <span class="rounded-3 bg-primary-subtle text-primary p-2 d-inline-flex"><i class="bi bi-universal-access-circle" aria-hidden="true"></i></span>
+            <h6 class="text-uppercase text-muted small fw-bold mb-0" style="letter-spacing: .04em;">{% trans "Accessibility" %}</h6>
+          </div>
+          <p class="small text-muted mb-3">{% trans "Smart mode adapts spacing, contrast, and control sizes. Voice feedback uses your browser’s built-in speech (no data leaves your device). Works with Appearance font size and theme." %}</p>
+          <div class="row g-3 mb-2">
+            <div class="col-12">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile">
+                <div class="d-flex flex-wrap gap-3 mb-3">
+                  <div class="ww-pref-tile-icon flex-shrink-0 align-self-start" aria-hidden="true"><i class="bi bi-magic"></i></div>
+                  <div class="min-w-0 flex-grow-1">
+                    <label class="fw-semibold d-block mb-1" for="{{ form.accessibility_mode.id_for_label }}">{% trans "Accessibility mode" %}</label>
+                    <p class="text-muted small mb-0">{% trans "Auto picks Enhanced when your device requests reduced motion, and Assistive when it requests higher contrast. Manual levels apply fixed layouts." %}</p>
+                  </div>
+                </div>
+                {{ form.accessibility_mode }}
+                {% if form.accessibility_mode.errors %}
+                <div class="text-danger small mt-2">{{ form.accessibility_mode.errors|striptags }}</div>
+                {% endif %}
+              </div>
+            </div>
+            <div class="col-12">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile ww-pref-toggle-row">
+                <div class="d-flex gap-3 min-w-0">
+                  <div class="ww-pref-tile-icon flex-shrink-0 align-self-start" aria-hidden="true"><i class="bi bi-volume-up"></i></div>
+                  <div class="min-w-0">
+                    <label class="fw-semibold mb-0 d-block" for="{{ form.voice_feedback_enabled.id_for_label }}">{% trans "Enable voice feedback" %}</label>
+                    <div class="text-muted small mb-0">{% trans "Shows read-aloud controls in the header. Reads main page content and notification text using the Web Speech API." %}</div>
+                  </div>
+                </div>
+                <div class="form-check form-switch m-0 ww-pref-toggle-switch flex-shrink-0">{{ form.voice_feedback_enabled }}</div>
+              </div>
+              {% if form.voice_feedback_enabled.errors %}
+                <div class="text-danger small mt-1">{{ form.voice_feedback_enabled.errors|striptags }}</div>
+              {% endif %}
+            </div>
+          </div>
+          <p class="small text-muted text-uppercase fw-bold mb-2" style="letter-spacing: .04em;">{% trans "Additional preferences" %}</p>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile ww-pref-toggle-row">
+                <div class="d-flex gap-3 min-w-0">
+                  <div class="ww-pref-tile-icon flex-shrink-0 align-self-start" aria-hidden="true"><i class="bi bi-pause-btn"></i></div>
+                  <div class="min-w-0">
+                    <label class="fw-semibold mb-0 d-block" for="{{ form.reduce_motion.id_for_label }}">{% trans "Reduce motion" %}</label>
+                    <div class="text-muted small mb-0">{% trans "Shortens or disables most interface animations. Also follows the system “reduce motion” setting when enabled." %}</div>
+                  </div>
+                </div>
+                <div class="form-check form-switch m-0 ww-pref-toggle-switch flex-shrink-0">{{ form.reduce_motion }}</div>
+              </div>
+              {% if form.reduce_motion.errors %}
+                <div class="text-danger small mt-1">{{ form.reduce_motion.errors|striptags }}</div>
+              {% endif %}
+            </div>
+            <div class="col-12 col-md-6">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile ww-pref-toggle-row">
+                <div class="d-flex gap-3 min-w-0">
+                  <div class="ww-pref-tile-icon flex-shrink-0 align-self-start" aria-hidden="true"><i class="bi bi-link-45deg"></i></div>
+                  <div class="min-w-0">
+                    <label class="fw-semibold mb-0 d-block" for="{{ form.underline_links.id_for_label }}">{% trans "Underline body links" %}</label>
+                    <div class="text-muted small mb-0">{% trans "Makes in-page links easier to spot in main content (navigation styling is unchanged)." %}</div>
+                  </div>
+                </div>
+                <div class="form-check form-switch m-0 ww-pref-toggle-switch flex-shrink-0">{{ form.underline_links }}</div>
+              </div>
+              {% if form.underline_links.errors %}
+                <div class="text-danger small mt-1">{{ form.underline_links.errors|striptags }}</div>
+              {% endif %}
+            </div>
+          </div>
+          </div>
+
+        {% elif active_tab == "notifications" %}
+          <div class="ww-notif-pref">
+          <div class="d-flex flex-wrap align-items-start gap-3 mb-4 pb-3 border-bottom border-light-subtle">
+            <span class="rounded-3 bg-primary-subtle text-primary border border-primary-subtle p-3 d-flex align-items-center justify-content-center flex-shrink-0">
+              <i class="bi bi-bell fs-3" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0 flex-grow-1">
+              <h5 class="fw-bold mb-1">{% trans "Notification preferences" %}</h5>
+              <p class="text-muted mb-0 small">
+                <i class="bi bi-info-circle me-1 text-primary" aria-hidden="true"></i>
+                {% trans "Configure in-app alerts, email delivery for critical events, and low-stock sensitivity." %}
+              </p>
+            </div>
+          </div>
+
+          {% if not notif_user_email %}
+          <div class="alert alert-warning border-0 shadow-sm mb-4 py-3" role="status">
+            <div class="d-flex gap-2 align-items-start">
+              <i class="bi bi-envelope-exclamation fs-5 flex-shrink-0 mt-1" aria-hidden="true"></i>
+              <div class="small">
+                {% trans "No email address is on file. Add one in My Profile if you want to receive critical alerts by email." %}
+              </div>
+            </div>
+          </div>
           {% endif %}
 
-          {% if active_tab == "general" %}
-            <h5 class="fw-bold mb-1">General Preferences</h5>
-            <div class="text-muted mb-4">Basic display and list behavior used across your account.</div>
-
-            <div class="row g-3">
-              <div class="col-12 col-lg-6">
-                <div class="p-3 border rounded-3">
-                  <label class="fw-semibold mb-2 d-block">Items Per Page</label>
-                  <div class="text-muted small mb-2">Controls default list pagination size.</div>
-                  {{ form.items_per_page }}
-                  <div class="text-danger small mt-1">{{ form.items_per_page.errors|striptags }}</div>
-                </div>
-              </div>
-              <div class="col-12 col-lg-6">
-                <div class="p-3 border rounded-3">
-                  <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                      <div class="fw-semibold">Compact Mode</div>
-                      <div class="text-muted small">Reduces spacing in cards and layout blocks.</div>
-                    </div>
-                    <div class="form-check form-switch m-0">
-                      {{ form.compact_mode }}
-                    </div>
-                  </div>
-                  <div class="text-danger small mt-1">{{ form.compact_mode.errors|striptags }}</div>
-                </div>
-              </div>
-            </div>
-
-          {% elif active_tab == "notifications" %}
-            <h5 class="fw-bold mb-1">Notification Preferences</h5>
-            <div class="text-muted mb-4">Choose which alerts you want and how they are delivered.</div>
-
-            <div class="row g-3">
-              <div class="col-12 col-lg-6">
-                <div class="p-3 border rounded-3">
-                  <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                      <div class="fw-semibold">Demand Anomaly Alerts</div>
-                      <div class="text-muted small">Notify me when unusual demand is detected.</div>
-                    </div>
-                    <div class="form-check form-switch m-0">{{ form.notify_anomalies }}</div>
-                  </div>
-                </div>
-              </div>
-              <div class="col-12 col-lg-6">
-                <div class="p-3 border rounded-3">
-                  <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                      <div class="fw-semibold">Low Stock Alerts</div>
-                      <div class="text-muted small">Notify me when stock reaches alert threshold.</div>
-                    </div>
-                    <div class="form-check form-switch m-0">{{ form.notify_low_stock }}</div>
-                  </div>
-                </div>
-              </div>
-              <div class="col-12 col-lg-6">
-                <div class="p-3 border rounded-3 bg-light-subtle">
-                  <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                      <div class="fw-semibold">Email Notifications</div>
-                      <div class="text-muted small">Allow account notifications by email.</div>
-                    </div>
-                    <div class="form-check form-switch m-0">{{ form.email_notifications }}</div>
-                  </div>
-                </div>
-              </div>
-              <div class="col-12 col-lg-6">
-                <div class="p-3 border rounded-3 bg-light-subtle">
-                  <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                      <div class="fw-semibold">Push Notifications</div>
-                      <div class="text-muted small">Allow browser-level notifications.</div>
-                    </div>
-                    <div class="form-check form-switch m-0">{{ form.push_notifications }}</div>
-                  </div>
-                </div>
-              </div>
-              <div class="col-12 col-lg-6">
-                <div class="p-3 border rounded-3">
-                  <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                      <div class="fw-semibold">Weekly Reports</div>
-                      <div class="text-muted small">Receive a weekly summary digest.</div>
-                    </div>
-                    <div class="form-check form-switch m-0">{{ form.weekly_reports }}</div>
-                  </div>
-                </div>
-              </div>
-              <div class="col-12 col-lg-6">
-                <div class="p-3 border rounded-3">
-                  <label class="fw-semibold mb-2 d-block">Low Stock Threshold Buffer</label>
-                  <div class="text-muted small mb-2">Set to 0 to use each item's reorder level only.</div>
-                  {{ form.low_stock_threshold }}
-                  <div class="text-danger small mt-1">{{ form.low_stock_threshold.errors|striptags }}</div>
-                </div>
-              </div>
-            </div>
-
-          {% elif active_tab == "appearance" %}
-            <h5 class="fw-bold mb-1">Appearance</h5>
-            <div class="text-muted mb-4">Personalize your theme and accent color.</div>
-
-            <div class="row g-3">
-              <div class="col-12 col-lg-6">
-                <div class="p-3 border rounded-3">
-                  <label class="fw-semibold mb-3 d-block">Theme</label>
-                  <div class="d-flex flex-column gap-2">{{ form.theme }}</div>
-                  <div class="text-danger small mt-1">{{ form.theme.errors|striptags }}</div>
-                </div>
-              </div>
-              <div class="col-12 col-lg-6">
-                <div class="p-3 border rounded-3">
-                  <label class="fw-semibold mb-3 d-block">Accent Color</label>
-                  <div class="d-flex flex-column gap-2">{{ form.accent_color }}</div>
-                  <div class="text-danger small mt-1">{{ form.accent_color.errors|striptags }}</div>
-                </div>
-              </div>
-            </div>
-          {% endif %}
-
-          <div class="mt-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <a class="btn btn-outline-secondary" href="{% url 'dashboard' %}">Cancel</a>
-            <button class="btn btn-primary" type="submit">
-              <i class="bi bi-save me-1"></i> Save Settings
-            </button>
+          <div class="d-flex align-items-center gap-2 mb-3">
+            <span class="rounded-3 bg-primary-subtle text-primary p-2 d-inline-flex" aria-hidden="true"><i class="bi bi-app-indicator"></i></span>
+            <h6 class="text-uppercase text-muted small fw-bold mb-0" style="letter-spacing: .04em;">{% trans "In-app alerts" %}</h6>
           </div>
-        </form>
-      {% else %}
-        <h5 class="fw-bold mb-1">Data &amp; Privacy</h5>
-        <div class="text-muted mb-4">Utility actions related to your account data and notifications.</div>
+          <p class="small text-muted mb-3">{% trans "These items appear in the notification bell and on the Alerts page." %}</p>
+          <div class="row g-3 mb-4">
+            <div class="col-12 col-lg-6">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile ww-pref-toggle-row">
+                <div class="d-flex gap-3 min-w-0">
+                  <div class="ww-pref-tile-icon align-self-start" aria-hidden="true"><i class="bi bi-graph-up-arrow"></i></div>
+                  <div class="min-w-0">
+                    <label class="fw-semibold mb-1 d-block" for="{{ form.notify_anomalies.id_for_label }}">{% trans "Demand anomaly alerts" %}</label>
+                    <div class="text-muted small mb-0">{% trans "Demand and forecast notifications generated from sales analysis and recommendation data." %}</div>
+                  </div>
+                </div>
+                <div class="form-check form-switch m-0 ww-pref-toggle-switch">{{ form.notify_anomalies }}</div>
+              </div>
+              <div class="text-danger small mt-1">{{ form.notify_anomalies.errors|striptags }}</div>
+            </div>
+            <div class="col-12 col-lg-6">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile ww-pref-toggle-row">
+                <div class="d-flex gap-3 min-w-0">
+                  <div class="ww-pref-tile-icon align-self-start" aria-hidden="true"><i class="bi bi-box-seam"></i></div>
+                  <div class="min-w-0">
+                    <label class="fw-semibold mb-1 d-block" for="{{ form.notify_low_stock.id_for_label }}">{% trans "Low stock alerts" %}</label>
+                    <div class="text-muted small mb-0">{% trans "Notify when on-hand quantity is at or below the reorder level, including any early-warning buffer you set below." %}</div>
+                  </div>
+                </div>
+                <div class="form-check form-switch m-0 ww-pref-toggle-switch">{{ form.notify_low_stock }}</div>
+              </div>
+              <div class="text-danger small mt-1">{{ form.notify_low_stock.errors|striptags }}</div>
+            </div>
+          </div>
 
-        <div class="row g-3">
+          <div class="d-flex align-items-center gap-2 mb-3">
+            <span class="rounded-3 bg-primary-subtle text-primary p-2 d-inline-flex" aria-hidden="true"><i class="bi bi-envelope-paper"></i></span>
+            <h6 class="text-uppercase text-muted small fw-bold mb-0" style="letter-spacing: .04em;">{% trans "Email" %}</h6>
+          </div>
+          <div class="row g-3 mb-4">
+            <div class="col-12 col-lg-8">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile ww-pref-toggle-row">
+                <div class="d-flex gap-3 min-w-0">
+                  <div class="ww-pref-tile-icon align-self-start" aria-hidden="true"><i class="bi bi-envelope-check"></i></div>
+                  <div class="min-w-0">
+                    <label class="fw-semibold mb-1 d-block" for="{{ form.email_notifications.id_for_label }}">{% trans "Critical alert emails" %}</label>
+                    <div class="text-muted small mb-0">{% trans "Receive email when the system raises a new critical demand anomaly or forecast alert." %}</div>
+                  </div>
+                </div>
+                <div class="form-check form-switch m-0 ww-pref-toggle-switch">{{ form.email_notifications }}</div>
+              </div>
+              <div class="text-danger small mt-1">{{ form.email_notifications.errors|striptags }}</div>
+            </div>
+          </div>
+
+          <div class="d-flex align-items-center gap-2 mb-3">
+            <span class="rounded-3 bg-primary-subtle text-primary p-2 d-inline-flex" aria-hidden="true"><i class="bi bi-sliders"></i></span>
+            <h6 class="text-uppercase text-muted small fw-bold mb-0" style="letter-spacing: .04em;">{% trans "Low stock sensitivity" %}</h6>
+          </div>
+          <div class="row g-3">
+            <div class="col-12">
+              <div class="p-3 border rounded-3 shadow-sm ww-pref-tile">
+                <div class="d-flex flex-column flex-lg-row gap-3 align-items-lg-start">
+                  <div class="ww-pref-tile-icon flex-shrink-0 d-none d-lg-flex" aria-hidden="true"><i class="bi bi-speedometer2"></i></div>
+                  <div class="flex-grow-1 min-w-0 w-100">
+                    <label class="fw-semibold mb-1 d-block" for="{{ form.low_stock_threshold.id_for_label }}">{% trans "Early-warning buffer (units)" %}</label>
+                    <p class="text-muted small mb-3 mb-lg-2">{% trans "Optional units added to each item’s reorder level. Alerts appear when on-hand quantity is at or below that combined threshold. Use zero to rely on the reorder level only." %}</p>
+                    <div class="row g-2 align-items-end">
+                      <div class="col-12 col-sm-6 col-md-4">
+                        {{ form.low_stock_threshold }}
+                      </div>
+                    </div>
+                    <div class="text-danger small mt-2">{{ form.low_stock_threshold.errors|striptags }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          </div>
+
+        {% elif active_tab == "appearance" %}
+          <div class="ww-appearance-pref">
+          <div class="d-flex flex-wrap align-items-start gap-3 mb-4 pb-3 border-bottom border-light-subtle">
+            <span class="rounded-3 bg-primary-subtle text-primary border border-primary-subtle p-3 d-flex align-items-center justify-content-center flex-shrink-0">
+              <i class="bi bi-palette fs-3" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0 flex-grow-1">
+              <h5 class="fw-bold mb-1">{% trans "Appearance" %}</h5>
+              <p class="text-muted mb-0 small">
+                <i class="bi bi-info-circle me-1 text-primary" aria-hidden="true"></i>
+                {% trans "Choose light, dark, or system theme, accent colour, and base text size. These apply across the whole app." %}
+              </p>
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-12 col-lg-6">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile">
+                <div class="d-flex gap-3 mb-3">
+                  <div class="ww-pref-tile-icon flex-shrink-0" aria-hidden="true"><i class="bi bi-brightness-high"></i></div>
+                  <div>
+                    <span class="fw-semibold d-block">{% trans "Theme" %}</span>
+                    <span class="text-muted small">{% trans "Light, dark, or match your device setting." %}</span>
+                  </div>
+                </div>
+                <div class="ww-appearance-options ww-appearance-theme">{{ form.theme }}</div>
+                <div class="text-danger small mt-2">{{ form.theme.errors|striptags }}</div>
+              </div>
+            </div>
+            <div class="col-12 col-lg-6">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile">
+                <div class="d-flex gap-3 mb-3">
+                  <div class="ww-pref-tile-icon flex-shrink-0" aria-hidden="true"><i class="bi bi-droplet-half"></i></div>
+                  <div>
+                    <span class="fw-semibold d-block">{% trans "Accent colour" %}</span>
+                    <span class="text-muted small">{% trans "Primary buttons, active navigation, badges, and focus states." %}</span>
+                  </div>
+                </div>
+                <div class="ww-appearance-options ww-appearance-accent">{{ form.accent_color }}</div>
+                <div class="text-danger small mt-2">{{ form.accent_color.errors|striptags }}</div>
+              </div>
+            </div>
+            <div class="col-12">
+              <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile">
+                <div class="d-flex gap-3 mb-3">
+                  <div class="ww-pref-tile-icon flex-shrink-0" aria-hidden="true"><i class="bi bi-type"></i></div>
+                  <div>
+                    <span class="fw-semibold d-block">{% trans "Font size" %}</span>
+                    <span class="text-muted small">{% trans "Scales text and controls across WareWolf (uses relative sizing)." %}</span>
+                  </div>
+                </div>
+                <div class="ww-appearance-options ww-appearance-font">{{ form.font_size }}</div>
+                <div class="text-danger small mt-2">{{ form.font_size.errors|striptags }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4 p-3 border rounded-3 ww-appearance-preview bg-body-tertiary border-secondary-subtle">
+            <div class="small text-muted mb-2 fw-semibold text-uppercase" style="letter-spacing: .04em;">{% trans "Live preview" %}</div>
+            <p class="text-muted small mb-3 mb-md-2">{% trans "Changes apply across the app as you adjust theme, accent, and font size. Save to keep them on your next visit." %}</p>
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+              <span class="badge bg-primary">{% trans "Badge" %}</span>
+              <button type="button" class="btn btn-primary btn-sm" disabled>{% trans "Primary" %}</button>
+              <button type="button" class="btn btn-outline-primary btn-sm" disabled>{% trans "Outline" %}</button>
+              <span class="nav-link active rounded-pill px-3 py-1 small bg-primary text-white">{% trans "Active" %}</span>
+            </div>
+            <div class="border-top border-secondary-subtle pt-3">
+              <div class="fw-bold mb-1">{% trans "Sample heading" %}</div>
+              <p class="text-muted mb-0 small">{% trans "Sample body text — lists, forms, and tables follow this scale everywhere after you save." %}</p>
+            </div>
+          </div>
+          </div>
+        {% endif %}
+
+        <div class="ww-form-actions d-flex flex-wrap gap-2 justify-content-between align-items-center">
+          <a class="btn btn-outline-secondary" href="{% url 'dashboard' %}">{% trans "Cancel" %}</a>
+          <button class="btn btn-primary" type="submit">
+            <i class="bi bi-save me-1"></i> {% trans "Save Settings" %}
+          </button>
+        </div>
+      </form>
+    {% else %}
+      <div class="ww-privacy-pref">
+        <div class="d-flex flex-wrap align-items-start gap-3 mb-4 pb-3 border-bottom border-secondary-subtle">
+          <span class="rounded-3 bg-primary-subtle text-primary border border-primary-subtle p-3 d-flex align-items-center justify-content-center flex-shrink-0">
+            <i class="bi bi-shield-lock fs-3" aria-hidden="true"></i>
+          </span>
+          <div class="min-w-0 flex-grow-1">
+            <h5 class="fw-bold mb-1">{% trans "Data & Privacy" %}</h5>
+            <p class="text-muted mb-0 small">
+              <i class="bi bi-info-circle me-1 text-primary" aria-hidden="true"></i>
+              {% trans "Download copies of your data, control alert dismissal, and manage defaults. Your warehouse records (items, orders, etc.) belong to the organisation — contact an administrator for those exports." %}
+            </p>
+          </div>
+        </div>
+
+        <div class="ww-privacy-section-title">{% trans "Downloads" %}</div>
+        <div class="row g-3 mb-4">
           <div class="col-12 col-lg-6">
-            <div class="p-3 border rounded-3 h-100">
-              <div class="fw-semibold mb-1">Export Activity Log</div>
-              <div class="text-muted small mb-3">Download your recent account activity as CSV.</div>
-              <a href="{% url 'export_activity_log' %}" class="btn btn-outline-primary">
-                <i class="bi bi-download me-1"></i> Export Activity
-              </a>
+            <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile">
+              <div class="d-flex gap-3">
+                <div class="ww-pref-tile-icon" aria-hidden="true"><i class="bi bi-clock-history"></i></div>
+                <div class="min-w-0 flex-grow-1">
+                  <div class="fw-semibold mb-1">{% trans "Activity log (CSV)" %}</div>
+                  <p class="text-muted small mb-2">{% trans "Recent actions tied to your account (up to 500 rows), for your own records or audits." %}</p>
+                  <p class="small text-body-secondary mb-3">
+                    {% blocktrans count total=privacy_activity_count %}
+                      {{ total }} event logged.
+                    {% plural %}
+                      {{ total }} events logged.
+                    {% endblocktrans %}
+                  </p>
+                  <a href="{% url 'export_activity_log' %}" class="btn btn-outline-primary">
+                    <i class="bi bi-download me-1"></i> {% trans "Download CSV" %}
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
           <div class="col-12 col-lg-6">
-            <div class="p-3 border rounded-3 h-100">
-              <div class="fw-semibold mb-1">Restore Dismissed Alerts</div>
-              <div class="text-muted small mb-3">Re-enable previously dismissed session alerts in the navbar.</div>
-              <form method="post" action="{% url 'settings' %}?tab=privacy" class="d-inline">
-                {% csrf_token %}
-                <input type="hidden" name="tab" value="privacy">
-                <input type="hidden" name="action" value="clear_dismissed_alerts">
-                <button class="btn btn-outline-secondary" type="submit">
-                  <i class="bi bi-arrow-counterclockwise me-1"></i> Restore Alerts
-                </button>
-              </form>
-            </div>
-          </div>
-          <div class="col-12">
-            <div class="p-3 border rounded-3 bg-light-subtle d-flex justify-content-between align-items-center flex-wrap gap-2">
-              <div>
-                <div class="fw-semibold">Reset All Preferences</div>
-                <div class="text-muted small">Set all settings back to system defaults.</div>
+            <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile">
+              <div class="d-flex gap-3">
+                <div class="ww-pref-tile-icon" aria-hidden="true"><i class="bi bi-file-earmark-code"></i></div>
+                <div class="min-w-0 flex-grow-1">
+                  <div class="fw-semibold mb-1">{% trans "Account & preferences (JSON)" %}</div>
+                  <p class="text-muted small mb-3">{% trans "Machine-readable export: sign-in identity fields, all saved settings, and optional profile text fields. Does not include your password or avatar image file." %}</p>
+                  <a href="{% url 'export_account_data' %}" class="btn btn-outline-primary">
+                    <i class="bi bi-download me-1"></i> {% trans "Download JSON" %}
+                  </a>
+                </div>
               </div>
-              <form method="post" action="{% url 'settings' %}?tab=privacy" class="d-inline">
-                {% csrf_token %}
-                <input type="hidden" name="tab" value="privacy">
-                <input type="hidden" name="action" value="reset_defaults">
-                <button class="btn btn-outline-danger" type="submit">Reset to Defaults</button>
-              </form>
             </div>
           </div>
         </div>
-      {% endif %}
-    </div>
+
+        <div class="ww-privacy-section-title">{% trans "Alerts & this browser" %}</div>
+        <div class="row g-3 mb-4">
+          <div class="col-12 col-lg-6">
+            <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile">
+              <div class="d-flex gap-3">
+                <div class="ww-pref-tile-icon" aria-hidden="true"><i class="bi bi-bell-slash"></i></div>
+                <div class="min-w-0 flex-grow-1">
+                  <div class="fw-semibold mb-1">{% trans "Restore dismissed header alerts" %}</div>
+                  <p class="text-muted small mb-2">{% trans "Bring back items you hid from the notification dropdown (session-based dismissals only)." %}</p>
+                  <p class="small text-body-secondary mb-3">
+                    {% blocktrans count total=privacy_dismissed_count %}
+                      {{ total }} dismissal stored in this session.
+                    {% plural %}
+                      {{ total }} dismissals stored in this session.
+                    {% endblocktrans %}
+                  </p>
+                  <form method="post" action="{% url 'settings' %}?tab=privacy" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="tab" value="privacy">
+                    <input type="hidden" name="action" value="clear_dismissed_alerts">
+                    <button class="btn btn-outline-secondary" type="submit"{% if privacy_dismissed_count == 0 %} disabled{% endif %}>
+                      <i class="bi bi-arrow-counterclockwise me-1"></i> {% trans "Restore alerts" %}
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-12 col-lg-6">
+            <div class="p-3 border rounded-3 shadow-sm h-100 ww-pref-tile">
+              <div class="d-flex gap-3">
+                <div class="ww-pref-tile-icon" aria-hidden="true"><i class="bi bi-display"></i></div>
+                <div class="min-w-0 flex-grow-1">
+                  <div class="fw-semibold mb-1">{% trans "Reset saved UI on this device" %}</div>
+                  <p class="text-muted small mb-3">{% trans "Clears WareWolf keys from browser storage (table columns, filters, sidebar collapse, dashboard panel state). Does not change server data. You may need to refresh the page." %}</p>
+                  <button type="button" class="btn btn-outline-secondary" id="ww-privacy-clear-local-ui"
+                    data-msg-none="{% trans 'No WareWolf browser keys were found on this device.' %}"
+                    data-msg-done-prefix="{% trans 'Removed' %}"
+                    data-msg-done-suffix="{% trans 'saved keys. Refresh if a page still looks wrong.' %}">
+                    <i class="bi bi-eraser me-1"></i> {% trans "Clear browser UI state" %}
+                  </button>
+                  <p class="small text-success mt-2 mb-0 d-none" id="ww-privacy-clear-local-feedback" role="status"></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ww-privacy-section-title">{% trans "What we store about you" %}</div>
+        <div class="border rounded-3 p-3 p-md-4 mb-4 bg-body-tertiary border-secondary-subtle ww-privacy-info">
+          <ul class="text-body-secondary">
+            <li>{% trans "Account: username, email, and security data managed via Profile → Security." %}</li>
+            <li>{% trans "Settings: theme, font size, smart accessibility mode, voice feedback, motion and link options, notifications, regional formats, and behaviour toggles (stored in your user preferences)." %}</li>
+            <li>{% trans "Activity log: append-only events for important actions you perform in the app." %}</li>
+            <li>{% trans "Optional profile: job title, phone, avatar, etc., if you add them on your profile." %}</li>
+            <li>{% trans "This browser: temporary keys so lists and panels remember how you left them (cleared with the button above)." %}</li>
+          </ul>
+          <a href="{% url 'profile' %}?tab=security" class="btn btn-sm btn-outline-primary mt-2">
+            <i class="bi bi-key me-1"></i> {% trans "Change password" %}
+          </a>
+          <a href="{% url 'profile' %}?tab=profile" class="btn btn-sm btn-outline-secondary mt-2 ms-1 ms-sm-2">
+            <i class="bi bi-person me-1"></i> {% trans "Edit profile" %}
+          </a>
+        </div>
+
+        <div class="ww-privacy-section-title">{% trans "Danger zone" %}</div>
+        <div class="p-3 border border-danger-subtle rounded-3 shadow-sm bg-body-tertiary">
+          <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+            <div class="min-w-0" style="max-width: 42rem;">
+              <div class="fw-semibold text-danger-emphasis mb-1">{% trans "Reset all preferences" %}</div>
+              <p class="text-muted small mb-0">{% trans "Notifications, appearance, general settings, and regional options return to defaults. Your profile, password, and activity log are not deleted." %}</p>
+            </div>
+            <form method="post" action="{% url 'settings' %}?tab=privacy" class="flex-shrink-0">
+              {% csrf_token %}
+              <input type="hidden" name="tab" value="privacy">
+              <input type="hidden" name="action" value="reset_defaults">
+              <button class="btn btn-outline-danger" type="submit" id="ww-privacy-reset-prefs"
+                data-ww-confirm="{% trans 'Reset every preference to defaults? This cannot be undone.' %}">
+                {% trans "Reset to defaults" %}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    {% endif %}
   </div>
 </div>
+{% endblock %}
+
+{% block extra_body %}
+{% if active_tab == "appearance" %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    var root = document.querySelector(".ww-appearance-pref");
+    if (!root || typeof window.wwApplyThemeFromBody !== "function") return;
+
+    function syncAppearancePreviewFromForm() {
+        var themeInput = root.querySelector('input[name="theme"]:checked');
+        var accentInput = root.querySelector('input[name="accent_color"]:checked');
+        var fontInput = root.querySelector('input[name="font_size"]:checked');
+        var theme = themeInput ? themeInput.value : "light";
+        var accent = accentInput ? accentInput.value : "blue";
+        var fontSize = fontInput ? fontInput.value : "medium";
+        document.body.dataset.theme = theme;
+        document.body.dataset.accent = accent;
+        document.documentElement.setAttribute("data-font-size", fontSize);
+        window.wwApplyThemeFromBody();
+    }
+
+    root.addEventListener("change", function (e) {
+        var t = e.target;
+        if (t && t.matches && t.matches('input[name="theme"], input[name="accent_color"], input[name="font_size"]')) {
+            syncAppearancePreviewFromForm();
+        }
+    });
+    syncAppearancePreviewFromForm();
+});
+</script>
+{% elif active_tab == "privacy" %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    var resetBtn = document.getElementById("ww-privacy-reset-prefs");
+    if (resetBtn && resetBtn.form) {
+        resetBtn.form.addEventListener("submit", function (e) {
+            if (e.submitter && e.submitter !== resetBtn) {
+                return;
+            }
+            var msg = resetBtn.getAttribute("data-ww-confirm");
+            if (msg && !window.confirm(msg)) {
+                e.preventDefault();
+            }
+        });
+    }
+    var clearBtn = document.getElementById("ww-privacy-clear-local-ui");
+    var clearFb = document.getElementById("ww-privacy-clear-local-feedback");
+    if (clearBtn) {
+        clearBtn.addEventListener("click", function () {
+            if (!window.confirm("{% trans 'Remove saved table, filter, and panel state from this browser only?' %}")) {
+                return;
+            }
+            var n = 0;
+            try {
+                var keys = [];
+                for (var i = 0; i < localStorage.length; i++) {
+                    var k = localStorage.key(i);
+                    if (k && k.indexOf("warewolf_") === 0) {
+                        keys.push(k);
+                    }
+                }
+                keys.forEach(function (k) {
+                    localStorage.removeItem(k);
+                    n++;
+                });
+            } catch (err) {}
+            if (clearFb) {
+                if (n) {
+                    clearFb.textContent =
+                        clearBtn.getAttribute("data-msg-done-prefix") +
+                        " " +
+                        n +
+                        " " +
+                        clearBtn.getAttribute("data-msg-done-suffix");
+                } else {
+                    clearFb.textContent = clearBtn.getAttribute("data-msg-none") || "";
+                }
+                clearFb.classList.remove("d-none");
+            }
+        });
+    }
+});
+</script>
+{% endif %}
 {% endblock %}

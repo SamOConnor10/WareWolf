@@ -113,11 +113,11 @@
     opacity: 0.9;
 }
 .contacts-sidebar .sidebar-link:hover {
-    background: #eff6ff;
-    color: #1d4ed8 !important;
+    background: var(--bs-primary-bg-subtle);
+    color: var(--bs-primary) !important;
 }
 .contacts-sidebar .sidebar-link.active {
-    background: #1d4ed8;
+    background: var(--bs-primary);
     color: #ffffff !important;
 }
 .contacts-sidebar.collapsed .sidebar-link {
@@ -141,10 +141,10 @@ body.dark-mode .contacts-sidebar .toggle-btn {
 body.dark-mode .contacts-sidebar .sidebar-link { color: #e5e7eb !important; }
 body.dark-mode .contacts-sidebar .sidebar-link:hover {
     background: #374151;
-    color: #93c5fd !important;
+    color: color-mix(in srgb, var(--bs-primary) 72%, white) !important;
 }
 body.dark-mode .contacts-sidebar .sidebar-link.active {
-    background: #2563eb;
+    background: var(--bs-primary);
     color: #ffffff !important;
 }
 </style>

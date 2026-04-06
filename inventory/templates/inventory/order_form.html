@@ -229,7 +229,10 @@
                     total += (parseFloat(qtyInput.value) || 0) * (parseFloat(priceInput.value) || 0);
                 }
             });
-            if (totalBadge) totalBadge.textContent = "Total: €" + total.toFixed(2);
+            if (totalBadge) {
+                var sym = document.body.dataset.currencySymbol || "€";
+                totalBadge.textContent = "Total: " + sym + total.toFixed(2);
+            }
         }
 
         document.getElementById("order-line-formset").addEventListener("input", function() {

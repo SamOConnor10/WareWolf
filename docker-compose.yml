@@ -1,0 +1,28 @@
+# Local PostgreSQL for WareWolf — matches POSTGRES_* in .env by default.
+# Start:  docker compose up -d
+# Stop:   docker compose down
+# Data persists in Docker volume "warewolf_pgdata" (not lost on container restart).
+#
+# Default host port 5433 so this does not fight PostgreSQL already on 5432 (typical Windows install).
+# To use this container: set POSTGRES_PORT=5433 in .env, then docker compose up -d
+# If your real data is on local Postgres :5432, leave POSTGRES_PORT=5432 and do not start this service.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: warewolf-postgres
+    environment:
+      POSTGRES_DB: warewolf
+      POSTGRES_USER: devuser
+      POSTGRES_PASSWORD: devpass
+    ports:
+      - "5433:5432"
+    volumes:
+      - warewolf_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devuser -d warewolf"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  warewolf_pgdata:

@@ -1,11 +1,55 @@
 {% load static %}
 {% load django_bootstrap5 %}
+{% load user_pref_format %}
+{% load i18n %}
+{% get_current_language as CURRENT_LANGUAGE %}
+{% trans "Notifications." as ww_tts_notifications %}
+{% trans "No active notifications in the menu." as ww_tts_no_notifications %}
+{% trans "Read this page aloud" as ww_tts_read_page %}
+{% trans "Stop reading aloud" as ww_tts_stop_speech %}
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ CURRENT_LANGUAGE }}" data-user-theme="{% if user_pref %}{{ user_pref.theme }}{% else %}light{% endif %}" data-font-size="{% if user_pref %}{{ user_pref.font_size }}{% else %}medium{% endif %}" data-user-reduce-motion="{% if user_pref and user_pref.reduce_motion %}1{% else %}0{% endif %}" data-user-underline-links="{% if user_pref and user_pref.underline_links %}1{% else %}0{% endif %}" data-accessibility-mode="{% if user_pref %}{{ user_pref.accessibility_mode }}{% else %}basic{% endif %}" data-voice-feedback="{% if user_pref and user_pref.voice_feedback_enabled %}1{% else %}0{% endif %}">
 <head>
     <meta charset="UTF-8">
-    <title>WareWolf</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% trans "WareWolf" %}</title>
+    <script>
+    (function () {
+        try {
+            var root = document.documentElement;
+            var th = root.getAttribute("data-user-theme") || "light";
+            var dark = th === "dark" || (th === "auto" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+            root.setAttribute("data-bs-theme", dark ? "dark" : "light");
+            root.style.colorScheme = dark ? "dark" : "light";
+            var rmUser = root.getAttribute("data-user-reduce-motion") === "1";
+            var rmSys = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            if (rmUser || rmSys) {
+                root.classList.add("ww-reduce-motion");
+            }
+            if (root.getAttribute("data-user-underline-links") === "1") {
+                root.classList.add("ww-underline-links");
+            }
+            var a11yMode = root.getAttribute("data-accessibility-mode") || "basic";
+            function wwEffectiveA11yTier() {
+                if (a11yMode === "auto") {
+                    try {
+                        var cMore = window.matchMedia && window.matchMedia("(prefers-contrast: more)").matches;
+                        var rMot = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+                        if (cMore) return "assistive";
+                        if (rMot) return "enhanced";
+                    } catch (e2) {}
+                    return "basic";
+                }
+                return a11yMode;
+            }
+            var tier = wwEffectiveA11yTier();
+            root.classList.remove("ww-a11y-tier-enhanced", "ww-a11y-tier-assistive");
+            if (tier === "enhanced" || tier === "assistive") root.classList.add("ww-a11y-tier-enhanced");
+            if (tier === "assistive") root.classList.add("ww-a11y-tier-assistive");
+        } catch (e) {}
+    })();
+    </script>
 
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="{% static 'inventory/images/warewolf-favicon.png' %}">
@@ -19,6 +63,128 @@
 
     {% block extra_head %}{% endblock %}
     <style>
+        /* System-wide type scale (Bootstrap uses rem; root is html) */
+        html { font-size: 100%; }
+        html[data-font-size="small"] { font-size: 87.5%; }
+        html[data-font-size="medium"] { font-size: 100%; }
+        html[data-font-size="large"] { font-size: 112.5%; }
+
+        /* Skip to main content (keyboard / screen reader) */
+        .ww-skip-link {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+        .ww-skip-link:focus {
+            position: fixed;
+            top: 0.75rem;
+            left: 0.75rem;
+            z-index: 2000;
+            width: auto;
+            height: auto;
+            margin: 0;
+            padding: 0.65rem 1.1rem;
+            clip: auto;
+            overflow: visible;
+            white-space: normal;
+            background: var(--bs-primary);
+            color: #fff !important;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            text-decoration: none;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+        }
+        .ww-skip-link:focus-visible {
+            outline: 3px solid #fff;
+            outline-offset: 2px;
+        }
+
+        /* Reduced motion: system (media) or user class from early script / sync below */
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
+        html.ww-reduce-motion *,
+        html.ww-reduce-motion *::before,
+        html.ww-reduce-motion *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+        }
+
+        html.ww-underline-links main a:not(.btn):not(.stretched-link),
+        html.ww-underline-links #ww-main-content a:not(.btn):not(.nav-link):not(.dropdown-item):not(.page-link):not(.stretched-link) {
+            text-decoration: underline;
+            text-underline-offset: 0.2em;
+        }
+
+        a:focus-visible,
+        button:focus-visible,
+        .btn:focus-visible,
+        .form-control:focus-visible,
+        .form-select:focus-visible,
+        .nav-link:focus-visible,
+        summary:focus-visible {
+            outline: 2px solid var(--bs-primary);
+            outline-offset: 2px;
+        }
+
+        /* Smart accessibility: Enhanced — larger targets, stronger focus */
+        html.ww-a11y-tier-enhanced #ww-main-content .btn:not(.btn-sm):not(.btn-lg),
+        html.ww-a11y-tier-enhanced #ww-main-content .form-control,
+        html.ww-a11y-tier-enhanced #ww-main-content .form-select {
+            min-height: 2.75rem;
+        }
+        html.ww-a11y-tier-enhanced .navbar .nav-link {
+            padding: 0.5rem 0.85rem;
+        }
+        html.ww-a11y-tier-enhanced a:focus-visible,
+        html.ww-a11y-tier-enhanced button:focus-visible,
+        html.ww-a11y-tier-enhanced .btn:focus-visible,
+        html.ww-a11y-tier-enhanced .form-control:focus-visible,
+        html.ww-a11y-tier-enhanced .form-select:focus-visible,
+        html.ww-a11y-tier-enhanced .nav-link:focus-visible,
+        html.ww-a11y-tier-enhanced summary:focus-visible {
+            outline-width: 3px;
+            outline-offset: 3px;
+        }
+        html.ww-a11y-tier-enhanced #ww-main-content .table > :not(caption) > * > * {
+            padding: 0.65rem 0.85rem;
+        }
+
+        /* Assistive — flatter cards, more spacing, clearer type in main */
+        html.ww-a11y-tier-assistive #ww-main-content .card {
+            box-shadow: none !important;
+            border-width: 2px;
+        }
+        html.ww-a11y-tier-assistive #ww-main-content .table > :not(caption) > * > * {
+            padding: 0.8rem 1rem;
+        }
+        html.ww-a11y-tier-assistive #ww-main-content .row.g-3 {
+            --bs-gutter-x: 1.15rem;
+            --bs-gutter-y: 1.15rem;
+        }
+        html.ww-a11y-tier-assistive #ww-main-content {
+            line-height: 1.55;
+        }
+        html.ww-a11y-tier-assistive .help-nav-btn {
+            min-width: 2.75rem;
+            min-height: 2.75rem;
+        }
+
         body { background: #f7f9fc; }
 
         /* NAVBAR */
@@ -54,7 +220,7 @@
         }
 
         .nav-link.active {
-            background: #2563eb !important;
+            background: var(--bs-primary) !important;
             color: white !important;
         }
 
@@ -166,7 +332,7 @@
         }
 
         .notif-link:hover {
-            color: #2563eb;
+            color: var(--bs-primary);
             text-decoration: underline;
         }
 
@@ -188,11 +354,11 @@
 
         .notif-badge-critical { background: #fee2e2; color: #b91c1c; }
         .notif-badge-warning { background: #fef3c7; color: #b45309; }
-        .notif-badge-info { background: #dbeafe; color: #1d4ed8; }
+        .notif-badge-info { background: var(--bs-primary-bg-subtle); color: var(--bs-primary-text-emphasis); }
 
         /* Profile Dropdown */
         .profile-circle {
-            background: #3b82f6;
+            background: var(--bs-primary);
             color: white;
             width: 36px;
             height: 36px;
@@ -203,6 +369,169 @@
             font-weight: 600;
             margin-left: 16px;
             cursor: pointer;
+            overflow: hidden;
+            flex-shrink: 0;
+            position: relative;
+            padding: 0;
+        }
+        /* Bootstrap caret would sit beside the image in flex layout and show blue at the edge */
+        .profile-circle.dropdown-toggle::after {
+            display: none !important;
+        }
+        .profile-circle .profile-circle-img {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center;
+            display: block;
+            border-radius: 50%;
+        }
+        .profile-circle .profile-circle-letter {
+            line-height: 1;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Profile form fields */
+        .ww-profile-input:not([type="file"]) {
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+            background-color: #fafbfc;
+        }
+        .ww-profile-input:focus {
+            background-color: #fff;
+            border-color: var(--bs-primary);
+            box-shadow: 0 0 0 0.2rem rgba(var(--bs-primary-rgb), 0.22);
+        }
+        textarea.ww-profile-input { min-height: 104px; }
+        input[type="file"].ww-profile-input {
+            padding: 0.5rem 0.75rem;
+            background: #fafbfc;
+        }
+        .ww-profile-photo-frame {
+            width: 128px;
+            height: 128px;
+            border-radius: 50%;
+            overflow: hidden;
+            border: 3px solid #e2e8f0;
+            background: #f1f5f9;
+            margin: 0 auto;
+            position: relative;
+        }
+        @media (min-width: 768px) {
+            .ww-profile-photo-frame { margin: 0; }
+        }
+        .ww-profile-photo-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .ww-profile-photo-fallback {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(145deg, color-mix(in srgb, var(--bs-primary) 55%, white), var(--bs-primary));
+            color: #fff;
+            font-size: 2.25rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+        .ww-profile-photo-clickable {
+            cursor: pointer;
+            position: relative;
+            transition: box-shadow 0.15s ease, transform 0.15s ease;
+        }
+        .ww-profile-photo-clickable:hover {
+            box-shadow: 0 0 0 4px rgba(var(--bs-primary-rgb), 0.35);
+        }
+        .ww-profile-photo-clickable:focus {
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(var(--bs-primary-rgb), 0.45);
+        }
+        .ww-profile-photo-clickable::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: rgba(15, 23, 42, 0.45);
+            opacity: 0;
+            transition: opacity 0.15s ease;
+            pointer-events: none;
+        }
+        .ww-profile-photo-clickable:hover::after,
+        .ww-profile-photo-clickable:focus-visible::after {
+            opacity: 1;
+        }
+        .ww-profile-photo-hint {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #fff;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+            opacity: 0;
+            transition: opacity 0.15s ease;
+            pointer-events: none;
+            z-index: 2;
+        }
+        .ww-profile-photo-clickable:hover .ww-profile-photo-hint,
+        .ww-profile-photo-clickable:focus-visible .ww-profile-photo-hint {
+            opacity: 1;
+        }
+
+        /* Profile / Settings secondary tabs — inactive stays readable (not “disabled”) */
+        .ww-subnav.nav-pills { flex-wrap: wrap; }
+        .ww-subnav.nav-pills .nav-link {
+            color: #334155 !important;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            font-weight: 500;
+            border-radius: 10px;
+            padding: 0.55rem 1rem !important;
+        }
+        .ww-subnav.nav-pills .nav-link:hover {
+            background: #f1f5f9;
+            color: #0f172a !important;
+            border-color: #cbd5e1;
+        }
+        .ww-subnav.nav-pills .nav-link.active {
+            background: var(--bs-primary) !important;
+            border-color: transparent;
+            color: #fff !important;
+        }
+
+        .ww-form-actions {
+            position: sticky;
+            bottom: 0;
+            z-index: 5;
+            margin-top: 1.5rem;
+            padding-top: 1rem;
+            padding-bottom: 0.25rem;
+            background: linear-gradient(to top, #f7f9fc 70%, transparent);
+        }
+
+        .ww-appearance-options ul {
+            list-style: none;
+            padding-left: 0;
+            margin-bottom: 0;
+        }
+        .ww-appearance-options li { margin-bottom: 0.5rem; }
+        .ww-appearance-options li:last-child { margin-bottom: 0; }
+        .ww-appearance-options li label {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 500;
         }
     </style>
 
@@ -211,6 +540,7 @@
         body.dark-mode {
             background-color: #0d1117 !important;
             color: #e6edf3 !important;
+            scrollbar-color: #484f58 #0d1117;
         }
 
         .dark-mode .navbar {
@@ -261,20 +591,249 @@
         .ww-sticky-header thead th { position: sticky; top: 0; z-index: 10; background: #f8f9fa !important; box-shadow: 0 1px 0 #dee2e6; }
         body.dark-mode .ww-sticky-header thead th { background: #21262d !important; box-shadow: 0 1px 0 #30363d; }
         .ww-table-compact .table td, .ww-table-compact .table th { padding: 0.35rem 0.5rem; font-size: 0.8125rem; }
+
+        body.dark-mode .ww-subnav.nav-pills .nav-link {
+            color: #e2e8f0 !important;
+            background: #161b22;
+            border-color: #30363d;
+        }
+        body.dark-mode .ww-subnav.nav-pills .nav-link:hover {
+            background: #21262d;
+            color: #f8fafc !important;
+        }
+        body.dark-mode .ww-form-actions {
+            background: linear-gradient(to top, #0d1117 75%, transparent);
+        }
+
+        body.dark-mode .ww-profile-input:not([type="file"]) {
+            background-color: #0d1117;
+            border-color: #30363d;
+            color: #e6edf3;
+        }
+        body.dark-mode input[type="file"].ww-profile-input {
+            background: #161b22;
+            border-color: #30363d;
+            color: #e6edf3;
+        }
+        body.dark-mode .ww-profile-photo-frame {
+            border-color: #30363d;
+            background: #161b22;
+        }
+
+        /* Bootstrap + utility text (muted, body, dark) */
+        body.dark-mode .text-muted,
+        [data-bs-theme="dark"] .text-muted {
+            color: #8b949e !important;
+        }
+        body.dark-mode .text-body,
+        body.dark-mode .text-dark,
+        [data-bs-theme="dark"] .text-body,
+        [data-bs-theme="dark"] .text-dark {
+            color: #e6edf3 !important;
+        }
+        body.dark-mode h1, body.dark-mode h2, body.dark-mode h3, body.dark-mode h4, body.dark-mode h5, body.dark-mode h6,
+        body.dark-mode .h1, body.dark-mode .h2, body.dark-mode .h3, body.dark-mode .h4, body.dark-mode .h5, body.dark-mode .h6 {
+            color: #f0f6fc;
+        }
+
+        body.dark-mode .bg-white,
+        [data-bs-theme="dark"] .bg-white {
+            background-color: #21262d !important;
+            color: #e6edf3 !important;
+        }
+        body.dark-mode .card-header,
+        body.dark-mode .card-header.bg-white,
+        [data-bs-theme="dark"] .card-header {
+            background-color: #21262d !important;
+            border-color: #30363d !important;
+            color: #e6edf3 !important;
+        }
+        body.dark-mode .card-footer {
+            background-color: #161b22 !important;
+            border-color: #30363d !important;
+            color: #e6edf3 !important;
+        }
+
+        body.dark-mode .table,
+        [data-bs-theme="dark"] .table {
+            --bs-table-bg: #161b22;
+            --bs-table-color: #e6edf3;
+            --bs-table-border-color: #30363d;
+            --bs-table-striped-bg: rgba(255, 255, 255, 0.03);
+            --bs-table-hover-bg: rgba(255, 255, 255, 0.06);
+            color: var(--bs-table-color);
+        }
+        body.dark-mode .table > :not(caption) > * > *,
+        [data-bs-theme="dark"] .table > :not(caption) > * > * {
+            border-bottom-color: #30363d;
+        }
+        body.dark-mode .table thead th,
+        body.dark-mode .table-light,
+        [data-bs-theme="dark"] .table thead th,
+        [data-bs-theme="dark"] .table-light,
+        [data-bs-theme="dark"] thead.table-light th {
+            --bs-table-bg: #21262d !important;
+            background-color: #21262d !important;
+            color: #e6edf3 !important;
+            border-color: #30363d !important;
+        }
+        body.dark-mode .table tbody tr,
+        body.dark-mode .table tbody td,
+        [data-bs-theme="dark"] .table tbody tr,
+        [data-bs-theme="dark"] .table tbody td {
+            background-color: #161b22 !important;
+            color: #e6edf3 !important;
+        }
+        body.dark-mode tfoot.table-light th,
+        body.dark-mode tfoot.table-light td,
+        [data-bs-theme="dark"] tfoot.table-light th {
+            background-color: #21262d !important;
+            color: #e6edf3 !important;
+        }
+
+        body.dark-mode .input-group-text,
+        [data-bs-theme="dark"] .input-group-text {
+            background-color: #21262d !important;
+            border-color: #30363d !important;
+            color: #e6edf3 !important;
+        }
+        body.dark-mode .form-label,
+        body.dark-mode .form-text,
+        [data-bs-theme="dark"] .form-label {
+            color: #c9d1d9;
+        }
+        body.dark-mode .form-control::placeholder,
+        body.dark-mode .form-select,
+        [data-bs-theme="dark"] .form-control::placeholder {
+            color: #8b949e;
+        }
+
+        body.dark-mode .border,
+        body.dark-mode .border-bottom,
+        body.dark-mode .border-top,
+        body.dark-mode .border-start,
+        body.dark-mode .border-end {
+            border-color: #30363d !important;
+        }
+        body.dark-mode .bg-light,
+        body.dark-mode .bg-body-secondary,
+        [data-bs-theme="dark"] .bg-light {
+            background-color: #21262d !important;
+            color: #e6edf3 !important;
+        }
+        body.dark-mode .bg-body-tertiary,
+        [data-bs-theme="dark"] .bg-body-tertiary {
+            background-color: #161b22 !important;
+        }
+        body.dark-mode .list-group-item {
+            background-color: #161b22;
+            border-color: #30363d;
+            color: #e6edf3;
+        }
+        body.dark-mode .list-group-item-action:hover {
+            background-color: #21262d;
+            color: #f0f6fc;
+        }
+        body.dark-mode .modal-content,
+        [data-bs-theme="dark"] .modal-content {
+            background-color: #161b22;
+            color: #e6edf3;
+            border-color: #30363d;
+        }
+        body.dark-mode .modal-header,
+        body.dark-mode .modal-footer {
+            border-color: #30363d !important;
+        }
+        body.dark-mode .dropdown-menu,
+        [data-bs-theme="dark"] .dropdown-menu {
+            background-color: #161b22;
+            border-color: #30363d;
+        }
+        body.dark-mode .dropdown-item {
+            color: #e6edf3;
+        }
+        body.dark-mode .dropdown-item:hover,
+        body.dark-mode .dropdown-item:focus {
+            background-color: #21262d;
+            color: #fff;
+        }
+        body.dark-mode .page-link {
+            background-color: #161b22;
+            border-color: #30363d;
+            color: #e6edf3;
+        }
+        body.dark-mode .page-link:hover {
+            background-color: #21262d;
+            color: #fff;
+        }
+        body.dark-mode .page-item.active .page-link {
+            background-color: var(--bs-primary);
+            border-color: var(--bs-primary);
+            color: #fff;
+        }
+        body.dark-mode .btn-outline-secondary {
+            color: #c9d1d9;
+            border-color: #484f58;
+        }
+        body.dark-mode .btn-outline-secondary:hover {
+            background-color: #30363d;
+            color: #f0f6fc;
+        }
+        body.dark-mode .btn-close {
+            filter: invert(1) grayscale(1);
+            opacity: 0.65;
+        }
+        body.dark-mode .alert-light,
+        [data-bs-theme="dark"] .alert-light {
+            background-color: #21262d !important;
+            border-color: #30363d !important;
+            color: #e6edf3 !important;
+        }
+        body.dark-mode .text-bg-light {
+            background-color: #30363d !important;
+            color: #e6edf3 !important;
+        }
+        body.dark-mode .search-input::placeholder {
+            color: #8b949e !important;
+        }
+        body.dark-mode .breadcrumb-item,
+        body.dark-mode .breadcrumb-item a {
+            color: #c9d1d9;
+        }
+        body.dark-mode .breadcrumb-item.active {
+            color: #8b949e;
+        }
+
+        /* Accent-derived subtles on dark surfaces */
+        body.dark-mode[data-accent] {
+            --bs-primary-bg-subtle: color-mix(in srgb, var(--bs-primary) 22%, #161b22);
+            --bs-primary-border-subtle: color-mix(in srgb, var(--bs-primary) 45%, #30363d);
+            --bs-primary-text-emphasis: color-mix(in srgb, var(--bs-primary) 55%, #f0f6fc);
+        }
     </style>
 
     <style>
-        :root { --accent: #0d6efd; }
+        /* Accent drives Bootstrap primary tokens so .btn-primary, links, badges, and custom rules stay in sync */
+        body[data-accent="blue"]   { --bs-primary: #0d6efd; --bs-primary-rgb: 13, 110, 253; }
+        body[data-accent="green"]  { --bs-primary: #198754; --bs-primary-rgb: 25, 135, 84; }
+        body[data-accent="purple"] { --bs-primary: #6f42c1; --bs-primary-rgb: 111, 66, 193; }
+        body[data-accent="red"]    { --bs-primary: #dc3545; --bs-primary-rgb: 220, 53, 69; }
+        body[data-accent="orange"] { --bs-primary: #fd7e14; --bs-primary-rgb: 253, 126, 20; }
+        body[data-accent="pink"]   { --bs-primary: #d63384; --bs-primary-rgb: 214, 51, 132; }
 
-        body[data-accent="blue"]   { --accent:#0d6efd; }
-        body[data-accent="green"]  { --accent:#198754; }
-        body[data-accent="purple"] { --accent:#6f42c1; }
-        body[data-accent="red"]    { --accent:#dc3545; }
-        body[data-accent="orange"] { --accent:#fd7e14; }
-        body[data-accent="pink"]   { --accent:#d63384; }
+        body[data-accent] {
+            --accent: var(--bs-primary);
+            --accent-rgb: var(--bs-primary-rgb);
+            --bs-link-color: var(--bs-primary);
+            --bs-link-hover-color: color-mix(in srgb, var(--bs-primary) 78%, black);
+            --bs-focus-ring-color: rgba(var(--bs-primary-rgb), 0.28);
+            --bs-primary-bg-subtle: color-mix(in srgb, var(--bs-primary) 16%, white);
+            --bs-primary-border-subtle: color-mix(in srgb, var(--bs-primary) 40%, white);
+            --bs-primary-text-emphasis: color-mix(in srgb, var(--bs-primary) 52%, black);
+        }
 
-        .btn-accent { background: var(--accent); border-color: var(--accent); color:#fff; }
-        .btn-accent:hover { filter: brightness(0.95); color:#fff; }
+        .btn-accent { background: var(--bs-primary); border-color: var(--bs-primary); color: #fff; }
+        .btn-accent:hover { filter: brightness(0.95); color: #fff; }
 
         body.compact .card { padding: 1rem !important; }
         body.compact .row.g-4 { --bs-gutter-y: 1rem; --bs-gutter-x: 1rem; }
@@ -285,16 +844,22 @@
 <body
   data-theme="{% if user_pref %}{{ user_pref.theme }}{% else %}light{% endif %}"
   data-accent="{% if user_pref %}{{ user_pref.accent_color }}{% else %}blue{% endif %}"
+  data-default-table-density="{% if user_pref %}{{ user_pref.default_table_density }}{% else %}comfortable{% endif %}"
+  data-currency-symbol="{% if user_pref %}{{ user_pref.default_currency|ww_currency_symbol }}{% else %}€{% endif %}"
+  data-confirm-destructive="{% if user_pref %}{{ user_pref.confirm_destructive_actions|yesno:'1,0' }}{% else %}1{% endif %}"
+  data-keyboard-shortcuts="{% if user_pref %}{{ user_pref.keyboard_shortcuts_enabled|yesno:'1,0' }}{% else %}1{% endif %}"
   class="{% if user_pref and user_pref.compact_mode %}compact{% endif %}"
 >
 
+<a href="#ww-main-content" class="ww-skip-link">{% trans "Skip to main content" %}</a>
+
 <!-- ======================= NAVBAR ============================= -->
-<nav class="navbar navbar-expand-lg">
+<nav class="navbar navbar-expand-lg" aria-label="{% trans 'Main navigation' %}">
 
     <!-- LOGO -->
     <a class="navbar-brand" href="{% url 'dashboard' %}">
         <img src="{% static 'inventory/images/warewolf-logo.png' %}" alt="WareWolf logo" class="ww-logo">
-        <span>WareWolf</span>
+        <span>{% trans "WareWolf" %}</span>
     </a>
 
     <!-- NAV LINKS -->
@@ -302,35 +867,35 @@
         <li class="nav-item">
             <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}"
                href="{% url 'dashboard' %}">
-                <i class="bi bi-house-door"></i> Dashboard
+                <i class="bi bi-house-door"></i> {% trans "Dashboard" %}
             </a>
         </li>
 
         <li class="nav-item">
             <a class="nav-link {% if request.resolver_match.url_name == 'item_list' %}active{% endif %}"
                href="{% url 'item_list' %}">
-                <i class="bi bi-box"></i> Stock
+                <i class="bi bi-box"></i> {% trans "Stock" %}
             </a>
         </li>
 
         <li class="nav-item">
             <a class="nav-link {% if request.resolver_match.url_name == 'location_list' %}active{% endif %}"
                href="{% url 'location_list' %}">
-                <i class="bi bi-geo-alt"></i> Locations
+                <i class="bi bi-geo-alt"></i> {% trans "Locations" %}
             </a>
         </li>
 
         <li class="nav-item">
             <a class="nav-link {% if request.resolver_match.url_name == 'order_list' %}active{% endif %}"
                href="{% url 'order_list' %}">
-                <i class="bi bi-cart-check"></i> Orders
+                <i class="bi bi-cart-check"></i> {% trans "Orders" %}
             </a>
         </li>
 
         <li class="nav-item">
             <a class="nav-link {% if request.resolver_match.url_name == 'contacts_list' %}active{% endif %}"
                href="{% url 'contacts_list' %}">
-                <i class="bi bi-people"></i> Contacts
+                <i class="bi bi-people"></i> {% trans "Contacts" %}
             </a>
         </li>
     </ul>
@@ -344,7 +909,8 @@
             class="form-control search-input"
             type="text"
             autocomplete="off"
-            placeholder="Search items, orders, suppliers..."
+            aria-label="{% trans 'Search items, orders, suppliers' %}"
+            placeholder="{% trans 'Search items, orders, suppliers…' %}"
         >
 
         <div id="globalSearchResults" class="search-results shadow-sm"></div>
@@ -383,40 +949,52 @@
 
         <!-- Help / Docs -->
         <li class="nav-item">
-            <button type="button" class="help-nav-btn" data-bs-toggle="modal" data-bs-target="#helpModal" title="Help &amp; documentation">
-                <i class="bi bi-question-circle fs-5"></i>
+            <button type="button" class="help-nav-btn" data-bs-toggle="modal" data-bs-target="#helpModal" title="{% trans 'Help and documentation' %}" aria-label="{% trans 'Help and documentation' %}">
+                <i class="bi bi-question-circle fs-5" aria-hidden="true"></i>
             </button>
         </li>
 
+        {% if user.is_authenticated and user_pref and user_pref.voice_feedback_enabled %}
+        <li class="nav-item">
+            <button type="button" class="help-nav-btn" id="wwTtsReadPageBtn" title="{{ ww_tts_read_page }}" aria-label="{{ ww_tts_read_page }}" aria-pressed="false">
+                <i class="bi bi-volume-up fs-5" aria-hidden="true"></i>
+            </button>
+        </li>
+        {% endif %}
+
         <!-- Notifications -->
         <li class="nav-item dropdown">
-        <a class="nav-link position-relative" href="#" role="button" data-bs-toggle="dropdown">
-            <i class="bi bi-bell fs-5"></i>
+        <a class="nav-link position-relative" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" id="wwNavbarNotifToggle" aria-haspopup="true"
+           aria-label="{% if global_alerts_count %}{% blocktrans with n=global_alerts_count %}Notifications, {{ n }} unread{% endblocktrans %}{% else %}{% trans 'Notifications' %}{% endif %}">
+            <i class="bi bi-bell fs-5" aria-hidden="true"></i>
 
             {% if global_alerts_count %}
-            <span class="badge bg-danger rounded-circle position-absolute top-0 start-100 translate-middle p-1">
+            <span class="badge bg-danger rounded-circle position-absolute top-0 start-100 translate-middle p-1" aria-hidden="true">
                 {{ global_alerts_count }}
             </span>
             {% endif %}
         </a>
 
-        <ul class="dropdown-menu dropdown-menu-end shadow-sm notif-menu">
-            <li class="notif-header d-flex justify-content-between align-items-center gap-2">
-                <span class="fw-bold">Notifications</span>
-                <div class="d-flex align-items-center gap-2">
-                    <small class="text-muted">{{ global_alerts_count|default:0 }} active</small>
-                    <a href="{% url 'alerts_list' %}" class="btn btn-sm btn-outline-primary py-0 px-2">View all</a>
+        <ul class="dropdown-menu dropdown-menu-end shadow-sm notif-menu" aria-labelledby="wwNavbarNotifToggle">
+            <li class="notif-header d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                <span class="fw-bold">{% trans "Notifications" %}</span>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <small class="text-muted">{% blocktrans with n=global_alerts_count|default:0 %}{{ n }} active{% endblocktrans %}</small>
+                    {% if user.is_authenticated and user_pref and user_pref.voice_feedback_enabled %}
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 ww-stop-close" id="wwTtsReadAlertsBtn">{% trans "Read aloud" %}</button>
+                    {% endif %}
+                    <a href="{% url 'alerts_list' %}" class="btn btn-sm btn-outline-primary py-0 px-2">{% trans "View all" %}</a>
                 </div>
             </li>
 
             {% if global_alerts %}
                 {% if alerts_critical %}
-                    <li class="notif-group-title">Critical</li>
+                    <li class="notif-group-title">{% trans "Critical" %}</li>
                     {% for alert in alerts_critical %}
                     <li class="notif-item">
                         <div class="d-flex justify-content-between align-items-start gap-2">
                             <div class="notif-content flex-grow-1">
-                                <span class="notif-badge notif-badge-critical">Critical</span><br>
+                                <span class="notif-badge notif-badge-critical">{% trans "Critical" %}</span><br>
                                 <span class="badge text-bg-danger-subtle text-danger-emphasis border border-danger-subtle mb-1">{{ alert.source|title }}</span><br>
                                 <a href="{{ alert.url }}" class="notif-link">{{ alert.message }}</a>
                                 {% if alert.time or alert.source %}
@@ -431,16 +1009,16 @@
                             {% if alert.is_db_notification %}
                             <form method="post" action="{% url 'dismiss_notification' alert.id %}" class="ms-2">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-sm btn-light border-0" title="Dismiss">
-                                    <i class="bi bi-x-lg"></i>
+                                <button type="submit" class="btn btn-sm btn-light border-0" title="{% trans 'Dismiss' %}" aria-label="{% trans 'Dismiss' %}">
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i>
                                 </button>
                             </form>
                             {% else %}
                             <form method="post" action="{% url 'dismiss_alert' %}" class="ms-2">
                                 {% csrf_token %}
                                 <input type="hidden" name="key" value="{{ alert.key }}">
-                                <button type="submit" class="btn btn-sm btn-light border-0" title="Dismiss">
-                                    <i class="bi bi-x-lg"></i>
+                                <button type="submit" class="btn btn-sm btn-light border-0" title="{% trans 'Dismiss' %}" aria-label="{% trans 'Dismiss' %}">
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i>
                                 </button>
                             </form>
                             {% endif %}
@@ -450,12 +1028,12 @@
                 {% endif %}
 
                 {% if alerts_warning %}
-                    <li class="notif-group-title">Warnings</li>
+                    <li class="notif-group-title">{% trans "Warnings" %}</li>
                     {% for alert in alerts_warning %}
                     <li class="notif-item">
                         <div class="d-flex justify-content-between align-items-start gap-2">
                             <div class="notif-content flex-grow-1">
-                                <span class="notif-badge notif-badge-warning">Warning</span><br>
+                                <span class="notif-badge notif-badge-warning">{% trans "Warning" %}</span><br>
                                 <span class="badge text-bg-warning-subtle text-warning-emphasis border border-warning-subtle mb-1">{{ alert.source|title }}</span><br>
                                 <a href="{{ alert.url }}" class="notif-link">{{ alert.message }}</a>
                                 {% if alert.time or alert.source %}
@@ -470,16 +1048,16 @@
                             {% if alert.is_db_notification %}
                             <form method="post" action="{% url 'dismiss_notification' alert.id %}" class="ms-2">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-sm btn-light border-0" title="Dismiss">
-                                    <i class="bi bi-x-lg"></i>
+                                <button type="submit" class="btn btn-sm btn-light border-0" title="{% trans 'Dismiss' %}" aria-label="{% trans 'Dismiss' %}">
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i>
                                 </button>
                             </form>
                             {% else %}
                             <form method="post" action="{% url 'dismiss_alert' %}" class="ms-2">
                                 {% csrf_token %}
                                 <input type="hidden" name="key" value="{{ alert.key }}">
-                                <button type="submit" class="btn btn-sm btn-light border-0" title="Dismiss">
-                                    <i class="bi bi-x-lg"></i>
+                                <button type="submit" class="btn btn-sm btn-light border-0" title="{% trans 'Dismiss' %}" aria-label="{% trans 'Dismiss' %}">
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i>
                                 </button>
                             </form>
                             {% endif %}
@@ -487,8 +1065,8 @@
 
                         {% if alert.approve_url and alert.decline_url %}
                         <div class="mt-2 d-flex gap-2">
-                            <a href="{{ alert.approve_url }}" class="btn btn-sm btn-success">Approve</a>
-                            <a href="{{ alert.decline_url }}" class="btn btn-sm btn-outline-danger">Decline</a>
+                            <a href="{{ alert.approve_url }}" class="btn btn-sm btn-success">{% trans "Approve" %}</a>
+                            <a href="{{ alert.decline_url }}" class="btn btn-sm btn-outline-danger">{% trans "Decline" %}</a>
                         </div>
                         {% endif %}
                     </li>
@@ -496,12 +1074,12 @@
                 {% endif %}
 
                 {% if alerts_info %}
-                    <li class="notif-group-title">Info</li>
+                    <li class="notif-group-title">{% trans "Info" %}</li>
                     {% for alert in alerts_info %}
                     <li class="notif-item">
                         <div class="d-flex justify-content-between align-items-start gap-2">
                             <div class="notif-content flex-grow-1">
-                                <span class="notif-badge notif-badge-info">Info</span><br>
+                                <span class="notif-badge notif-badge-info">{% trans "Info" %}</span><br>
                                 <span class="badge text-bg-primary-subtle text-primary-emphasis border border-primary-subtle mb-1">{{ alert.source|title }}</span><br>
                                 <a href="{{ alert.url }}" class="notif-link">{{ alert.message }}</a>
                                 {% if alert.time or alert.source %}
@@ -516,16 +1094,16 @@
                             {% if alert.is_db_notification %}
                             <form method="post" action="{% url 'dismiss_notification' alert.id %}" class="ms-2">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-sm btn-light border-0" title="Dismiss">
-                                    <i class="bi bi-x-lg"></i>
+                                <button type="submit" class="btn btn-sm btn-light border-0" title="{% trans 'Dismiss' %}" aria-label="{% trans 'Dismiss' %}">
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i>
                                 </button>
                             </form>
                             {% else %}
                             <form method="post" action="{% url 'dismiss_alert' %}" class="ms-2">
                                 {% csrf_token %}
                                 <input type="hidden" name="key" value="{{ alert.key }}">
-                                <button type="submit" class="btn btn-sm btn-light border-0" title="Dismiss">
-                                    <i class="bi bi-x-lg"></i>
+                                <button type="submit" class="btn btn-sm btn-light border-0" title="{% trans 'Dismiss' %}" aria-label="{% trans 'Dismiss' %}">
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i>
                                 </button>
                             </form>
                             {% endif %}
@@ -534,11 +1112,12 @@
                     {% endfor %}
                 {% endif %}
             {% else %}
-            <li class="dropdown-item text-muted small p-3">No alerts</li>
+            <li class="dropdown-item text-muted small p-3">{% trans "No alerts" %}</li>
             {% endif %}
             {% if global_alerts_count and global_alerts_count > global_alerts|length %}
             <li class="dropdown-item text-center small text-muted">
-                Showing {{ global_alerts|length }} of {{ global_alerts_count }}. <a href="{% url 'alerts_list' %}" class="text-decoration-none">View all</a>
+                {% blocktrans with shown=global_alerts|length total=global_alerts_count %}Showing {{ shown }} of {{ total }}.{% endblocktrans %}
+                <a href="{% url 'alerts_list' %}" class="text-decoration-none">{% trans "View all" %}</a>
             </li>
             {% endif %}
         </ul>
@@ -548,22 +1127,26 @@
 
         <!-- PROFILE DROPDOWN -->
         <li class="nav-item dropdown">
-            <div class="profile-circle dropdown-toggle" data-bs-toggle="dropdown">
-                {{ request.user.username|first|upper }}
+            <div class="profile-circle dropdown-toggle" data-bs-toggle="dropdown" role="button" tabindex="0" aria-label="{% trans 'Account menu' %}" aria-haspopup="true" aria-expanded="false" id="wwNavbarAccountMenu">
+                {% if profile_avatar_url %}
+                    <img src="{{ profile_avatar_url }}" alt="" class="profile-circle-img" width="36" height="36">
+                {% else %}
+                    <span class="profile-circle-letter">{{ request.user.username|first|upper }}</span>
+                {% endif %}
             </div>
 
-            <ul class="dropdown-menu dropdown-menu-end">
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="wwNavbarAccountMenu">
                 <li><h6 class="dropdown-header">{{ request.user.username }}</h6></li>
 
                 <li>
                     <a class="dropdown-item" href="{% url 'profile' %}?tab=profile">
-                        <i class="bi bi-person"></i> Profile
+                        <i class="bi bi-person"></i> {% trans "Profile" %}
                     </a>
                 </li>
 
                 <li>
                     <a class="dropdown-item" href="{% url 'settings' %}">
-                        <i class="bi bi-gear"></i> Settings
+                        <i class="bi bi-gear"></i> {% trans "Settings" %}
                     </a>
                 </li>
 
@@ -571,7 +1154,7 @@
 
                 <li>
                     <a class="dropdown-item text-danger" href="#" data-bs-toggle="modal" data-bs-target="#logoutConfirmModal">
-                        <i class="bi bi-box-arrow-right"></i> Logout
+                        <i class="bi bi-box-arrow-right"></i> {% trans "Log out" %}
                     </a>
                 </li>
             </ul>
@@ -586,46 +1169,49 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title fw-bold" id="helpModalLabel"><i class="bi bi-question-circle me-2"></i>WareWolf Help Centre</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <h5 class="modal-title fw-bold" id="helpModalLabel"><i class="bi bi-question-circle me-2" aria-hidden="true"></i>{% trans "WareWolf Help Centre" %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}"></button>
             </div>
             <div class="modal-body">
-                <h6 class="fw-semibold text-secondary mb-2">Getting Started</h6>
+                <h6 class="fw-semibold text-secondary mb-2">{% trans "Getting Started" %}</h6>
                 <ul class="small mb-4">
-                    <li>How to add a stock item</li>
-                    <li>How to create a purchase order</li>
-                    <li>How to update stock quantities</li>
+                    <li>{% trans "How to add a stock item" %}</li>
+                    <li>{% trans "How to create a purchase order" %}</li>
+                    <li>{% trans "How to update stock quantities" %}</li>
                 </ul>
 
-                <h6 class="fw-semibold text-secondary mb-2">Quick Tips</h6>
+                <h6 class="fw-semibold text-secondary mb-2">{% trans "Quick Tips" %}</h6>
                 <ul class="small mb-4">
-                    <li>Use the search bar to find items instantly</li>
-                    <li>Low stock alerts appear in notifications</li>
-                    <li>Managers can approve reorder requests</li>
+                    <li>{% trans "Use the search bar to find items instantly" %}</li>
+                    <li>{% trans "Low stock alerts appear in notifications" %}</li>
+                    <li>{% trans "Managers can approve reorder requests" %}</li>
                 </ul>
 
-                <h6 class="fw-semibold text-secondary mb-2">Shortcuts</h6>
+                <h6 class="fw-semibold text-secondary mb-2">{% trans "Shortcuts" %}</h6>
                 <ul class="small mb-2">
-                    <li>Press <kbd>/</kbd> to focus search instantly</li>
-                    <li><i class="bi bi-bell me-1"></i> Use the bell icon to view alerts</li>
+                    <li>{% blocktrans trimmed %}Press <kbd>/</kbd> to focus search (when shortcuts are on){% endblocktrans %}</li>
+                    <li>{% blocktrans trimmed %}Press <kbd>?</kbd> for the full shortcut list, or use <kbd>g</kbd> then a letter to jump (e.g. <kbd>g</kbd> <kbd>i</kbd> for Stock){% endblocktrans %}</li>
+                    <li><i class="bi bi-bell me-1"></i> {% trans "Use the bell icon to view alerts" %}</li>
                 </ul>
                 <div class="small mb-0">
-                    <p class="mb-1"><i class="bi bi-box me-2"></i><strong>Adding Stock</strong> &rarr; Stock &rarr; Add Item</p>
-                    <p class="mb-1"><i class="bi bi-geo-alt me-2"></i><strong>Managing Locations</strong> &rarr; Locations &rarr; Create Location</p>
-                    <p class="mb-1"><i class="bi bi-cart-check me-2"></i><strong>Creating Orders</strong> &rarr; Orders &rarr; Create Order</p>
-                    <p class="mb-0"><i class="bi bi-bell me-2"></i><strong>Notifications</strong> &rarr; Low stock alerts appear here</p>
+                    <p class="mb-1"><i class="bi bi-box me-2"></i>{% trans "Adding Stock → Stock → Add Item" %}</p>
+                    <p class="mb-1"><i class="bi bi-geo-alt me-2"></i>{% trans "Managing Locations → Locations → Create Location" %}</p>
+                    <p class="mb-1"><i class="bi bi-cart-check me-2"></i>{% trans "Creating Orders → Orders → Create Order" %}</p>
+                    <p class="mb-0"><i class="bi bi-bell me-2"></i>{% trans "Notifications → Low stock alerts appear here" %}</p>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Close" %}</button>
             </div>
         </div>
     </div>
 </div>
 
+<main id="ww-main-content" tabindex="-1">
 <!-- Flash messages (success/error/info) -->
 {% if messages %}
-<div class="ww-alerts">
+<div class="container pt-4 pb-0">
+<div class="ww-alerts" role="status" aria-live="polite" aria-relevant="additions text">
     {% for message in messages %}
         <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show shadow-sm mb-2 d-flex align-items-start gap-2" role="alert">
             {% if message.tags == 'error' %}
@@ -641,11 +1227,17 @@
                     <div class="mt-2 small opacity-90">Reduce the order quantity or adjust stock before marking as delivered.</div>
                 {% endif %}
             </div>
-            <button type="button" class="btn-close flex-shrink-0" data-bs-dismiss="alert" aria-label="Close"></button>
+            <button type="button" class="btn-close flex-shrink-0" data-bs-dismiss="alert" aria-label="{% trans 'Close' %}"></button>
         </div>
     {% endfor %}
 </div>
+</div>
 {% endif %}
+
+<div class="container py-4">
+    {% block content %}{% endblock %}
+</div>
+</main>
 
 {% if request.user.is_authenticated %}
 <div class="modal fade" id="logoutConfirmModal" tabindex="-1" aria-labelledby="logoutConfirmModalLabel" aria-hidden="true">
@@ -654,23 +1246,23 @@
             <div class="modal-header border-0 pb-0">
                 <h5 class="modal-title d-flex align-items-center" id="logoutConfirmModalLabel">
                     <i class="bi bi-exclamation-triangle-fill text-danger me-2 fs-4"></i>
-                    Confirm logout
+                    {% trans "Confirm logout" %}
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}"></button>
             </div>
             <div class="modal-body pt-2">
-                <p class="mb-2">Are you sure you want to log out of account <strong>{{ request.user.username }}</strong>?</p>
+                <p class="mb-2">{% blocktrans with u=request.user.username %}Are you sure you want to log out of account <strong>{{ u }}</strong>?{% endblocktrans %}</p>
                 <div class="alert alert-warning d-flex align-items-start mb-0">
                     <i class="bi bi-info-circle me-2 mt-1"></i>
-                    <div>You can sign back in at any time to continue managing inventory, orders, and alerts.</div>
+                    <div>{% trans "You can sign back in at any time to continue managing inventory, orders, and alerts." %}</div>
                 </div>
             </div>
             <form method="post" action="{% url 'logout' %}">
                 {% csrf_token %}
                 <div class="modal-footer border-0 pt-0">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
                     <button type="submit" class="btn btn-danger">
-                        <i class="bi bi-box-arrow-right me-1"></i>Log out now
+                        <i class="bi bi-box-arrow-right me-1"></i>{% trans "Log out now" %}
                     </button>
                 </div>
             </form>
@@ -679,9 +1271,33 @@
 </div>
 {% endif %}
 
-<div class="container py-4">
-    {% block content %}{% endblock %}
+{% if user.is_authenticated %}
+<div class="modal fade" id="wwShortcutsModal" tabindex="-1" aria-labelledby="wwShortcutsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="wwShortcutsModalLabel">{% trans "Keyboard shortcuts" %}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}"></button>
+      </div>
+      <div class="modal-body small">
+        <p class="text-muted">{% trans "Shortcuts are inactive while focus is in a field. You can disable them under General settings." %}</p>
+        <ul class="list-unstyled mb-0">
+          <li class="mb-2">{% blocktrans trimmed %}<kbd>/</kbd> — Focus global search{% endblocktrans %}</li>
+          <li class="mb-2">{% blocktrans trimmed %}<kbd>?</kbd> — Show this list{% endblocktrans %}</li>
+          <li class="mb-2">{% blocktrans trimmed %}<kbd>g</kbd> then <kbd>d</kbd> — Dashboard{% endblocktrans %}</li>
+          <li class="mb-2">{% blocktrans trimmed %}<kbd>g</kbd> then <kbd>i</kbd> — Stock{% endblocktrans %}</li>
+          <li class="mb-2">{% blocktrans trimmed %}<kbd>g</kbd> then <kbd>l</kbd> — Locations{% endblocktrans %}</li>
+          <li class="mb-2">{% blocktrans trimmed %}<kbd>g</kbd> then <kbd>o</kbd> — Orders{% endblocktrans %}</li>
+          <li class="mb-2">{% blocktrans trimmed %}<kbd>g</kbd> then <kbd>c</kbd> — Contacts{% endblocktrans %}</li>
+          <li class="mb-2">{% blocktrans trimmed %}<kbd>g</kbd> then <kbd>a</kbd> — Alerts{% endblocktrans %}</li>
+          <li class="mb-2">{% blocktrans trimmed %}<kbd>g</kbd> then <kbd>n</kbd> — Anomalies{% endblocktrans %}</li>
+          <li class="mb-0">{% blocktrans trimmed %}<kbd>g</kbd> then <kbd>s</kbd> — Settings{% endblocktrans %}</li>
+        </ul>
+      </div>
+    </div>
+  </div>
 </div>
+{% endif %}
 
 <script>
 const input = document.getElementById("globalSearchInput");
@@ -728,30 +1344,295 @@ if (input && resultsBox) {
     });
 }
 
-// Press "/" to focus search (skip when typing in inputs/textareas)
-document.addEventListener("keydown", (e) => {
-    if (e.key === "/" && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) {
-        e.preventDefault();
-        const searchInput = document.getElementById("globalSearchInput");
-        if (searchInput) {
-            searchInput.focus();
-        }
+(function() {
+    function inputFocused() {
+        const t = document.activeElement;
+        return t && ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName);
     }
-});
+    function shortcutsOn() {
+        return document.body.dataset.keyboardShortcuts === "1";
+    }
+    let gPending = false;
+    let gTimer = null;
+    function clearG() {
+        gPending = false;
+        if (gTimer) clearTimeout(gTimer);
+        gTimer = null;
+    }
+    document.addEventListener("keydown", (e) => {
+        if (!shortcutsOn()) return;
+        if (inputFocused()) return;
+        if (gPending) {
+            clearG();
+            const k = e.key.toLowerCase();
+            const routes = {
+                d: "/",
+                i: "/items/",
+                l: "/locations/",
+                o: "/orders/",
+                c: "/contacts/",
+                a: "/alerts/",
+                n: "/anomalies/",
+                s: "/settings/",
+            };
+            if (routes[k]) {
+                e.preventDefault();
+                window.location.href = routes[k];
+            }
+            return;
+        }
+        if (e.key === "/" ) {
+            e.preventDefault();
+            document.getElementById("globalSearchInput")?.focus();
+            return;
+        }
+        if (e.key === "?" || (e.shiftKey && e.key === "/")) {
+            e.preventDefault();
+            const el = document.getElementById("wwShortcutsModal");
+            if (el && typeof bootstrap !== "undefined") {
+                bootstrap.Modal.getOrCreateInstance(el).show();
+            }
+            return;
+        }
+        if (e.key === "g" || e.key === "G") {
+            e.preventDefault();
+            gPending = true;
+            gTimer = setTimeout(clearG, 900);
+        }
+    });
+})();
+</script>
+
+<script>
+(function() {
+    function destructivePath(pathname) {
+        return /\/(delete|hard-delete|archive)(\/|$)/.test(pathname);
+    }
+    document.addEventListener("click", function(e) {
+        if (document.body.dataset.confirmDestructive !== "1") return;
+        const a = e.target.closest("a[href]");
+        if (!a) return;
+        let path = "";
+        try {
+            path = new URL(a.getAttribute("href"), window.location.origin).pathname;
+        } catch (err) {
+            return;
+        }
+        if (!destructivePath(path)) return;
+        if (!window.confirm("Are you sure you want to continue?")) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    }, true);
+    document.addEventListener("submit", function(e) {
+        if (document.body.dataset.confirmDestructive !== "1") return;
+        const form = e.target;
+        if (!(form instanceof HTMLFormElement)) return;
+        if (form.dataset.wwSkipConfirm === "1") return;
+        let path = "";
+        try {
+            path = new URL(form.action || window.location.href, window.location.origin).pathname;
+        } catch (err) {
+            return;
+        }
+        if (!destructivePath(path)) return;
+        if (!window.confirm("Are you sure you want to submit this action?")) {
+            e.preventDefault();
+        }
+    }, true);
+})();
 </script>
 
 <script>
 document.addEventListener("DOMContentLoaded", () => {
     const body = document.body;
-    const preferredTheme = body.dataset.theme || "light";
 
     const applyTheme = () => {
-        // Dark mode is opt-in only: account stays light unless explicitly set to dark.
-        const useDark = preferredTheme === "dark";
+        const theme = body.dataset.theme || "light";
+        let useDark = theme === "dark";
+        if (theme === "auto") {
+            useDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        }
         body.classList.toggle("dark-mode", useDark);
+        const root = document.documentElement;
+        root.setAttribute("data-bs-theme", useDark ? "dark" : "light");
+        root.style.colorScheme = useDark ? "dark" : "light";
     };
 
+    window.wwApplyThemeFromBody = applyTheme;
     applyTheme();
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+        if ((body.dataset.theme || "light") === "auto") applyTheme();
+    });
+
+    const syncReduceMotionClass = () => {
+        const root = document.documentElement;
+        const userRm = root.getAttribute("data-user-reduce-motion") === "1";
+        const sys = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        root.classList.toggle("ww-reduce-motion", userRm || sys);
+    };
+    syncReduceMotionClass();
+    window.matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", syncReduceMotionClass);
+
+    const wwSyncAccessibilityTier = () => {
+        const root = document.documentElement;
+        const mode = root.getAttribute("data-accessibility-mode") || "basic";
+        let tier = mode;
+        if (mode === "auto") {
+            try {
+                if (window.matchMedia("(prefers-contrast: more)").matches) tier = "assistive";
+                else if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) tier = "enhanced";
+                else tier = "basic";
+            } catch (e) {
+                tier = "basic";
+            }
+        }
+        root.classList.remove("ww-a11y-tier-enhanced", "ww-a11y-tier-assistive");
+        if (tier === "enhanced" || tier === "assistive") root.classList.add("ww-a11y-tier-enhanced");
+        if (tier === "assistive") root.classList.add("ww-a11y-tier-assistive");
+    };
+    wwSyncAccessibilityTier();
+    if ((document.documentElement.getAttribute("data-accessibility-mode") || "") === "auto") {
+        try {
+            window.matchMedia("(prefers-contrast: more)").addEventListener("change", wwSyncAccessibilityTier);
+            window.matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", wwSyncAccessibilityTier);
+        } catch (e) {}
+    }
+
+    window.wwTtsSessionRunning = false;
+    window.wwTtsAbortFlag = false;
+    window.wwTtsQueueGen = 0;
+    window.wwCancelSpeech = function () {
+        window.wwTtsQueueGen += 1;
+        window.wwTtsAbortFlag = true;
+        window.wwTtsSessionRunning = false;
+        try {
+            if (window.speechSynthesis) window.speechSynthesis.cancel();
+        } catch (e) {}
+        if (typeof window.wwTtsResetNavButton === "function") {
+            window.wwTtsResetNavButton();
+        }
+    };
+    window.wwSpeakQueue = function (parts, onDone) {
+        if (!window.speechSynthesis || !parts || !parts.length) return;
+        const clean = parts.map((p) => (p || "").replace(/\s+/g, " ").trim()).filter(Boolean);
+        if (!clean.length) return;
+        window.wwTtsQueueGen += 1;
+        const queueGen = window.wwTtsQueueGen;
+        try {
+            window.speechSynthesis.cancel();
+        } catch (e) {}
+        window.wwTtsAbortFlag = false;
+        window.wwTtsSessionRunning = true;
+        if (typeof window.wwTtsSetNavButtonSpeaking === "function") {
+            window.wwTtsSetNavButtonSpeaking();
+        }
+        let i = 0;
+        let lang = (document.documentElement.getAttribute("lang") || "en").replace("_", "-");
+        if (lang.indexOf("-") === -1) lang = lang + "-GB";
+        const finish = () => {
+            window.wwTtsSessionRunning = false;
+            window.wwTtsAbortFlag = false;
+            if (typeof onDone === "function") onDone();
+            if (typeof window.wwTtsResetNavButton === "function") {
+                window.wwTtsResetNavButton();
+            }
+        };
+        const run = () => {
+            if (queueGen !== window.wwTtsQueueGen) return;
+            if (window.wwTtsAbortFlag) {
+                window.wwTtsAbortFlag = false;
+                window.wwTtsSessionRunning = false;
+                return;
+            }
+            if (i >= clean.length) {
+                finish();
+                return;
+            }
+            const u = new SpeechSynthesisUtterance(clean[i++]);
+            u.lang = lang;
+            u.rate = 0.95;
+            u.onerror = () => run();
+            u.onend = run;
+            speechSynthesis.speak(u);
+        };
+        run();
+    };
+    if (document.documentElement.getAttribute("data-voice-feedback") === "1") {
+        const strNotif = "{{ ww_tts_notifications|escapejs }}";
+        const strNone = "{{ ww_tts_no_notifications|escapejs }}";
+        const labelRead = "{{ ww_tts_read_page|escapejs }}";
+        const labelStop = "{{ ww_tts_stop_speech|escapejs }}";
+        const btnPage = document.getElementById("wwTtsReadPageBtn");
+        window.wwTtsResetNavButton = function () {
+            if (!btnPage) return;
+            const icon = btnPage.querySelector("i");
+            btnPage.setAttribute("aria-pressed", "false");
+            btnPage.setAttribute("title", labelRead);
+            btnPage.setAttribute("aria-label", labelRead);
+            if (icon) icon.className = "bi bi-volume-up fs-5";
+        };
+        window.wwTtsSetNavButtonSpeaking = function () {
+            if (!btnPage) return;
+            const icon = btnPage.querySelector("i");
+            btnPage.setAttribute("aria-pressed", "true");
+            btnPage.setAttribute("title", labelStop);
+            btnPage.setAttribute("aria-label", labelStop);
+            if (icon) icon.className = "bi bi-stop-fill fs-5";
+        };
+        const readMain = () => {
+            const main = document.getElementById("ww-main-content");
+            if (!main) return;
+            const clone = main.cloneNode(true);
+            clone.querySelectorAll("script, style, noscript, template").forEach((el) => el.remove());
+            clone.querySelectorAll(".dropdown-menu").forEach((el) => el.remove());
+            clone.querySelectorAll(".modal, [role='dialog']").forEach((el) => el.remove());
+            let text = (clone.innerText || "").replace(/\s+/g, " ").trim();
+            if (text.length > 8000) text = text.slice(0, 8000) + " …";
+            const chunks = [];
+            let rest = text;
+            while (rest.length > 220) {
+                const cut = rest.lastIndexOf(". ", 220);
+                const idx = cut > 40 ? cut + 2 : 220;
+                chunks.push(rest.slice(0, idx).trim());
+                rest = rest.slice(idx).trim();
+            }
+            if (rest) chunks.push(rest);
+            window.wwSpeakQueue(chunks);
+        };
+        const readAlerts = () => {
+            const links = document.querySelectorAll(".notif-menu .notif-link");
+            const parts = [strNotif];
+            links.forEach((a) => {
+                const t = (a.textContent || "").trim();
+                if (t) parts.push(t);
+            });
+            if (links.length === 0) parts.push(strNone);
+            window.wwSpeakQueue(parts);
+        };
+        const btnAlerts = document.getElementById("wwTtsReadAlertsBtn");
+        if (btnPage) {
+            btnPage.addEventListener("click", () => {
+                /* speaking/pending are often false between queue chunks — use session flag */
+                if (window.wwTtsSessionRunning) {
+                    window.wwCancelSpeech();
+                    return;
+                }
+                readMain();
+            });
+        }
+        if (btnAlerts) {
+            btnAlerts.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (window.wwTtsSessionRunning) {
+                    window.wwCancelSpeech();
+                    return;
+                }
+                readAlerts();
+            });
+        }
+    }
 
     // Auto-dismiss success/info after ~4.5s; errors after ~7s (longer for long messages)
     setTimeout(() => {
@@ -809,5 +1690,6 @@ document.addEventListener("DOMContentLoaded", () => {
 })();
 </script>
 
+{% block extra_body %}{% endblock %}
 </body>
 </html>

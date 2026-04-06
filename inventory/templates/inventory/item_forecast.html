@@ -240,6 +240,8 @@ body.dark-mode .forecast-metric-icon.bg-success { background: rgba(34, 197, 94, 
   const isDark = document.body.classList.contains('dark-mode');
   const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
   const textColor = isDark ? '#9ca3af' : '#6b7280';
+  const primaryHex = (getComputedStyle(document.body).getPropertyValue('--bs-primary') || '#0d6efd').trim();
+  const primaryRgb = (getComputedStyle(document.body).getPropertyValue('--bs-primary-rgb') || '13, 110, 253').trim();
 
   new Chart(document.getElementById("forecastChart"), {
     type: "line",
@@ -249,8 +251,8 @@ body.dark-mode .forecast-metric-icon.bg-success { background: rgba(34, 197, 94, 
         {
           label: "Historical Demand",
           data: historyData.concat(new Array(forecast.length).fill(null)),
-          borderColor: "#3b82f6",
-          backgroundColor: "rgba(59, 130, 246, 0.08)",
+          borderColor: primaryHex,
+          backgroundColor: 'rgba(' + primaryRgb + ', 0.08)',
           fill: true,
           tension: 0.3,
           pointRadius: 2,

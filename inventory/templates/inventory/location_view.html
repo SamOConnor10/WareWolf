@@ -1,17 +1,29 @@
 {% extends "inventory/base.html" %}
+{% load user_pref_format %}
 
 {% block content %}
 
 <div class="location-detail-page">
     <!-- HEADER -->
     <div class="d-flex flex-wrap gap-4 mb-4">
-        <div class="flex-shrink-0">
+        <div class="item-detail-image-wrap flex-shrink-0 position-relative">
             {% if location.image %}
-                <img src="{{ location.image.url }}" alt="{{ location.name }}" class="rounded-3 shadow-sm" style="width: 80px; height: 80px; object-fit: cover;">
+                <a href="{{ location.image.url }}" target="_blank" rel="noopener" class="d-block h-100 rounded-3 shadow-sm overflow-hidden" title="View full size">
+                    <img src="{{ location.image.url }}" alt="{{ location.name }}" class="item-detail-image rounded-3 shadow-sm">
+                </a>
             {% else %}
-                <span class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
-                    <i class="bi bi-geo-alt text-primary" style="font-size: 2rem;"></i>
-                </span>
+                {% if perms.inventory.change_location %}
+                <a href="{% url 'location_edit' location.id %}" class="item-detail-placeholder rounded-3 bg-light d-flex align-items-center justify-content-center text-decoration-none" title="Add image">
+                    <div class="text-center px-2">
+                        <i class="bi bi-geo-alt display-4 text-muted d-block"></i>
+                        <small class="text-muted">Add image</small>
+                    </div>
+                </a>
+                {% else %}
+                <div class="item-detail-placeholder rounded-3 bg-light d-flex align-items-center justify-content-center">
+                    <i class="bi bi-geo-alt display-4 text-muted"></i>
+                </div>
+                {% endif %}
             {% endif %}
         </div>
         <div class="flex-grow-1 min-width-0">
@@ -28,7 +40,7 @@
                     <span class="ms-1">{{ location.get_breadcrumb }}</span>
                 {% endif %}
             </p>
-            <div class="d-flex flex-wrap gap-2 mb-2">
+            <div class="d-flex flex-wrap gap-2 mb-3">
                 {% if location.structural %}
                     <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Structural</span>
                 {% endif %}
@@ -48,19 +60,16 @@
                 <a href="{% url 'location_tree' %}" class="btn btn-outline-secondary">
                     <i class="bi bi-diagram-3 me-1"></i>Tree view
                 </a>
-                {% if location.get_map_url %}
+                {% if has_profile_map %}
+                    <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#locationProfileMapModal"><i class="bi bi-map me-1"></i>Map</button>
+                {% elif location.get_map_url %}
                 <a href="{{ location.get_map_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary" title="Open in Google Maps">
                     <i class="bi bi-geo-alt-fill me-1"></i>Open in map
                 </a>
                 {% endif %}
-                <div class="btn-group ms-1">
-                    <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">More</button>
-                    <ul class="dropdown-menu dropdown-menu-end">
-                        {% if perms.inventory.delete_location %}
-                            <li><a class="dropdown-item text-danger" href="{% url 'location_delete' location.id %}"><i class="bi bi-trash me-2"></i>Delete</a></li>
-                        {% endif %}
-                    </ul>
-                </div>
+                {% if perms.inventory.delete_location %}
+                    <a href="{% url 'location_delete' location.id %}" class="btn btn-outline-danger"><i class="bi bi-trash me-1"></i>Delete</a>
+                {% endif %}
                 <a href="{% url 'location_list' %}" class="btn btn-outline-secondary ms-auto">
                     <i class="bi bi-arrow-left me-1"></i>Back to list
                 </a>
@@ -125,14 +134,6 @@
     <div class="row g-3 location-detail-grid">
         <!-- Left column: Details + Sub-locations (sizes to content, no stretch) -->
         <div class="col-xl-4 col-lg-5">
-            {% if location.image %}
-            <div class="card shadow-sm border-0 mb-3 overflow-hidden">
-                <a href="{{ location.image.url }}" target="_blank" rel="noopener" class="d-block">
-                    <img src="{{ location.image.url }}" alt="{{ location.name }}" class="w-100" style="max-height: 180px; object-fit: cover;">
-                </a>
-                <div class="card-footer bg-white border-0 py-1 small text-muted text-center">Click to view full size</div>
-            </div>
-            {% endif %}
             <div class="card border-0 shadow-sm mb-3">
                 <div class="card-header bg-white py-3">
                     <h5 class="mb-0 fw-semibold"><i class="bi bi-info-circle text-primary me-2"></i>Details</h5>
@@ -283,7 +284,7 @@
                                 {% for o in sales_shipped %}
                                 {% for ln in o.lines.all %}
                                 <tr>
-                                    <td>{% if forloop.parentloop.first %}{{ o.order_date|date:"d M Y" }}{% endif %}</td>
+                                    <td>{% if forloop.parentloop.first %}{% ww_date o.order_date %}{% endif %}</td>
                                     <td><a href="{% url 'item_detail' ln.item.id %}">{{ ln.item.name|truncatechars:30 }}</a></td>
                                     <td class="text-end">{{ ln.quantity }}</td>
                                     <td>{% if forloop.first %}{{ o.get_status_display }}{% endif %}</td>
@@ -315,7 +316,7 @@
                                 {% for o in purchases_received %}
                                 {% for ln in o.lines.all %}
                                 <tr>
-                                    <td>{% if forloop.first %}{{ o.order_date|date:"d M Y" }}{% endif %}</td>
+                                    <td>{% if forloop.first %}{% ww_date o.order_date %}{% endif %}</td>
                                     <td><a href="{% url 'item_detail' ln.item.id %}">{{ ln.item.name|truncatechars:30 }}</a></td>
                                     <td class="text-end">{{ ln.quantity }}</td>
                                     <td>{% if forloop.first %}{{ o.get_status_display }}{% endif %}</td>
@@ -347,6 +348,14 @@
 .location-detail-orders-table { max-height: 180px; overflow-y: auto; }
 .location-detail-orders-table .table { font-size: 0.875rem; margin-bottom: 0; }
 .location-detail-orders-table .table td, .location-detail-orders-table .table th { padding: 0.4rem 0.75rem; }
+.item-detail-image-wrap { width: 220px; height: 220px; }
+.item-detail-image { width: 100%; height: 100%; object-fit: cover; }
+.item-detail-placeholder { width: 100%; height: 100%; object-fit: cover; border: 2px dashed #dee2e6; }
 </style>
+
+{% if has_profile_map %}
+{{ profile_map_points|json_script:"locationProfileMapData" }}
+{% include "inventory/includes/profile_leaflet_modal.html" with modal_id="locationProfileMapModal" map_title="Warehouse location" container_id="location-profile-map-leaflet" script_id="locationProfileMapData" %}
+{% endif %}
 
 {% endblock content %}

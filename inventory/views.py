@@ -1,6 +1,6 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.db.models import Count, Sum
-from .models import Item, Supplier, Client, Location, Order, OrderLine, StockHistory, Category
+from .models import Item, Supplier, Client, Location, Order, OrderLine, StockHistory, Category, UserPreference, UserProfile
 from .forms import ItemForm, OrderForm, OrderLineFormSet, SupplierForm, ClientForm, CategoryForm, LocationForm
 from django.db.models import F, Q
 from django.core.paginator import Paginator
@@ -12,11 +12,13 @@ from datetime import date, timedelta
 from django.db import models
 from decimal import Decimal
 from django.utils import timezone
-from django.db.models.functions import TruncWeek, Coalesce
+from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.urls import reverse
+from .login_redirect import get_post_login_redirect_url
 from inventory.models import Activity
-from django.contrib.auth import login
+from .permissions_display import summarize_permissions, build_role_capability_sections
+from django.contrib.auth import login, update_session_auth_hash
 from django.shortcuts import render, redirect, get_object_or_404
 from .forms import SignUpForm
 from django.contrib.auth.decorators import login_required
@@ -25,7 +27,7 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth import logout
 from django.contrib import messages
 from .forms import SignUpForm
-from .models import ManagerRequest
+from .models import ManagerRequest, Notification
 from django.contrib.auth.password_validation import password_validators_help_texts
 from django.contrib import messages
 from django.views.decorators.http import require_POST
@@ -53,12 +55,31 @@ PER_PAGE_CHOICES = [10, 20, 50, 100]
 
 
 def get_per_page(request):
-    """Read and validate per_page from request. Returns int in PER_PAGE_CHOICES or DEFAULT_PER_PAGE."""
+    """Read per_page from query string, falling back to the signed-in user's saved preference."""
+    default = DEFAULT_PER_PAGE
+    if request.user.is_authenticated:
+        pref = (
+            UserPreference.objects.filter(user=request.user)
+            .only("items_per_page")
+            .first()
+        )
+        if pref and pref.items_per_page in PER_PAGE_CHOICES:
+            default = pref.items_per_page
     try:
-        val = int(request.GET.get("per_page", DEFAULT_PER_PAGE))
-        return val if val in PER_PAGE_CHOICES else DEFAULT_PER_PAGE
+        val = int(request.GET.get("per_page", default))
+        return val if val in PER_PAGE_CHOICES else default
     except (TypeError, ValueError):
-        return DEFAULT_PER_PAGE
+        return default
+
+
+def _signup_notify_all_users(message):
+    """Best-effort in-app notifications; signup should still succeed if this fails."""
+    try:
+        Notification.objects.bulk_create(
+            [Notification(user=u, message=message) for u in User.objects.all()]
+        )
+    except Exception:
+        logger.exception("Signup notification bulk_create failed")
 
 
 def signup(request):
@@ -83,13 +104,9 @@ def signup(request):
                 user.groups.add(staff_group)
 
                 # Notify everyone in-app
-                Notification.objects.bulk_create([
-                    Notification(
-                        user=u,
-                        message=f"New account created: {user.username} (Staff)."
-                    )
-                    for u in User.objects.all()
-                ])
+                _signup_notify_all_users(
+                    f"New account created: {user.username} (Staff)."
+                )
 
                 # Email the user (confirmation)
                 if user.email:
@@ -109,7 +126,7 @@ def signup(request):
 
                 login(request, user)
                 messages.success(request, f"Welcome back, {request.user.username}!")
-                return redirect("dashboard")
+                return redirect(get_post_login_redirect_url(request.user))
 
             # ---------------------------------------
             # MANAGER: must be approved before login
@@ -120,13 +137,9 @@ def signup(request):
             ManagerRequest.objects.get_or_create(user=user)
 
             # Notify everyone in-app
-            Notification.objects.bulk_create([
-                Notification(
-                    user=u,
-                    message=f"New account created: {user.username} (Manager request)."
-                )
-                for u in User.objects.all()
-            ])
+            _signup_notify_all_users(
+                f"New account created: {user.username} (Manager request)."
+            )
 
             # Email the user (request received)
             if user.email:
@@ -263,7 +276,7 @@ def approve_manager_request(request, request_id):
         return redirect("dashboard")
 
     req = get_object_or_404(ManagerRequest, id=request_id, status="PENDING")
-    manager_group = Group.objects.get(name="Manager")
+    manager_group, _ = Group.objects.get_or_create(name="Manager")
 
     req.status = "APPROVED"
     req.decided_by = request.user
@@ -306,9 +319,12 @@ def decline_manager_request(request, request_id):
     req.decided_at = timezone.now()
     req.save()
 
-    # keep blocked from logging in
-    req.user.is_active = False
-    req.user.save()
+    # Signup manager request: inactive until approved — keep inactive on decline.
+    # Staff upgrading from profile: stay active as Staff.
+    was_active_staff = req.user.is_active and req.user.groups.filter(name="Staff").exists()
+    if not was_active_staff:
+        req.user.is_active = False
+        req.user.save(update_fields=["is_active"])
 
     # email user (ONLY if they have an email)
     if req.user.email:
@@ -329,13 +345,15 @@ def decline_manager_request(request, request_id):
     return redirect("dashboard")
 
 
-from .models import Notification
 @require_POST
 @login_required
 def dismiss_notification(request, notification_id):
     n = get_object_or_404(Notification, id=notification_id, user=request.user)
+    now = timezone.now()
     n.is_read = True
-    n.save(update_fields=["is_read"])
+    n.dismissed = True
+    n.dismissed_at = now
+    n.save(update_fields=["is_read", "dismissed", "dismissed_at"])
     cache.delete(f"ctx_notifications:{request.user.pk}")
     return redirect(request.META.get("HTTP_REFERER", "dashboard"))
 
@@ -362,7 +380,6 @@ def dismiss_alert(request):
 @login_required
 def dashboard(request):
     from django.db.models import Sum, Count
-    from django.db.models.functions import TruncWeek
     import datetime
     from inventory.models import DemandAnomaly
 
@@ -456,29 +473,37 @@ def dashboard(request):
                 model_eval.get("validation_points"),
             )
 
-    # ---- weekly orders activity (last 6 weeks, split by purchase vs sale) ----
-    orders_start = today - datetime.timedelta(weeks=5)
+    # ---- weekly orders activity (6 calendar weeks Mon–Sun, always including current week) ----
+    def _monday_of_week(d):
+        return d - datetime.timedelta(days=d.weekday())
 
-    weekly_qs = (
-        Order.objects
-        .filter(order_date__gte=orders_start)
-        .annotate(week=TruncWeek("order_date"))
-        .values("week")
-        .annotate(
-            purchase_count=Count("id", filter=Q(order_type=Order.TYPE_PURCHASE)),
-            sale_count=Count("id", filter=Q(order_type=Order.TYPE_SALE)),
+    current_week_start = _monday_of_week(today)
+    week_starts = [current_week_start - datetime.timedelta(weeks=k) for k in range(5, -1, -1)]
+    week_end_max = week_starts[-1] + datetime.timedelta(days=6)
+    idx_for_week_start = {ws: i for i, ws in enumerate(week_starts)}
+    purchase_by_week = [0] * 6
+    sale_by_week = [0] * 6
+    for order_date, otype in (
+        Order.objects.filter(
+            order_date__gte=week_starts[0],
+            order_date__lte=week_end_max,
         )
-        .order_by("week")
-    )
+        .values_list("order_date", "order_type")
+        .iterator(chunk_size=4000)
+    ):
+        ws = _monday_of_week(order_date)
+        i = idx_for_week_start.get(ws)
+        if i is None:
+            continue
+        if otype == Order.TYPE_PURCHASE:
+            purchase_by_week[i] += 1
+        elif otype == Order.TYPE_SALE:
+            sale_by_week[i] += 1
 
-    weekly_data = [
-        (row["week"].strftime("%d %b"), row["purchase_count"], row["sale_count"])
-        for row in weekly_qs if row["week"]
-    ]
-    weekly_labels = [x[0] for x in weekly_data]
-    weekly_purchase_counts = [x[1] for x in weekly_data]
-    weekly_sale_counts = [x[2] for x in weekly_data]
-    weekly_counts = [x[1] + x[2] for x in weekly_data]  # total for backwards compat
+    weekly_labels = [ws.strftime("%d %b") for ws in week_starts]
+    weekly_purchase_counts = purchase_by_week
+    weekly_sale_counts = sale_by_week
+    weekly_counts = [p + s for p, s in zip(purchase_by_week, sale_by_week)]
 
     this_week_orders = weekly_counts[-1] if weekly_counts else 0
     last_week_orders = weekly_counts[-2] if len(weekly_counts) >= 2 else None
@@ -1097,8 +1122,18 @@ def item_toggle_archive(request, pk):
 
     if item.is_active:
         messages.success(request, f"Unarchived item: {item.name}")
+        Activity.objects.create(
+            message=f"Unarchived item: {item.name}",
+            user=request.user,
+            kind=Activity.KIND_ITEM_UNARCHIVE,
+        )
     else:
         messages.success(request, f"Archived item: {item.name}")
+        Activity.objects.create(
+            message=f"Archived item: {item.name}",
+            user=request.user,
+            kind=Activity.KIND_ITEM_ARCHIVE,
+        )
 
     # Preserve filters if you want (optional), otherwise just go back to list
     return redirect("item_list")
@@ -1121,19 +1156,25 @@ def item_adjust_quantity(request, pk):
                 "Stock cannot go below zero."
             )
             return redirect("item_list")
+        was_active = item.is_active
         item.quantity = new_qty
         item.save()
         item.maybe_archive_on_deplete()
+        item.refresh_from_db(fields=["is_active"])
 
         messages.success(request, f"Adjusted {item.name}: quantity updated by {adjustment:+d}")
 
-        # Log activity
-        from django.apps import apps
-        Activity = apps.get_model("inventory", "Activity")
         Activity.objects.create(
             message=f"Adjusted quantity for {item.name}: change of {adjustment}",
-            user=request.user
+            user=request.user,
+            kind=Activity.KIND_ITEM_ADJUST,
         )
+        if was_active and not item.is_active:
+            Activity.objects.create(
+                message=f"Archived item (auto, stock depleted): {item.name}",
+                user=request.user,
+                kind=Activity.KIND_ITEM_AUTO_ARCHIVE,
+            )
 
         return redirect("item_list")
 
@@ -1152,17 +1193,16 @@ def item_create(request):
         if form.is_valid():
             item = form.save()
 
-            # Log activity
-            from django.apps import apps
-            Activity = apps.get_model("inventory", "Activity")
             Activity.objects.create(
                 message=f"New item created: {item.name}",
-                user=request.user
+                user=request.user,
+                kind=Activity.KIND_ITEM_CREATE,
             )
 
             return redirect("item_list")
     else:
-        form = ItemForm()
+        pref, _ = UserPreference.objects.get_or_create(user=request.user)
+        form = ItemForm(user_pref=pref)
 
     return render(request, "inventory/item_form.html", {
         "form": form,
@@ -1182,12 +1222,10 @@ def item_edit(request, pk):
         if form.is_valid():
             updated_item = form.save()
 
-            # Log activity
-            from django.apps import apps
-            Activity = apps.get_model("inventory", "Activity")
             Activity.objects.create(
                 message=f"Item updated: {updated_item.name}",
-                user=request.user
+                user=request.user,
+                kind=Activity.KIND_ITEM_UPDATE,
             )
 
             return redirect("item_list")
@@ -1209,17 +1247,28 @@ def item_delete(request, pk):
     item = get_object_or_404(Item, pk=pk)
 
     if request.method == "POST":
-        item.delete()
-        return redirect("item_list")
-    
-    try:
-        item.delete()
-        messages.success(request, "Item deleted.")
-    except ProtectedError:
-        messages.error(request, "Cannot delete item because it has order history. Archive it instead.")
+        name = item.name
+        try:
+            item.delete()
+        except ProtectedError:
+            messages.error(
+                request,
+                "Cannot delete this item because it has order history. Archive it instead, or ask a manager for a permanent removal.",
+            )
+            return redirect("item_list")
+        Activity.objects.create(
+            message=f"Item deleted: {name}",
+            user=request.user,
+            kind=Activity.KIND_ITEM_DELETE,
+        )
+        messages.success(request, f"Deleted item: {name}")
         return redirect("item_list")
 
-    return render(request, "inventory/item_confirm_delete.html", {"item": item})
+    return render(
+        request,
+        "inventory/item_confirm_delete.html",
+        {"item": item, "view": "items"},
+    )
 
 from django.db import transaction
 from django.contrib.auth.decorators import login_required, user_passes_test
@@ -1241,6 +1290,15 @@ def item_hard_delete(request, pk):
         name = item.name
         item.delete()
 
+        _perm_msg = (
+            f"Permanently deleted item: {name} "
+            f"(order lines removed: {order_lines_deleted}, history rows: {history_deleted})"
+        )
+        Activity.objects.create(
+            message=_perm_msg[:255],
+            user=request.user,
+            kind=Activity.KIND_ITEM_HARD_DELETE,
+        )
         messages.success(
             request,
             f"Permanently deleted item '{name}' (order lines: {order_lines_deleted}, history: {history_deleted})."
@@ -1603,6 +1661,7 @@ def location_list(request):
         "top_receiving_loc": top_receiving_loc,
         "active_filter": quick_filter,
         "locations_with_coords": locations_with_coords,
+        "has_locations_map": bool(locations_with_coords),
     })
 
 
@@ -1770,6 +1829,20 @@ def location_view(request, pk):
     if location.capacity and location.capacity > 0:
         utilisation_pct = min(100, round(100 * int(total_qty) / location.capacity, 1))
 
+    profile_map_points = []
+    if location.latitude is not None and location.longitude is not None:
+        lat = float(location.latitude)
+        lng = float(location.longitude)
+        profile_map_points = [{
+            "id": location.id,
+            "name": location.name,
+            "address": location.address or "",
+            "latitude": lat,
+            "longitude": lng,
+            "map_url": f"https://www.google.com/maps?q={lat},{lng}&z=17",
+            "detail_url": reverse("location_view", args=[location.id]),
+        }]
+
     return render(request, "inventory/location_view.html", {
         "location": location,
         "items": items,
@@ -1781,6 +1854,8 @@ def location_view(request, pk):
         "sales_shipped_count": sales_shipped_count,
         "purchases_received_count": purchases_received_count,
         "utilisation_pct": utilisation_pct,
+        "profile_map_points": profile_map_points,
+        "has_profile_map": bool(profile_map_points),
     })
 
 # -------------------------------
@@ -2401,6 +2476,29 @@ def order_mark_delivered(request, pk):
     return redirect(reverse("order_list") + f"?type={order.order_type.lower()}")
 
 
+def _contact_map_points(qs, detail_view_name: str):
+    """Build [{id, name, address, latitude, longitude, map_url, detail_url}, ...] for Leaflet."""
+    rows = qs.filter(
+        is_active=True,
+        latitude__isnull=False,
+        longitude__isnull=False,
+    ).values("id", "name", "address", "latitude", "longitude")
+    out = []
+    for row in rows:
+        lat = float(row["latitude"])
+        lng = float(row["longitude"])
+        out.append({
+            "id": row["id"],
+            "name": row["name"],
+            "address": row.get("address") or "",
+            "latitude": lat,
+            "longitude": lng,
+            "map_url": f"https://www.google.com/maps?q={lat},{lng}&z=17",
+            "detail_url": reverse(detail_view_name, args=[row["id"]]),
+        })
+    return out
+
+
 @login_required
 @permission_required("inventory.view_supplier", raise_exception=True)
 @permission_required("inventory.view_client", raise_exception=True)
@@ -2592,6 +2690,13 @@ def contacts_list(request):
         status_filter and status_filter != "active",
     ])
 
+    suppliers_map_points = _contact_map_points(Supplier.objects.all(), "supplier_view")
+    clients_map_points = _contact_map_points(Client.objects.all(), "client_view")
+    contacts_map_points = suppliers_map_points if type_filter == "suppliers" else clients_map_points
+    contacts_map_modal_title = (
+        "Supplier locations" if type_filter == "suppliers" else "Customer locations"
+    )
+
     # ----------------------------
     # Render page
     # ----------------------------
@@ -2619,6 +2724,11 @@ def contacts_list(request):
         "search_query": q,
         "sort": sort,
         "has_filters": has_filters,
+        "suppliers_map_points": suppliers_map_points,
+        "clients_map_points": clients_map_points,
+        "contacts_map_points": contacts_map_points,
+        "has_contacts_map": bool(contacts_map_points),
+        "contacts_map_modal_title": contacts_map_modal_title,
     })
 
 
@@ -2739,8 +2849,8 @@ def supplier_create(request):
     if request.method == "POST":
         form = SupplierForm(request.POST, request.FILES)
         if form.is_valid():
-            form.save()
-            return redirect(reverse("contacts_list") + "?type=suppliers")
+            obj = form.save()
+            return redirect("supplier_view", pk=obj.pk)
     else:
         form = SupplierForm()
 
@@ -2756,7 +2866,7 @@ def supplier_edit(request, pk):
         form = SupplierForm(request.POST, request.FILES, instance=supplier)
         if form.is_valid():
             form.save()
-            return redirect(reverse("contacts_list") + "?type=suppliers")
+            return redirect("supplier_view", pk=supplier.pk)
     else:
         form = SupplierForm(instance=supplier)
 
@@ -2809,6 +2919,12 @@ def supplier_view(request, pk):
     chart_labels = [d["month"].strftime("%b %Y") if d["month"] else "" for d in order_values_by_month]
     chart_values = [float(d["total"] or 0) for d in order_values_by_month]
 
+    profile_map_points = []
+    if supplier.latitude is not None and supplier.longitude is not None:
+        profile_map_points = _contact_map_points(
+            Supplier.objects.filter(pk=supplier.pk), "supplier_view"
+        )
+
     return render(request, "inventory/supplier_view.html", {
         "supplier": supplier,
         "orders": orders,
@@ -2819,6 +2935,8 @@ def supplier_view(request, pk):
         "chart_labels": chart_labels,
         "chart_values": chart_values,
         "hide_contacts_sidebar": True,
+        "profile_map_points": profile_map_points,
+        "has_profile_map": bool(profile_map_points),
     })
 
 
@@ -2828,8 +2946,8 @@ def client_create(request):
     if request.method == "POST":
         form = ClientForm(request.POST, request.FILES)
         if form.is_valid():
-            form.save()
-            return redirect(reverse("contacts_list") + "?type=customers")
+            obj = form.save()
+            return redirect("client_view", pk=obj.pk)
     else:
         form = ClientForm()
 
@@ -2845,7 +2963,7 @@ def client_edit(request, pk):
         form = ClientForm(request.POST, request.FILES, instance=client)
         if form.is_valid():
             form.save()
-            return redirect(reverse("contacts_list") + "?type=customers")
+            return redirect("client_view", pk=client.pk)
     else:
         form = ClientForm(instance=client)
 
@@ -2897,6 +3015,12 @@ def client_view(request, pk):
     chart_labels = [d["month"].strftime("%b %Y") if d["month"] else "" for d in order_values_by_month]
     chart_values = [float(d["total"] or 0) for d in order_values_by_month]
 
+    profile_map_points = []
+    if client.latitude is not None and client.longitude is not None:
+        profile_map_points = _contact_map_points(
+            Client.objects.filter(pk=client.pk), "client_view"
+        )
+
     return render(request, "inventory/client_view.html", {
         "client": client,
         "orders": orders,
@@ -2906,6 +3030,8 @@ def client_view(request, pk):
         "chart_labels": chart_labels,
         "chart_values": chart_values,
         "hide_contacts_sidebar": True,
+        "profile_map_points": profile_map_points,
+        "has_profile_map": bool(profile_map_points),
     })
 
 
@@ -2913,12 +3039,11 @@ def client_view(request, pk):
 from .forms import (
     ProfileForm,
     UserProfileDetailsForm,
+    WareWolfPasswordChangeForm,
     GeneralPreferenceForm,
     NotificationPreferenceForm,
     AppearancePreferenceForm,
 )
-from .models import UserPreference, UserProfile
-
 @login_required
 @never_cache
 def profile_view(request):
@@ -2934,9 +3059,33 @@ def profile_view(request):
 
     details, _ = UserProfile.objects.get_or_create(user=user)
 
-    if request.method == "POST" and tab == "profile":
+    password_change_form = None
+    password_change_failed = False
+
+    if request.method == "POST" and request.POST.get("change_password") == "1":
+        password_change_form = WareWolfPasswordChangeForm(user=user, data=request.POST)
+        if password_change_form.is_valid():
+            password_change_form.save()
+            update_session_auth_hash(request, user)
+            messages.success(request, "Your password was changed successfully.")
+            return redirect(f"{reverse('profile')}?tab=security")
+        tab = "security"
+        password_change_failed = True
+        form = ProfileForm(instance=user)
+        details_form = UserProfileDetailsForm(instance=details)
+    elif request.method == "POST" and tab == "profile":
+        if request.POST.get("remove_avatar") == "1":
+            if details.avatar:
+                details.avatar.delete(save=False)
+                details.avatar = None
+                details.save(update_fields=["avatar"])
+                messages.success(request, "Profile photo removed.")
+            else:
+                messages.info(request, "There is no profile photo to remove.")
+            return redirect(f"{reverse('profile')}?tab=profile")
+
         form = ProfileForm(request.POST, instance=user)
-        details_form = UserProfileDetailsForm(request.POST, instance=details)
+        details_form = UserProfileDetailsForm(request.POST, request.FILES, instance=details)
         if form.is_valid() and details_form.is_valid():
             form.save()
             details_form.save()
@@ -2946,24 +3095,152 @@ def profile_view(request):
         form = ProfileForm(instance=user)
         details_form = UserProfileDetailsForm(instance=details)
 
-    activities = []
+    if tab == "security" and password_change_form is None:
+        password_change_form = WareWolfPasswordChangeForm(user=user)
+
+    open_password_modal = password_change_failed or (
+        tab == "security" and request.GET.get("pwd") == "1"
+    )
+
+    activities_page = None
+    activity_per_page = None
     if tab == "activity":
-        activities = (
-            Activity.objects
-            .filter(user=user)
-            .order_by("-timestamp")[:50]
-        )
+        activity_per_page = get_per_page(request)
+        act_qs = Activity.objects.filter(user=user).order_by("-timestamp")
+        paginator = Paginator(act_qs, activity_per_page)
+        activities_page = paginator.get_page(request.GET.get("page") or 1)
 
     all_perms = sorted(user.get_all_permissions())
+    permissions_summary = (
+        summarize_permissions(all_perms) if tab == "permissions" else None
+    )
+    role_sections = (
+        build_role_capability_sections(user) if tab == "permissions" else []
+    )
+
+    pending_mr = ManagerRequest.objects.filter(user=user, status="PENDING").first()
+    is_manager = user.groups.filter(name="Manager").exists()
+    is_staff_member = user.groups.filter(name="Staff").exists()
+    can_request_manager = (
+        is_staff_member
+        and not is_manager
+        and not user.is_superuser
+        and pending_mr is None
+    )
+    manager_request_pending = (
+        pending_mr is not None and is_staff_member and not is_manager and not user.is_superuser
+    )
+    can_demote_to_staff = is_manager and not user.is_superuser
 
     return render(request, "inventory/profile.html", {
         "form": form,
         "details_form": details_form,
         "groups": groups,
         "active_tab": tab,
-        "recent_activity": activities,
+        "activities_page": activities_page,
+        "activity_per_page": activity_per_page,
+        "per_page_choices": PER_PAGE_CHOICES,
         "all_perms": all_perms,
+        "permissions_summary": permissions_summary,
+        "role_sections": role_sections,
+        "can_request_manager": can_request_manager,
+        "manager_request_pending": manager_request_pending,
+        "can_demote_to_staff": can_demote_to_staff,
+        "password_change_form": password_change_form,
+        "open_password_modal": open_password_modal,
     })
+
+
+@login_required
+def password_change_page_redirect(request):
+    return redirect(f"{reverse('profile')}?tab=security&pwd=1")
+
+
+@login_required
+def password_change_done_redirect(request):
+    messages.success(request, "Your password was changed successfully.")
+    return redirect(f"{reverse('profile')}?tab=security")
+
+
+@require_POST
+@login_required
+def request_manager_upgrade(request):
+    user = request.user
+    if user.is_superuser or user.groups.filter(name="Manager").exists():
+        messages.info(request, "You already have Manager access.")
+        return redirect(f"{reverse('profile')}?tab=profile")
+    if not user.groups.filter(name="Staff").exists():
+        messages.error(
+            request,
+            "Only Staff accounts can request Manager access from here.",
+        )
+        return redirect(f"{reverse('profile')}?tab=profile")
+
+    mr = ManagerRequest.objects.filter(user=user).first()
+    if mr is None:
+        ManagerRequest.objects.create(user=user, status="PENDING")
+        _signup_notify_all_users(
+            f"{user.username} requested Manager access from their profile."
+        )
+        messages.success(
+            request,
+            "Manager access request submitted. Managers will review it shortly.",
+        )
+        return redirect(f"{reverse('profile')}?tab=profile")
+
+    if mr.status == "PENDING":
+        messages.info(request, "You already have a pending Manager access request.")
+        return redirect(f"{reverse('profile')}?tab=profile")
+
+    if mr.status == "APPROVED":
+        messages.info(
+            request,
+            "Your Manager access was already approved. If permissions look wrong, sign out and back in.",
+        )
+        return redirect(f"{reverse('profile')}?tab=profile")
+
+    if user.is_active and user.groups.filter(name="Staff").exists():
+        mr.status = "PENDING"
+        mr.decided_by = None
+        mr.decided_at = None
+        mr.save(update_fields=["status", "decided_by", "decided_at"])
+        _signup_notify_all_users(
+            f"{user.username} re-requested Manager access from their profile."
+        )
+        messages.success(request, "Manager access request submitted again.")
+    else:
+        messages.error(
+            request,
+            "Your earlier request was declined. Please contact an administrator.",
+        )
+    return redirect(f"{reverse('profile')}?tab=profile")
+
+
+@require_POST
+@login_required
+def demote_to_staff(request):
+    user = request.user
+    if user.is_superuser:
+        messages.error(request, "Superuser accounts cannot use this action.")
+        return redirect(f"{reverse('profile')}?tab=profile")
+    if not user.groups.filter(name="Manager").exists():
+        messages.error(request, "You are not in the Manager role.")
+        return redirect(f"{reverse('profile')}?tab=profile")
+
+    manager_g = Group.objects.filter(name="Manager").first()
+    if manager_g:
+        user.groups.remove(manager_g)
+    staff_g, _ = Group.objects.get_or_create(name="Staff")
+    if not user.groups.filter(pk=staff_g.pk).exists():
+        user.groups.add(staff_g)
+
+    ManagerRequest.objects.filter(user=user).delete()
+
+    messages.success(
+        request,
+        "You now have Staff permissions only. If menus look unchanged, sign out and sign back in.",
+    )
+    return redirect(f"{reverse('profile')}?tab=profile")
 
 
 @login_required
@@ -2974,10 +3251,77 @@ def export_activity_log(request):
     response["Content-Disposition"] = 'attachment; filename="activity_log.csv"'
 
     writer = csv.writer(response)
-    writer.writerow(["timestamp", "message"])
+    writer.writerow(["timestamp", "kind", "kind_label", "message"])
     for a in qs:
-        writer.writerow([a.timestamp.strftime("%Y-%m-%d %H:%M:%S"), a.message])
+        writer.writerow([
+            a.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            a.kind,
+            a.get_kind_display(),
+            a.message,
+        ])
 
+    return response
+
+
+def _json_export_safe(value):
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return str(value)
+    return value
+
+
+@login_required
+def export_account_data(request):
+    """Portable JSON: account fields, preferences, and profile (no binary avatar)."""
+    user = request.user
+    pref, _ = UserPreference.objects.get_or_create(user=user)
+    profile = UserProfile.objects.filter(user=user).first()
+
+    pref_dict = {}
+    for field in pref._meta.fields:
+        n = field.name
+        if n in ("id", "user"):
+            continue
+        pref_dict[n] = _json_export_safe(getattr(pref, n))
+
+    profile_dict = None
+    if profile:
+        profile_dict = {}
+        for field in profile._meta.fields:
+            n = field.name
+            if n in ("id", "user"):
+                continue
+            if n == "avatar":
+                av = profile.avatar
+                profile_dict["has_avatar"] = bool(av)
+                profile_dict["avatar_storage_name"] = av.name if av else ""
+                continue
+            profile_dict[n] = _json_export_safe(getattr(profile, n))
+
+    payload = {
+        "export_format_version": 1,
+        "generated_at": timezone.now().isoformat(),
+        "user": {
+            "username": user.username,
+            "email": user.email or "",
+            "first_name": user.first_name or "",
+            "last_name": user.last_name or "",
+            "date_joined": user.date_joined.isoformat() if user.date_joined else None,
+            "last_login": user.last_login.isoformat() if user.last_login else None,
+        },
+        "preferences": pref_dict,
+        "profile": profile_dict,
+    }
+
+    response = HttpResponse(
+        json.dumps(payload, indent=2, ensure_ascii=False, default=str),
+        content_type="application/json; charset=utf-8",
+    )
+    fname = f"warewolf-account-data-{timezone.now().date().isoformat()}.json"
+    response["Content-Disposition"] = f'attachment; filename="{fname}"'
     return response
 
 
@@ -2990,20 +3334,20 @@ def settings_view(request):
         "notifications": NotificationPreferenceForm,
         "appearance": AppearancePreferenceForm,
     }
-    active_tab = request.GET.get("tab", "notifications")
+    active_tab = request.GET.get("tab", "general")
     if active_tab not in valid_tabs:
-        active_tab = "notifications"
+        active_tab = "general"
 
     if request.method == "POST":
         active_tab = request.POST.get("tab", active_tab)
         if active_tab not in valid_tabs:
-            active_tab = "notifications"
+            active_tab = "general"
 
         action = request.POST.get("action", "save")
         if action == "reset_defaults":
             pref.delete()
             UserPreference.objects.create(user=request.user)
-            cache.delete(f"ctx_user_pref:{request.user.pk}")
+            cache.delete(f"ctx_user_pref:v6:{request.user.pk}")
             cache.delete(f"ctx_notifications:{request.user.pk}")
             messages.success(request, "Settings reset to defaults.")
             return redirect(f"{reverse('settings')}?tab={active_tab}")
@@ -3021,7 +3365,7 @@ def settings_view(request):
         form = form_class(request.POST, instance=pref)
         if form.is_valid():
             form.save()
-            cache.delete(f"ctx_user_pref:{request.user.pk}")
+            cache.delete(f"ctx_user_pref:v6:{request.user.pk}")
             cache.delete(f"ctx_notifications:{request.user.pk}")
             messages.success(request, "Settings saved.")
             return redirect(f"{reverse('settings')}?tab={active_tab}")
@@ -3029,10 +3373,16 @@ def settings_view(request):
         form_class = tab_form_map.get(active_tab)
         form = form_class(instance=pref) if form_class else None
 
-    return render(request, "inventory/settings.html", {
+    ctx = {
         "form": form,
         "active_tab": active_tab,
-    })
+    }
+    if active_tab == "notifications":
+        ctx["notif_user_email"] = (request.user.email or "").strip()
+    if active_tab == "privacy":
+        ctx["privacy_dismissed_count"] = len(request.session.get("dismissed_alerts") or [])
+        ctx["privacy_activity_count"] = Activity.objects.filter(user=request.user).count()
+    return render(request, "inventory/settings.html", ctx)
 
 
 @login_required
@@ -3163,7 +3513,11 @@ def dismiss_alerts_bulk(request):
                 dismissed.add(key)
 
     if notification_ids:
-        Notification.objects.filter(id__in=notification_ids, user=request.user).update(is_read=True)
+        Notification.objects.filter(id__in=notification_ids, user=request.user).update(
+            is_read=True,
+            dismissed=True,
+            dismissed_at=timezone.now(),
+        )
     request.session["dismissed_alerts"] = list(dismissed)
     cache.delete(f"ctx_notifications:{request.user.pk}")
     return redirect(request.META.get("HTTP_REFERER", reverse("alerts_list")))

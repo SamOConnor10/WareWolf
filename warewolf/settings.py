@@ -13,8 +13,6 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 from pathlib import Path
 
-from celery.schedules import crontab
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 try:
@@ -67,6 +65,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "inventory.middleware.UserPreferenceActivationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -95,6 +94,13 @@ WSGI_APPLICATION = "warewolf.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+_use_sqlite_local = os.getenv("DJANGO_USE_SQLITE", "").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+
 if os.getenv("DATABASE_URL"):
     import dj_database_url  # optional until DATABASE_URL is used (e.g. Render)
 
@@ -102,6 +108,13 @@ if os.getenv("DATABASE_URL"):
     if os.getenv("DJANGO_DATABASE_SSL_REQUIRE", "").strip().lower() in ("1", "true", "yes"):
         _db_opts["ssl_require"] = True
     DATABASES = {"default": dj_database_url.config(**_db_opts)}
+elif _use_sqlite_local:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 else:
     DATABASES = {
         "default": {
@@ -129,13 +142,27 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = "en-us"
+LANGUAGE_CODE = "en"
 
 TIME_ZONE = "UTC"
+
+# UI languages available in Settings → General (gettext catalogs optional).
+LANGUAGES = [
+    ("en", "English"),
+    ("en-gb", "English (UK)"),
+    ("de", "Deutsch"),
+    ("fr", "Français"),
+    ("es", "Español"),
+]
 
 USE_I18N = True
 
 USE_TZ = True
+
+# Project translations (nav, settings, etc.). Run: django-admin compilemessages
+LOCALE_PATHS = [
+    BASE_DIR / "locale",
+]
 
 
 # Static files (CSS, JavaScript, Images)
@@ -192,6 +219,7 @@ else:
 
 TEMPLATES[0]["OPTIONS"]["context_processors"] += [
     "inventory.context_processors.user_preferences",
+    "inventory.context_processors.user_profile_avatar",
 ]
 
 # Celery (background tasks)
@@ -210,10 +238,6 @@ CELERY_BEAT_SCHEDULE = {
     "refresh-recommendations-every-30-minutes": {
         "task": "inventory.tasks.refresh_recommendations_task",
         "schedule": 30 * 60,
-    },
-    "send-weekly-alert-digest": {
-        "task": "inventory.tasks.send_weekly_alert_digest_task",
-        "schedule": crontab(hour=8, minute=0, day_of_week=1),
     },
 }
 

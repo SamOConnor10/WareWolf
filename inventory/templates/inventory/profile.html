@@ -1,17 +1,40 @@
 {% extends "inventory/base.html" %}
+{% load querystring user_pref_format %}
+{% block extra_head %}
+<style>
+  .ww-profile-tab .ww-profile-tile {
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .ww-profile-tab .ww-profile-tile:hover {
+    border-color: var(--bs-primary-border-subtle) !important;
+    box-shadow: 0 0.25rem 0.75rem rgba(15, 23, 42, 0.06) !important;
+  }
+  .ww-profile-tab .ww-profile-tile-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.65rem;
+    background: var(--bs-primary-bg-subtle);
+    color: var(--bs-primary);
+    flex-shrink: 0;
+  }
+  .ww-profile-tab .ww-profile-tile-icon .bi { font-size: 1.25rem; line-height: 1; }
+  .ww-profile-tab .ww-profile-section-head .bi { font-size: 1rem; line-height: 1; }
+</style>
+{% endblock %}
 {% block content %}
-<div class="container mt-4">
-  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
-    <div>
-      <h1 class="fw-bold mb-1">My Profile</h1>
-      <div class="text-muted">Manage your account details, security, and access information.</div>
-    </div>
-    <a class="btn btn-outline-secondary" href="{% url 'settings' %}">
-      <i class="bi bi-gear me-1"></i> Open Settings
-    </a>
-  </div>
+<div class="pb-3">
+  <h1 class="fw-bold mb-1 d-flex align-items-center gap-2 flex-wrap">
+    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-3 p-2"><i class="bi bi-person fs-5"></i></span>
+    My Profile
+  </h1>
+  <p class="text-muted mb-0">Manage your account details, security, and access information.</p>
+</div>
 
-  <ul class="nav nav-pills gap-2 mb-4">
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+  <ul class="nav nav-pills gap-2 ww-subnav mb-0 flex-wrap">
     <li class="nav-item">
       <a class="nav-link {% if active_tab == 'profile' %}active{% endif %}" href="{% url 'profile' %}?tab=profile">
         <i class="bi bi-person me-1"></i> Profile Information
@@ -33,168 +56,626 @@
       </a>
     </li>
   </ul>
+  <a class="btn btn-outline-secondary flex-shrink-0 text-nowrap" href="{% url 'settings' %}">
+    <i class="bi bi-gear me-1"></i> Open Settings
+  </a>
+</div>
 
-  <div class="card shadow-sm border-0">
-    <div class="card-body p-4 p-lg-5">
-      {% if active_tab == "profile" %}
-        <div class="row g-4 mb-4">
-          <div class="col-lg-8">
-            <div class="border rounded-3 p-3 bg-light-subtle">
-              <div class="small text-muted mb-2">Username</div>
-              <div class="fw-semibold">{{ request.user.username }}</div>
-            </div>
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4 p-lg-5">
+    {% if active_tab == "profile" %}
+        {# Main profile form only wraps the right column so nested <form> tags (demote / manager / remove photo) stay valid. #}
+        <div class="ww-profile-tab">
+        <div class="d-flex flex-wrap align-items-start gap-3 mb-4 pb-3 border-bottom border-light-subtle">
+          <span class="rounded-3 bg-primary-subtle text-primary border border-primary-subtle p-3 d-flex align-items-center justify-content-center flex-shrink-0">
+            <i class="bi bi-person-badge fs-3" aria-hidden="true"></i>
+          </span>
+          <div class="min-w-0 flex-grow-1">
+            <h5 class="fw-bold mb-1">Profile information</h5>
+            <p class="text-muted mb-0 small">
+              <i class="bi bi-info-circle me-1 text-primary" aria-hidden="true"></i>
+              Update your photo, sign-in identity, and optional workplace details. Changes apply as soon as you save.
+            </p>
           </div>
+        </div>
+        <div class="row g-4 align-items-start">
           <div class="col-lg-4">
-            <div class="border rounded-3 p-3">
-              <div class="small text-muted mb-2">Role(s)</div>
-              <div class="d-flex flex-wrap gap-2">
-                {% for g in groups %}
-                  <span class="badge bg-primary-subtle text-primary border">{{ g }}</span>
-                {% empty %}
-                  <span class="badge bg-secondary-subtle text-secondary border">No role assigned</span>
-                {% endfor %}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <form method="post" action="{% url 'profile' %}?tab=profile" novalidate>
-          {% csrf_token %}
-          {% if form.non_field_errors or details_form.non_field_errors %}
-            <div class="alert alert-danger">
-              <strong>Could not save profile.</strong> Please review the errors and try again.
-            </div>
-          {% endif %}
-
-          <div class="row g-3">
-            <div class="col-md-6">
-              <label class="form-label">First name</label>
-              {{ form.first_name }}
-              <div class="text-danger small">{{ form.first_name.errors|striptags }}</div>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Last name</label>
-              {{ form.last_name }}
-              <div class="text-danger small">{{ form.last_name.errors|striptags }}</div>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Email</label>
-              {{ form.email }}
-              <div class="text-danger small">{{ form.email.errors|striptags }}</div>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Phone</label>
-              {{ details_form.phone_number }}
-              <div class="text-danger small">{{ details_form.phone_number.errors|striptags }}</div>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Job title</label>
-              {{ details_form.job_title }}
-              <div class="text-danger small">{{ details_form.job_title.errors|striptags }}</div>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Department</label>
-              {{ details_form.department }}
-              <div class="text-danger small">{{ details_form.department.errors|striptags }}</div>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Employee ID</label>
-              {{ details_form.employee_id }}
-              <div class="text-danger small">{{ details_form.employee_id.errors|striptags }}</div>
-            </div>
-            <div class="col-12">
-              <label class="form-label">Bio</label>
-              {{ details_form.bio }}
-              <div class="text-danger small">{{ details_form.bio.errors|striptags }}</div>
-            </div>
-          </div>
-
-          <div class="mt-4 d-flex flex-wrap gap-2">
-            <button class="btn btn-primary" type="submit">
-              <i class="bi bi-check2-circle me-1"></i> Save Profile
-            </button>
-            <a class="btn btn-outline-secondary" href="{% url 'dashboard' %}">Back to Dashboard</a>
-          </div>
-        </form>
-
-      {% elif active_tab == "security" %}
-        <div class="row g-3">
-          <div class="col-12">
-            <h5 class="fw-bold mb-1">Security</h5>
-            <div class="text-muted">Keep your account protected by updating your password regularly.</div>
-          </div>
-          <div class="col-12 col-lg-7">
-            <div class="border rounded-3 p-4">
-              <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                <div>
-                  <div class="fw-semibold">Password</div>
-                  <div class="text-muted small">Change your account password securely.</div>
+            <div class="d-flex flex-column flex-sm-row align-items-center align-items-sm-start gap-3 mb-2">
+              <div class="flex-shrink-0">
+                <div
+                  class="ww-profile-photo-frame ww-profile-photo-clickable mx-auto mx-sm-0"
+                  id="wwProfilePhotoTrigger"
+                  role="button"
+                  tabindex="0"
+                  aria-label="Change profile photo"
+                >
+                  <span class="ww-profile-photo-hint">Change</span>
+                  <img {% if details_form.instance.avatar %}src="{{ details_form.instance.avatar.url }}"{% endif %} alt="" class="ww-profile-photo-img {% if not details_form.instance.avatar %}d-none{% endif %}" id="wwProfilePhotoPreview" width="128" height="128">
+                  <div class="ww-profile-photo-fallback {% if details_form.instance.avatar %}d-none{% endif %}" id="wwProfilePhotoFallback" aria-hidden="true">
+                    {% with u=request.user %}
+                      {% if u.first_name or u.last_name %}
+                        {{ u.first_name|slice:":1"|upper }}{{ u.last_name|slice:":1"|upper }}
+                      {% else %}
+                        {{ u.username|slice:":2"|upper }}
+                      {% endif %}
+                    {% endwith %}
+                  </div>
                 </div>
-                <a href="{% url 'password_change' %}" class="btn btn-dark">
-                  <i class="bi bi-lock me-1"></i> Change Password
-                </a>
+              </div>
+              <div class="min-w-0 flex-grow-1 text-center text-sm-start">
+                <div class="small text-muted text-uppercase fw-semibold mb-1" style="letter-spacing:0.04em;">Username</div>
+                <div class="fw-bold fs-4 lh-sm text-break" id="wwProfileUsernameDisplay">{{ form.username.value|default:request.user.username }}</div>
+              </div>
+            </div>
+
+            {% if details_form.instance.avatar %}
+            <form method="post" action="{% url 'profile' %}?tab=profile" class="mb-3 text-center text-sm-start">
+              {% csrf_token %}
+              <input type="hidden" name="remove_avatar" value="1">
+              <button type="submit" class="btn btn-link btn-sm text-danger p-0 text-decoration-none">
+                <i class="bi bi-trash me-1"></i>Remove photo
+              </button>
+            </form>
+            {% endif %}
+
+            <div class="card border shadow-sm mb-3 ww-profile-tile">
+              <div class="card-body py-3">
+                <div class="d-flex align-items-center gap-2 mb-2 ww-profile-section-head">
+                  <span class="rounded-2 bg-primary-subtle text-primary p-2 d-inline-flex" aria-hidden="true"><i class="bi bi-shield-check"></i></span>
+                  <span class="small text-muted text-uppercase fw-semibold mb-0" style="letter-spacing:0.04em;">Role(s)</span>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                  {% for g in groups %}
+                    <span class="badge bg-primary-subtle text-primary border">{{ g }}</span>
+                  {% empty %}
+                    <span class="badge bg-secondary-subtle text-secondary border">No role assigned</span>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+
+            {% if can_request_manager %}
+            <form method="post" action="{% url 'request_manager_upgrade' %}" class="d-grid w-100 mb-2">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-outline-primary w-100">
+                <i class="bi bi-shield-plus me-1"></i> Request Manager access
+              </button>
+            </form>
+            {% elif manager_request_pending %}
+            <div class="alert alert-info py-2 px-3 small mb-2 w-100">
+              <i class="bi bi-hourglass-split me-1"></i> Manager access request is pending review.
+            </div>
+            {% endif %}
+            {% if can_demote_to_staff %}
+            <div class="d-grid w-100">
+              <button type="button" class="btn btn-outline-secondary w-100" data-bs-toggle="modal" data-bs-target="#demoteToStaffModal">
+                <i class="bi bi-arrow-down-circle me-1"></i> Switch to Staff account
+              </button>
+            </div>
+
+            <div class="modal fade" id="demoteToStaffModal" tabindex="-1" aria-labelledby="demoteToStaffModalLabel" aria-hidden="true">
+              <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content shadow border-0 border-start border-warning border-4">
+                  <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title d-flex align-items-center" id="demoteToStaffModalLabel">
+                      <i class="bi bi-arrow-down-circle text-warning me-2 fs-4"></i>
+                      Switch to Staff account
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                  </div>
+                  <div class="modal-body pt-2">
+                    <p class="mb-2">You are about to remove <strong>Manager</strong> permissions from <strong>{{ request.user.username }}</strong>.</p>
+                    <p class="mb-3">You will keep <strong>Staff</strong> access only.</p>
+                    <div class="alert alert-warning d-flex align-items-start mb-0">
+                      <i class="bi bi-info-circle me-2 mt-1"></i>
+                      <div><strong>Staff</strong> is view-only: you can open stock, locations, orders, and contacts, but you cannot add, edit, or delete records there—or run manager-only actions such as approvals.</div>
+                    </div>
+                  </div>
+                  <form method="post" action="{% url 'demote_to_staff' %}">
+                    {% csrf_token %}
+                    <div class="modal-footer border-0 pt-0">
+                      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                      <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-check-lg me-1"></i>Yes, switch to Staff
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+            {% endif %}
+          </div>
+
+          <div class="col-lg-8">
+            <form id="ww-profile-main-form" method="post" action="{% url 'profile' %}?tab=profile" enctype="multipart/form-data" novalidate>
+              {% csrf_token %}
+              {% if form.non_field_errors or details_form.non_field_errors %}
+              <div class="alert alert-danger">
+                <strong>Could not save profile.</strong> Please review the errors and try again.
+              </div>
+              {% endif %}
+              <div class="visually-hidden" aria-hidden="true">{{ details_form.avatar }}</div>
+              {% if details_form.avatar.errors %}
+              <div class="text-danger small mb-3">{{ details_form.avatar.errors|striptags }}</div>
+              {% endif %}
+            <div class="card shadow-sm border-0 h-100">
+              <div class="card-header bg-white border-bottom py-3">
+                <h5 class="mb-0 fw-semibold d-flex align-items-center gap-2 flex-wrap">
+                  <span class="rounded-2 bg-primary-subtle text-primary p-2 d-inline-flex" aria-hidden="true"><i class="bi bi-card-heading"></i></span>
+                  Personal details
+                </h5>
+                <p class="small text-muted mb-0 mt-2">Sign-in name, contact details, and optional workplace information.</p>
+              </div>
+              <div class="card-body p-4">
+                <div class="row g-3">
+                  <div class="col-12">
+                    <div class="d-flex align-items-center gap-2 mb-1 ww-profile-section-head">
+                      <span class="rounded-2 bg-primary-subtle text-primary p-2 d-inline-flex" aria-hidden="true"><i class="bi bi-key"></i></span>
+                      <span class="text-uppercase text-muted small fw-bold mb-0" style="letter-spacing:0.04em;">Sign-in</span>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label fw-medium">Username</label>
+                    {{ form.username }}
+                    <div class="text-danger small">{{ form.username.errors|striptags }}</div>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label fw-medium">Email</label>
+                    {{ form.email }}
+                    <div class="text-danger small">{{ form.email.errors|striptags }}</div>
+                  </div>
+                  <div class="col-12 pt-2">
+                    <div class="d-flex align-items-center gap-2 mb-1 ww-profile-section-head">
+                      <span class="rounded-2 bg-primary-subtle text-primary p-2 d-inline-flex" aria-hidden="true"><i class="bi bi-person-lines-fill"></i></span>
+                      <span class="text-uppercase text-muted small fw-bold mb-0" style="letter-spacing:0.04em;">Contact</span>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label fw-medium">First name</label>
+                    {{ form.first_name }}
+                    <div class="text-danger small">{{ form.first_name.errors|striptags }}</div>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label fw-medium">Last name</label>
+                    {{ form.last_name }}
+                    <div class="text-danger small">{{ form.last_name.errors|striptags }}</div>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label fw-medium">Phone</label>
+                    {{ details_form.phone_number }}
+                    <div class="text-danger small">{{ details_form.phone_number.errors|striptags }}</div>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label fw-medium">Job title</label>
+                    {{ details_form.job_title }}
+                    <div class="text-danger small">{{ details_form.job_title.errors|striptags }}</div>
+                  </div>
+                  <div class="col-12 pt-2">
+                    <div class="d-flex align-items-center gap-2 mb-1 ww-profile-section-head">
+                      <span class="rounded-2 bg-primary-subtle text-primary p-2 d-inline-flex" aria-hidden="true"><i class="bi bi-building"></i></span>
+                      <span class="text-uppercase text-muted small fw-bold mb-0" style="letter-spacing:0.04em;">Workplace</span>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label fw-medium">Department</label>
+                    {{ details_form.department }}
+                    <div class="text-danger small">{{ details_form.department.errors|striptags }}</div>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label fw-medium">Employee ID</label>
+                    {{ details_form.employee_id }}
+                    <div class="text-danger small">{{ details_form.employee_id.errors|striptags }}</div>
+                  </div>
+                  <div class="col-12 pt-2">
+                    <div class="d-flex align-items-center gap-2 mb-1 ww-profile-section-head">
+                      <span class="rounded-2 bg-primary-subtle text-primary p-2 d-inline-flex" aria-hidden="true"><i class="bi bi-chat-left-text"></i></span>
+                      <span class="text-uppercase text-muted small fw-bold mb-0" style="letter-spacing:0.04em;">About</span>
+                    </div>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label fw-medium">Bio</label>
+                    {{ details_form.bio }}
+                    <div class="text-danger small">{{ details_form.bio.errors|striptags }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            </form>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-12">
+            <div class="ww-form-actions ww-form-actions-profile d-flex flex-wrap gap-2 justify-content-between align-items-center">
+              <a class="btn btn-outline-secondary" href="{% url 'dashboard' %}">Back to Dashboard</a>
+              <button class="btn btn-primary" type="submit" form="ww-profile-main-form">
+                <i class="bi bi-check2-circle me-1"></i> Save Profile
+              </button>
+            </div>
+          </div>
+        </div>
+        </div>
+
+      <script>
+      (function () {
+        var input = document.getElementById("ww-profile-avatar-input");
+        var trigger = document.getElementById("wwProfilePhotoTrigger");
+        var img = document.getElementById("wwProfilePhotoPreview");
+        var fallback = document.getElementById("wwProfilePhotoFallback");
+        if (!input || !trigger || !img || !fallback) return;
+        function openPicker() {
+          input.click();
+        }
+        trigger.addEventListener("click", openPicker);
+        trigger.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openPicker();
+          }
+        });
+        input.addEventListener("change", function () {
+          var f = input.files && input.files[0];
+          if (!f || !f.type || f.type.indexOf("image/") !== 0) return;
+          var url = URL.createObjectURL(f);
+          img.src = url;
+          img.classList.remove("d-none");
+          fallback.classList.add("d-none");
+        });
+
+        var unInput = document.getElementById("id_username");
+        var unDisp = document.getElementById("wwProfileUsernameDisplay");
+        if (unInput && unDisp) {
+          unInput.addEventListener("input", function () {
+            var v = (unInput.value || "").trim();
+            unDisp.textContent = v || "—";
+          });
+        }
+      })();
+      </script>
+
+    {% elif active_tab == "security" %}
+      <div class="ww-profile-tab">
+        <div class="d-flex flex-wrap align-items-start gap-3 mb-4 pb-3 border-bottom border-light-subtle">
+          <span class="rounded-3 bg-primary-subtle text-primary border border-primary-subtle p-3 d-flex align-items-center justify-content-center flex-shrink-0">
+            <i class="bi bi-shield-lock fs-3" aria-hidden="true"></i>
+          </span>
+          <div class="min-w-0 flex-grow-1">
+            <h5 class="fw-bold mb-1">Security</h5>
+            <p class="text-muted mb-0 small">
+              <i class="bi bi-info-circle me-1 text-primary" aria-hidden="true"></i>
+              Keep your account protected by updating your password regularly and reviewing account activity.
+            </p>
+          </div>
+        </div>
+        <div class="row g-3">
+          <div class="col-12 col-xl-6">
+            <div class="p-3 border rounded-3 shadow-sm h-100 ww-profile-tile">
+              <div class="d-flex gap-3 align-items-start">
+                <div class="ww-profile-tile-icon align-self-start" aria-hidden="true"><i class="bi bi-key-fill"></i></div>
+                <div class="flex-grow-1 min-w-0">
+                  <div class="fw-semibold mb-1">Password</div>
+                  <div class="text-muted small mb-3">Update your current password. You will stay signed in on this device.</div>
+                  <button type="button" class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#changePasswordModal">
+                    <i class="bi bi-lock me-1"></i> Change password
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-12 col-xl-6">
+            <div class="p-3 border rounded-3 shadow-sm h-100 ww-profile-tile bg-body-secondary bg-opacity-25">
+              <div class="d-flex gap-3 align-items-start">
+                <div class="ww-profile-tile-icon align-self-start" aria-hidden="true"><i class="bi bi-lightbulb"></i></div>
+                <div class="min-w-0">
+                  <div class="fw-semibold mb-2">Good habits</div>
+                  <ul class="small text-muted mb-0 ps-3">
+                    <li class="mb-1">Use a strong password you do not reuse on other sites.</li>
+                    <li class="mb-1">Sign out when you finish on a shared or public computer.</li>
+                    <li class="mb-0">Review your <a href="{% url 'profile' %}?tab=activity">activity log</a> if something looks unfamiliar.</li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>
         </div>
+      </div>
 
-      {% elif active_tab == "activity" %}
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-          <div>
-            <h5 class="fw-bold mb-1">Recent Activity</h5>
-            <div class="text-muted">A timeline of your latest account actions.</div>
+      <div class="modal fade" id="changePasswordModal" tabindex="-1" aria-labelledby="changePasswordModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+          <div class="modal-content shadow border-0 border-start border-primary border-4">
+            <div class="modal-header border-0 pb-0">
+              <h5 class="modal-title d-flex align-items-center gap-2" id="changePasswordModalLabel">
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-3 p-2"><i class="bi bi-shield-lock fs-5"></i></span>
+                Change password
+              </h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-2">
+              <p class="text-muted small mb-4">Enter your current password, then choose a new one. The same rules apply as when you created your account.</p>
+              <form method="post" action="{% url 'profile' %}?tab=security" id="wwChangePasswordForm" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="change_password" value="1">
+                {% if password_change_form.non_field_errors %}
+                  <div class="alert alert-danger">{{ password_change_form.non_field_errors }}</div>
+                {% endif %}
+                <div class="row g-3">
+                  <div class="col-12">
+                    <label class="form-label fw-medium" for="{{ password_change_form.old_password.id_for_label }}">Current password</label>
+                    {{ password_change_form.old_password }}
+                    <div class="text-danger small">{{ password_change_form.old_password.errors|striptags }}</div>
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label fw-medium" for="{{ password_change_form.new_password1.id_for_label }}">New password</label>
+                    {{ password_change_form.new_password1 }}
+                    <div class="text-danger small">{{ password_change_form.new_password1.errors|striptags }}</div>
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label fw-medium" for="{{ password_change_form.new_password2.id_for_label }}">Confirm new password</label>
+                    {{ password_change_form.new_password2 }}
+                    <div class="text-danger small">{{ password_change_form.new_password2.errors|striptags }}</div>
+                  </div>
+                </div>
+                {% if password_change_form.new_password1.help_text %}
+                  <div class="form-text mt-3 small">{{ password_change_form.new_password1.help_text|safe }}</div>
+                {% endif %}
+                <div class="d-flex flex-wrap gap-2 justify-content-end mt-4 pt-2 border-top">
+                  <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                  <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check2-circle me-1"></i> Update password
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-          <a href="{% url 'export_activity_log' %}" class="btn btn-outline-secondary">
+        </div>
+      </div>
+      {% if open_password_modal %}
+      <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        var el = document.getElementById("changePasswordModal");
+        if (!el || typeof bootstrap === "undefined") return;
+        var modal = bootstrap.Modal.getOrCreateInstance(el);
+        modal.show();
+      });
+      </script>
+      {% endif %}
+      <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        if (params.get("pwd") !== "1") return;
+        document.addEventListener("DOMContentLoaded", function () {
+          var el = document.getElementById("changePasswordModal");
+          if (!el || typeof bootstrap === "undefined") return;
+          bootstrap.Modal.getOrCreateInstance(el).show();
+          params.delete("pwd");
+          var q = params.toString();
+          var path = window.location.pathname + (q ? "?" + q : "") + window.location.hash;
+          window.history.replaceState({}, "", path);
+        });
+      })();
+      </script>
+
+    {% elif active_tab == "activity" %}
+      <div class="ww-profile-tab">
+        <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4 pb-3 border-bottom border-light-subtle">
+          <div class="d-flex flex-wrap align-items-start gap-3 min-w-0">
+            <span class="rounded-3 bg-primary-subtle text-primary border border-primary-subtle p-3 d-flex align-items-center justify-content-center flex-shrink-0">
+              <i class="bi bi-clock-history fs-3" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <h5 class="fw-bold mb-1">Recent Activity</h5>
+              <p class="text-muted small mb-0">Actions recorded for your account, newest first.</p>
+              {% if activities_page.paginator.count %}
+                <div class="small text-muted mt-1">
+                  <i class="bi bi-list-ol me-1" aria-hidden="true"></i>{{ activities_page.start_index }}–{{ activities_page.end_index }} of {{ activities_page.paginator.count }} · {{ activity_per_page }} per page
+                </div>
+              {% endif %}
+            </div>
+          </div>
+          <a href="{% url 'export_activity_log' %}" class="btn btn-outline-secondary flex-shrink-0 align-self-start">
             <i class="bi bi-download me-1"></i> Export CSV
           </a>
         </div>
 
-        <div class="border rounded-3">
-          {% for act in recent_activity %}
-            <div class="p-3 d-flex justify-content-between align-items-start gap-3">
-              <div>
-                <div class="fw-semibold">{{ act.message }}</div>
-                <div class="small text-muted">{{ act.timestamp|date:"d M Y, H:i" }}</div>
+        <div class="alert alert-light border small mb-3 mb-md-4 py-2">
+          <i class="bi bi-info-circle text-primary me-1"></i>
+          System-wide events (for example order deliveries applied to stock) may appear without your name if no user was recorded for that action.
+        </div>
+
+        <div class="border rounded-3 overflow-hidden shadow-sm">
+          {% for act in activities_page %}
+            <div class="p-3 d-flex justify-content-between align-items-start gap-3 bg-white">
+              <div class="d-flex gap-3 min-w-0 flex-grow-1">
+                <span class="ww-profile-tile-icon align-self-start d-none d-sm-flex" aria-hidden="true"><i class="bi bi-activity"></i></span>
+                <div class="min-w-0">
+                  <div class="fw-semibold text-break">{{ act.message }}</div>
+                  <div class="small text-muted">{% ww_datetime act.timestamp %}</div>
+                </div>
               </div>
-              <span class="badge text-bg-light border">activity</span>
+              <span class="badge {{ act.kind_badge_class }} flex-shrink-0">{{ act.get_kind_display }}</span>
             </div>
             {% if not forloop.last %}<hr class="my-0">{% endif %}
           {% empty %}
-            <div class="p-4 text-muted">No activity has been recorded for your account yet.</div>
+            <div class="p-4 text-muted d-flex gap-3 align-items-start">
+              <span class="ww-profile-tile-icon" aria-hidden="true"><i class="bi bi-inbox"></i></span>
+              <span>No activity has been recorded for your account yet. Try creating or editing stock while logged in.</span>
+            </div>
           {% endfor %}
         </div>
 
-      {% elif active_tab == "permissions" %}
-        <h5 class="fw-bold mb-1">Access Permissions</h5>
-        <div class="text-muted mb-4">Your current role assignments and technical permission scope.</div>
+        {% include "inventory/includes/pagination.html" with page_obj=activities_page per_page=activity_per_page per_page_choices=per_page_choices %}
+      </div>
 
-        <div class="mb-3">
-          <div class="fw-semibold mb-2">Assigned Groups</div>
-          <div class="d-flex flex-wrap gap-2">
-            {% for g in groups %}
-              <span class="badge bg-primary-subtle text-primary border">{{ g }}</span>
-            {% empty %}
-              <span class="text-muted">No groups assigned.</span>
-            {% endfor %}
+    {% elif active_tab == "permissions" %}
+      <style>
+        .ww-perm-tab .ww-perm-hero-icon { width: 3rem; height: 3rem; }
+        .ww-perm-tab .ww-perm-cap-badge { font-size: 0.8rem; letter-spacing: 0.02em; }
+        .ww-perm-tab .ww-perm-area-cell {
+          vertical-align: middle;
+          min-width: 10.5rem;
+          border-right: 1px solid var(--bs-border-color-translucent, rgba(0,0,0,.08));
+        }
+        .ww-perm-tab .table tbody tr:hover { background-color: rgba(var(--bs-primary-rgb), 0.04); }
+        .ww-perm-tab details > summary { list-style: none; }
+        .ww-perm-tab details > summary::-webkit-details-marker { display: none; }
+        .ww-perm-tab .ww-perm-matrix-scroll {
+          max-height: min(70vh, 32rem);
+          overflow: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+        .ww-perm-tab .ww-perm-matrix-scroll thead th {
+          position: sticky;
+          top: 0;
+          z-index: 4;
+          background-color: var(--bs-table-bg);
+          box-shadow: inset 0 -1px 0 var(--bs-border-color);
+          font-size: 0.8125rem;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          text-transform: none;
+        }
+      </style>
+      <div class="ww-perm-tab">
+        <div class="d-flex flex-wrap align-items-start gap-3 mb-4">
+          <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-3 p-0 d-flex align-items-center justify-content-center ww-perm-hero-icon flex-shrink-0">
+            <i class="bi bi-shield-lock fs-4"></i>
+          </span>
+          <div>
+            <h5 class="fw-bold mb-1">Access Permissions</h5>
+            <p class="text-muted small mb-0">Your role sets what you can open and change in WareWolf. Only administrators can change these assignments.</p>
           </div>
         </div>
 
-        <div class="alert alert-info mb-0">
-          <div class="fw-semibold mb-2">Permission List</div>
-          <div class="small text-muted mb-2">Managed by administrators. Showing up to 30 permissions.</div>
-          <ul class="small mb-0">
-            {% for p in all_perms|slice:":30" %}
-              <li>{{ p }}</li>
-            {% empty %}
-              <li>No explicit permissions found.</li>
-            {% endfor %}
-          </ul>
-          {% if all_perms|length > 30 %}
-            <div class="small text-muted mt-2">Showing first 30 permissions.</div>
-          {% endif %}
+        <div class="card border-0 shadow-sm bg-primary-subtle bg-opacity-25 mb-4">
+          <div class="card-body py-3 px-4 d-flex flex-wrap align-items-center gap-3">
+            <div class="d-flex align-items-center gap-2 text-primary">
+              <i class="bi bi-people-fill fs-5"></i>
+              <span class="fw-semibold small">Assigned Groups</span>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+              {% for g in groups %}
+                <span class="badge rounded-pill bg-white text-primary border border-primary-subtle px-3 py-2 fw-semibold shadow-sm">{{ g }}</span>
+              {% empty %}
+                <span class="text-muted small">No groups assigned.</span>
+              {% endfor %}
+            </div>
+          </div>
         </div>
-      {% endif %}
-    </div>
+
+        {% for block in role_sections %}
+        <div class="card border-0 shadow-sm mb-4 overflow-hidden border-start border-primary border-4">
+          <div class="card-body py-4 px-4">
+            <h6 class="fw-bold mb-2 d-flex align-items-center gap-2">
+              <i class="bi bi-list-check text-primary"></i>
+              {{ block.title }}
+            </h6>
+            {% if block.intro %}
+            <p class="small text-muted mb-3">{{ block.intro }}</p>
+            {% endif %}
+            <ul class="list-unstyled small mb-0">
+              {% for line in block.items %}
+              <li class="d-flex gap-2 mb-2 pb-1">
+                <i class="bi bi-check2-circle text-success flex-shrink-0 mt-1"></i>
+                <span>{{ line }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+        {% endfor %}
+
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <i class="bi bi-table text-primary fs-5"></i>
+          <span class="fw-bold">Detailed Permission Matrix</span>
+        </div>
+        <p class="small text-muted mb-4">Each row is a dataset; the first column groups related resources. Managers and Admins get full create/edit/delete on operational data, with view-only access to audit-style tables that WareWolf writes automatically. Staff get view access on core stock, orders, locations, and contacts only.</p>
+
+        {% if permissions_summary.resource_count %}
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="table-responsive ww-perm-matrix-scroll">
+            <table class="table table-bordered border-light align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th scope="col" class="text-secondary fw-semibold border-0 py-3 ps-4">Area</th>
+                  <th scope="col" class="text-secondary fw-semibold border-0 py-3">Resource</th>
+                  <th scope="col" class="text-secondary fw-semibold border-0 py-3 pe-4">Capabilities</th>
+                </tr>
+              </thead>
+              <tbody class="small">
+                {% if permissions_summary.area_groups %}
+                  {% for group in permissions_summary.area_groups %}
+                    {% for row in group.rows %}
+                    <tr>
+                      {% if forloop.first %}
+                      <td rowspan="{{ group.rowspan }}" class="ww-perm-area-cell bg-body-secondary bg-opacity-50 text-secondary fw-semibold ps-4 pe-3 align-middle">
+                        {{ group.area_display }}
+                      </td>
+                      {% endif %}
+                      <td class="py-3 fw-medium text-body border-start-0">{{ row.model_label }}</td>
+                      <td class="py-3 pe-4 border-start-0">
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                          {% if row.view_only_row %}
+                            <span class="badge rounded-pill bg-secondary-subtle text-secondary border ww-perm-cap-badge px-3 py-2">View Only</span>
+                          {% else %}
+                            {% for v in row.verbs %}
+                              <span class="badge rounded-pill {{ v.badge_class }} ww-perm-cap-badge px-3 py-2">{{ v.label }}</span>
+                            {% endfor %}
+                          {% endif %}
+                        </div>
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  {% endfor %}
+                {% else %}
+                  {% for row in permissions_summary.rows %}
+                  <tr>
+                    <td class="ww-perm-area-cell bg-body-secondary bg-opacity-50 text-secondary fw-semibold ps-4 pe-3">{{ row.area_display }}</td>
+                    <td class="py-3 fw-medium text-body">{{ row.model_label }}</td>
+                    <td class="py-3 pe-4">
+                      <div class="d-flex flex-wrap gap-2 align-items-center">
+                        {% if row.view_only_row %}
+                          <span class="badge rounded-pill bg-secondary-subtle text-secondary border ww-perm-cap-badge px-3 py-2">View Only</span>
+                        {% else %}
+                          {% for v in row.verbs %}
+                            <span class="badge rounded-pill {{ v.badge_class }} ww-perm-cap-badge px-3 py-2">{{ v.label }}</span>
+                          {% endfor %}
+                        {% endif %}
+                      </div>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="alert alert-light border rounded-3 py-3 px-4 mb-0 shadow-sm">
+          <div class="small text-muted mb-2">
+            <i class="bi bi-info-circle text-primary me-1"></i>
+            {{ permissions_summary.resource_count }} resource{{ permissions_summary.resource_count|pluralize }} listed.
+          </div>
+          <p class="small text-muted fst-italic mb-0">Archive and quantity changes are controlled by the <strong>Edit</strong> capability on stock items (there is no separate “archive” flag in the permission matrix).</p>
+        </div>
+        {% else %}
+        <div class="alert alert-light border text-muted small mb-0">No standard permissions are assigned to this account.</div>
+        {% endif %}
+
+        {% if permissions_summary.other_permissions %}
+        <details class="mt-4 card border-0 shadow-sm">
+          <summary class="fw-semibold small py-3 px-4 card-header bg-body-secondary bg-opacity-50 border-0" style="cursor: pointer;">
+            <i class="bi bi-code-slash me-2 text-muted"></i>Additional Permission Entries ({{ permissions_summary.other_count }})
+          </summary>
+          <div class="card-body border-top pt-3">
+            <p class="small text-muted mb-3">Custom or non-standard entries, as stored in the system.</p>
+            <ul class="small font-monospace mb-0 ps-3">
+              {% for p in permissions_summary.other_permissions %}
+                <li class="text-break mb-1">{{ p }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </details>
+        {% endif %}
+      </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

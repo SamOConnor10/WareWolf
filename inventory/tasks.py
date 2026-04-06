@@ -2,7 +2,6 @@ from celery import shared_task
 
 from .alerts_jobs import (
     run_anomaly_scan_and_notify,
-    send_weekly_alert_digest,
     sync_recommendation_notifications,
 )
 from .recommendation_engine import recalculate_all_recommendations
@@ -21,7 +20,3 @@ def refresh_recommendations_task(self):
     return {"status": "ok", **summary}
 
 
-@shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def send_weekly_alert_digest_task(self):
-    summary = send_weekly_alert_digest(days=7)
-    return {"status": "ok", **summary}

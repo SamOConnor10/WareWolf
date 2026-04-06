@@ -5,10 +5,8 @@ from django.core.cache import cache
 import re
 
 from inventory.models import Item, Order
-from .models import ManagerRequest, Notification, UserPreference
+from .models import ManagerRequest, Notification, UserPreference, UserProfile
 
-NOTIFICATIONS_CACHE_KEY = "ctx_notifications"
-NOTIFICATIONS_CACHE_SECONDS = 30
 NOTIFICATIONS_DROPDOWN_LIMIT = 25
 
 
@@ -74,13 +72,17 @@ def _build_alerts(request):
         # Load user preferences once (so we can reuse below)
         pref, _ = UserPreference.objects.get_or_create(user=request.user)
 
-        # A) DB-backed notifications (dismiss via dismiss_notification view -> sets is_read=True)
-        # Respect anomaly notification preference
-        if pref.notify_anomalies or pref.notify_low_stock:
+        # A) DB-backed notifications (dismiss -> is_read + dismissed on Notification).
+        # These records are created by anomaly / forecast jobs only — respect demand-anomaly pref.
+        # Low-stock line items are built separately in section C from live stock quantities.
+        if pref.notify_anomalies:
+            # Load all active DB notifications for counting and the Alerts page. A low slice (e.g. [:20])
+            # made len(merged alerts) stay flat while unread rows remained: dismissing one only swapped in
+            # the next row, so the badge/totals never dropped until the backlog fell below the slice size.
             user_notes = (
                 Notification.objects
                 .filter(user=request.user, is_read=False, dismissed=False)
-                .order_by("-created_at")[:20]
+                .order_by("-created_at")[:2000]
             )
 
             for n in user_notes:
@@ -164,9 +166,10 @@ def _build_alerts(request):
         if pref.notify_low_stock:
             low_stock_items = Item.objects.filter(is_active=True).order_by("quantity")[:300]
             for item in low_stock_items:
-                user_threshold = max(int(pref.low_stock_threshold or 0), 0)
+                user_buffer = max(int(pref.low_stock_threshold or 0), 0)
                 item_threshold = max(int(item.reorder_level or 0), 0)
-                effective_threshold = max(item_threshold, user_threshold)
+                # Alert when quantity is at or below reorder level plus optional early-warning buffer.
+                effective_threshold = item_threshold + user_buffer
                 if effective_threshold <= 0:
                     continue
                 if item.quantity > effective_threshold:
@@ -242,10 +245,8 @@ def notifications(request):
             "can_manage_requests": False,
         }
 
-    cache_key = f"{NOTIFICATIONS_CACHE_KEY}:{request.user.pk}"
-    cached = cache.get(cache_key)
-    if cached is not None:
-        return cached
+    # Do not cache navbar notifications: LocMem is per-process, so cache.delete() from
+    # dismiss views only clears one worker; other workers could serve stale counts (e.g. on Render).
 
     all_alerts, can_manage_requests = get_alerts_for_user(request, limit=None)
     total_alert_count = len(all_alerts)
@@ -255,7 +256,7 @@ def notifications(request):
     alerts_warning = [a for a in alerts if a.get("severity") == "warning"]
     alerts_info = [a for a in alerts if a.get("severity") == "info"]
 
-    result = {
+    return {
         "global_alerts": alerts,
         "global_alerts_count": total_alert_count,
         "alerts_critical": alerts_critical,
@@ -263,16 +264,30 @@ def notifications(request):
         "alerts_info": alerts_info,
         "can_manage_requests": can_manage_requests,
     }
-    cache.set(cache_key, result, NOTIFICATIONS_CACHE_SECONDS)
-    return result
 
 
 def user_preferences(request):
     if not request.user.is_authenticated:
         return {"user_pref": None}
-    cache_key = f"ctx_user_pref:{request.user.pk}"
+    cache_key = f"ctx_user_pref:v6:{request.user.pk}"
     pref = cache.get(cache_key)
     if pref is None:
         pref, _ = UserPreference.objects.get_or_create(user=request.user)
         cache.set(cache_key, pref, 120)
     return {"user_pref": pref}
+
+
+def user_profile_avatar(request):
+    if not request.user.is_authenticated:
+        return {"profile_avatar_url": None}
+    row = (
+        UserProfile.objects.filter(user_id=request.user.pk)
+        .only("avatar")
+        .first()
+    )
+    if not row or not row.avatar:
+        return {"profile_avatar_url": None}
+    try:
+        return {"profile_avatar_url": row.avatar.url}
+    except ValueError:
+        return {"profile_avatar_url": None}

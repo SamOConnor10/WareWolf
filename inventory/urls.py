@@ -1,7 +1,6 @@
 from django.urls import path, reverse
 from django.shortcuts import redirect
 from . import views
-from django.contrib.auth import views as auth_views
 
 urlpatterns = [
     path("signup/", views.signup, name="signup"),
@@ -77,18 +76,13 @@ urlpatterns = [
     path("contacts/supplier/<int:pk>/delete/", views.supplier_delete, name="supplier_delete"),
     path("contacts/customer/<int:pk>/delete/", views.client_delete, name="client_delete"),
 
+    path("profile/request-manager/", views.request_manager_upgrade, name="request_manager_upgrade"),
+    path("profile/demote-staff/", views.demote_to_staff, name="demote_to_staff"),
+    path("profile/password/", views.password_change_page_redirect, name="password_change"),
+    path("profile/password/done/", views.password_change_done_redirect, name="password_change_done"),
     path("profile/", views.profile_view, name="profile"),
     path("settings/", views.settings_view, name="settings"),
     path("profile/activity/export/", views.export_activity_log, name="export_activity_log"),
+    path("settings/privacy/export-account/", views.export_account_data, name="export_account_data"),
 
-]
-
-urlpatterns += [
-    path("profile/password/", auth_views.PasswordChangeView.as_view(
-        template_name="registration/password_change_form.html",
-        success_url="/profile/password/done/",
-    ), name="password_change"),
-    path("profile/password/done/", auth_views.PasswordChangeDoneView.as_view(
-        template_name="registration/password_change_done.html",
-    ), name="password_change_done"),
 ]

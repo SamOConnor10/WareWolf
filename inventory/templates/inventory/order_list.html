@@ -1,5 +1,5 @@
 {% extends "inventory/base_orders.html" %}
-{% load querystring %}
+{% load querystring user_pref_format %}
 
 {% block extra_head %}
 <script>
@@ -15,7 +15,10 @@
   var lk = 'warewolf_order_last_type';
   function get(t){ try { var s = localStorage.getItem(fk + '_' + t); return s ? JSON.parse(s) : {}; } catch(e){ return {}; } }
   function save(t,o){ try { localStorage.setItem(fk + '_' + t, JSON.stringify(o)); } catch(e){} }
-  function hasFilter(){ var k=['q','status','date_from','date_to','receiving_location','shipping_location','overdue','priority','min_total','saved_view','sort','item']; return k.some(function(x){ var v=params[x]; return v && v !== 'all'; }); }
+  // Include per_page and page so ?type=purchase&per_page=50 is not treated as a "bare" URL.
+  // Otherwise localStorage can hold per_page, hasSaved becomes true, and location.replace()
+  // runs every load (redirect loop → blank page).
+  function hasFilter(){ var k=['q','status','date_from','date_to','receiving_location','shipping_location','overdue','priority','min_total','saved_view','sort','item','per_page','page']; return k.some(function(x){ var v=params[x]; return v && v !== 'all'; }); }
   function qs(o){ return Object.keys(o).filter(function(k){ return o[k]; }).map(function(k){ return encodeURIComponent(k)+'='+encodeURIComponent(o[k]); }).join('&'); }
   if (params.clear === '1') {
     var t = params.type || 'purchase';
@@ -321,7 +324,7 @@
                         </td>
                         <td data-col="date">{{ order.order_date }}</td>
                         <td data-col="qty" class="text-end">{{ order.total_quantity }}</td>
-                        <td data-col="total" class="text-end {% if order.total >= 500 %}fw-bold{% endif %}">€{{ order.total }}</td>
+                        <td data-col="total" class="text-end {% if order.total >= 500 %}fw-bold{% endif %}">{% ww_money order.total %}</td>
                         <td data-col="status">
                             {% if order.status == 'DELIVERED' %}
                                 <span class="badge bg-success-subtle text-success">Delivered</span>
@@ -540,8 +543,11 @@
         });
     });
     try {
-        var saved = localStorage.getItem(DENSITY_KEY);
-        if (saved === 'compact') document.getElementById('order-table-card')?.classList.add('ww-table-compact');
+        var serverD = (document.body.getAttribute('data-default-table-density') || 'comfortable').toLowerCase();
+        if (serverD !== 'compact' && serverD !== 'comfortable') serverD = 'comfortable';
+        var savedD = localStorage.getItem(DENSITY_KEY);
+        var effectiveD = savedD || serverD;
+        if (effectiveD === 'compact') document.getElementById('order-table-card')?.classList.add('ww-table-compact');
     } catch (e) {}
 
 })();
