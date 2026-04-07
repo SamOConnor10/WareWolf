@@ -1,4 +1,5 @@
 {% extends "inventory/base.html" %}
+{% load i18n %}
 {% load querystring %}
 
 {% block extra_head %}
@@ -160,6 +161,7 @@
                 <li><label class="dropdown-item small"><input class="form-check-input me-2 col-toggle" type="checkbox" data-col="status" checked>Status</label></li>
                 <li><label class="dropdown-item small"><input class="form-check-input me-2 col-toggle" type="checkbox" data-col="message" checked>Alert</label></li>
                 <li><label class="dropdown-item small"><input class="form-check-input me-2 col-toggle" type="checkbox" data-col="time" checked>Time</label></li>
+                <li><label class="dropdown-item small"><input class="form-check-input me-2 col-toggle" type="checkbox" data-col="actions" checked>{% trans "Actions" %}</label></li>
             </ul>
         </div>
     </div>
@@ -223,6 +225,7 @@
                                     Time {% if sort == 'time' %}<i class="bi bi-arrow-up"></i>{% elif sort == '-time' %}<i class="bi bi-arrow-down"></i>{% endif %}
                                 </a>
                             </th>
+                            <th style="width: 200px;" data-col="actions">{% trans "Actions" %}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -268,10 +271,20 @@
                             <td data-col="status">{{ alert.status|default:"—" }}</td>
                             <td data-col="message"><a href="{{ alert.url }}" class="text-decoration-none">{{ alert.message }}</a></td>
                             <td data-col="time"><span class="small text-muted">{{ alert.time|default:"-" }}</span></td>
+                            <td data-col="actions">
+                                {% if alert.approve_url and alert.decline_url %}
+                                <div class="d-flex flex-wrap gap-1">
+                                    <a href="{{ alert.approve_url }}" class="btn btn-sm btn-success">{% trans "Approve" %}</a>
+                                    <a href="{{ alert.decline_url }}" class="btn btn-sm btn-outline-danger">{% trans "Decline" %}</a>
+                                </div>
+                                {% else %}
+                                <span class="text-muted small">—</span>
+                                {% endif %}
+                            </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="10" class="text-center py-5 text-muted">
+                            <td colspan="11" class="text-center py-5 text-muted">
                                 <i class="bi bi-inbox fs-3 d-block mb-2"></i>No alerts match your filters.
                             </td>
                         </tr>

@@ -483,7 +483,7 @@
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 440px;">
         <div class="modal-content">
             <div class="modal-header border-bottom">
-                <h5 class="modal-title fw-bold">Weekly orders chart</h5>
+                <h5 class="modal-title fw-bold">Weekly Orders Chart</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body small">
@@ -503,7 +503,7 @@
     <div class="modal-dialog modal-fullscreen-xl-down modal-xl">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title fw-bold" id="topDemandDetailModalLabel"><i class="bi bi-tag me-2"></i>Item demand (order frequency)</h5>
+                <h5 class="modal-title fw-bold" id="topDemandDetailModalLabel"><i class="bi bi-tag me-2"></i>Item Demand (Order Frequency)</h5>
                 <div class="d-flex align-items-center gap-2">
                     <button type="button" id="downloadTopDemandCsvBtn" class="btn btn-sm btn-outline-primary"><i class="bi bi-download me-1"></i>Download CSV</button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#topDemandHelpModal"><i class="bi bi-question-circle me-1"></i>Help</button>
@@ -513,9 +513,9 @@
             <div class="modal-body">
                 {% if top_item %}
                 <div class="row g-3 mb-3">
-                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Top item</div><div class="h6 mb-0 text-truncate" title="{{ top_item.name }}">{{ top_item.name }}</div></div></div>
-                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Order lines</div><div class="h4 mb-0 text-primary">{{ top_item.total_orders }}</div></div></div>
-                    <div class="col-12 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Items ranked</div><div class="h5 mb-0">Top {{ top_items_labels|length }}</div></div></div>
+                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Top Item</div><div class="h6 mb-0 text-truncate" title="{{ top_item.name }}">{{ top_item.name }}</div></div></div>
+                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Order Lines</div><div class="h4 mb-0 text-primary">{{ top_item.total_orders }}</div></div></div>
+                    <div class="col-12 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Items Ranked</div><div class="h5 mb-0">Top {{ top_items_labels|length }}</div></div></div>
                 </div>
                 <div class="chart-box chart-box-modal mb-3"><canvas id="topDemandChartModal"></canvas></div>
                 <div class="row g-3">
@@ -548,7 +548,7 @@
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 440px;">
         <div class="modal-content">
             <div class="modal-header border-bottom">
-                <h5 class="modal-title fw-bold">Demand ranking</h5>
+                <h5 class="modal-title fw-bold">Demand Ranking</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body small">
@@ -564,7 +564,7 @@
     <div class="modal-dialog modal-fullscreen-xl-down modal-xl">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title fw-bold" id="pieDetailModalLabel"><i class="bi bi-pie-chart me-2"></i>Inventory by category</h5>
+                <h5 class="modal-title fw-bold" id="pieDetailModalLabel"><i class="bi bi-pie-chart me-2"></i>Inventory by Category</h5>
                 <div class="d-flex align-items-center gap-2">
                     <button type="button" id="downloadPieCsvBtn" class="btn btn-sm btn-outline-primary"><i class="bi bi-download me-1"></i>Download CSV</button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#pieHelpModal"><i class="bi bi-question-circle me-1"></i>Help</button>
@@ -575,13 +575,13 @@
                 {% if pie_labels %}
                 <div class="row g-3 mb-3">
                     <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Categories</div><div class="h4 mb-0 text-primary">{{ pie_labels|length }}</div></div></div>
-                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Total units</div><div class="h5 mb-0">{{ pie_total_units }}</div></div></div>
-                    <div class="col-12 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">View</div><div class="h6 mb-0 text-muted">Share of stock by quantity</div></div></div>
+                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Total Units</div><div class="h5 mb-0">{{ pie_total_units }}</div></div></div>
+                    <div class="col-12 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">View</div><div class="h6 mb-0 text-muted">Share of Stock by Quantity</div></div></div>
                 </div>
                 <div class="chart-box chart-box-modal mb-3"><canvas id="pieChartModal"></canvas></div>
                 <div class="table-responsive border rounded mb-0" style="max-height: 220px;">
                     <table class="table table-sm table-hover mb-0">
-                        <thead class="table-light sticky-top"><tr><th>Category</th><th class="text-end">Units</th><th class="text-end">% of total</th></tr></thead>
+                        <thead class="table-light sticky-top"><tr><th>Category</th><th class="text-end">Units</th><th class="text-end">% of Total</th></tr></thead>
                         <tbody>
                             {% for row in pie_table_rows %}
                             <tr><td>{{ row.label }}</td><td class="text-end">{{ row.qty }}</td><td class="text-end">{{ row.pct }}%</td></tr>
@@ -602,7 +602,7 @@
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 440px;">
         <div class="modal-content">
             <div class="modal-header border-bottom">
-                <h5 class="modal-title fw-bold">Category breakdown</h5>
+                <h5 class="modal-title fw-bold">Category Breakdown</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body small">
@@ -618,7 +618,7 @@
     <div class="modal-dialog modal-fullscreen-xl-down modal-xl">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title fw-bold" id="locationDetailModalLabel"><i class="bi bi-geo-alt me-2"></i>Inventory by location</h5>
+                <h5 class="modal-title fw-bold" id="locationDetailModalLabel"><i class="bi bi-geo-alt me-2"></i>Inventory by Location</h5>
                 <div class="d-flex align-items-center gap-2">
                     <button type="button" id="downloadLocationCsvBtn" class="btn btn-sm btn-outline-primary"><i class="bi bi-download me-1"></i>Download CSV</button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#locationHelpModal"><i class="bi bi-question-circle me-1"></i>Help</button>
@@ -628,9 +628,9 @@
             <div class="modal-body">
                 {% if location_labels %}
                 <div class="row g-3 mb-3">
-                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Locations shown</div><div class="h4 mb-0 text-primary">{{ location_labels|length }}</div></div></div>
-                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Units (top locations)</div><div class="h5 mb-0">{{ location_total_units }}</div></div></div>
-                    <div class="col-12 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Scope</div><div class="h6 mb-0 text-muted">Top 8 by quantity</div></div></div>
+                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Locations Shown</div><div class="h4 mb-0 text-primary">{{ location_labels|length }}</div></div></div>
+                    <div class="col-6 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Units (Top Locations)</div><div class="h5 mb-0">{{ location_total_units }}</div></div></div>
+                    <div class="col-12 col-md-4"><div class="forecast-metric-tile"><div class="small text-muted">Scope</div><div class="h6 mb-0 text-muted">Top 8 by Quantity</div></div></div>
                 </div>
                 <div class="chart-box chart-box-modal mb-3"><canvas id="locationChartModal"></canvas></div>
                 <div class="table-responsive border rounded mb-0" style="max-height: 220px;">
@@ -682,13 +682,13 @@
                 <div class="row g-3 mb-3">
                     <div class="col-6 col-md-4">
                         <div class="forecast-metric-tile">
-                            <div class="small text-muted">Items shown</div>
+                            <div class="small text-muted">Items Shown</div>
                             <div class="h4 mb-0 text-primary">{{ recent_activity_detail_list|length }}</div>
                         </div>
                     </div>
                     <div class="col-6 col-md-8">
                         <div class="forecast-metric-tile">
-                            <div class="small text-muted">What counts as activity</div>
+                            <div class="small text-muted">What Counts as Activity</div>
                             <div class="h6 mb-0 text-muted">Orders, stock adjustments, and system events from your live data feed.</div>
                         </div>
                     </div>
@@ -758,7 +758,7 @@
     <div class="modal-dialog modal-fullscreen-xl-down modal-xl">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title fw-bold" id="anomaliesDetailModalLabel"><i class="bi bi-exclamation-triangle me-2"></i>Demand anomalies</h5>
+                <h5 class="modal-title fw-bold" id="anomaliesDetailModalLabel"><i class="bi bi-exclamation-triangle me-2"></i>Demand Anomalies</h5>
                 <div class="d-flex align-items-center gap-2">
                     <button type="button" id="downloadAnomaliesCsvBtn" class="btn btn-sm btn-outline-primary"><i class="bi bi-download me-1"></i>Download CSV</button>
                     {% if is_manager_or_admin %}
@@ -839,6 +839,7 @@
                         </ul>
                     </div>
 
+                    {% if is_manager_or_admin %}
                     <div class="ms-auto d-flex gap-2 align-items-center" id="anomalies-actions-bar"
                          data-review-url="{% url 'anomaly_bulk_review' %}"
                          data-dismiss-url="{% url 'anomaly_bulk_dismiss' %}"
@@ -848,20 +849,25 @@
                         <button id="btn-anomalies-dismiss" type="button" class="btn btn-sm btn-outline-danger disabled" disabled>Dismiss</button>
                         <button id="btn-anomalies-undo" type="button" class="btn btn-sm btn-outline-secondary disabled" disabled>Undo</button>
                     </div>
+                    {% endif %}
                 </div>
 
+                {% if is_manager_or_admin %}
                 <form method="post" id="anomalies-bulk-form" action="{% url 'anomaly_bulk_review' %}">
                     {% csrf_token %}
                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                {% endif %}
 
                     <div class="card shadow-sm border-0" id="anomalies-table-card">
                         <div class="table-responsive ww-table-responsive">
                             <table class="table table-hover align-middle mb-0 ww-sticky-header" id="anomalies-table">
                                 <thead class="table-light">
                                     <tr>
+                                        {% if is_manager_or_admin %}
                                         <th style="width: 36px;">
                                             <input type="checkbox" class="form-check-input" id="select-all-anomalies" title="Select all">
                                         </th>
+                                        {% endif %}
                                         <th data-col="item">Item</th>
                                         <th data-col="date">Date</th>
                                         <th data-col="qty" class="text-end">Qty</th>
@@ -873,10 +879,12 @@
                                 <tbody>
                                     {% for a in anomalies_page_obj %}
                                     <tr>
+                                        {% if is_manager_or_admin %}
                                         <td style="width: 36px;">
                                             <input type="checkbox" class="form-check-input anomaly-row-check"
                                                    name="selected_anomalies" value="{{ a.id }}">
                                         </td>
+                                        {% endif %}
                                         <td data-col="item" class="text-truncate" style="max-width: 280px;">
                                             <a href="{% url 'item_forecast' a.item.id %}" class="text-decoration-none">{{ a.item.name }}</a>
                                         </td>
@@ -899,13 +907,15 @@
                                         </td>
                                     </tr>
                                     {% empty %}
-                                    <tr><td colspan="7" class="text-center text-muted py-4">No anomalies found for this filter.</td></tr>
+                                    <tr><td colspan="{% if is_manager_or_admin %}7{% else %}6{% endif %}" class="text-center text-muted py-4">No anomalies found for this filter.</td></tr>
                                     {% endfor %}
                                 </tbody>
                             </table>
                         </div>
                     </div>
+                {% if is_manager_or_admin %}
                 </form>
+                {% endif %}
 
                 {% include "inventory/includes/pagination.html" with page_obj=anomalies_page_obj per_page=anomalies_per_page per_page_choices=per_page_choices %}
 
@@ -919,7 +929,7 @@
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 480px;">
         <div class="modal-content">
             <div class="modal-header border-bottom">
-                <h5 class="modal-title fw-bold">Demand anomalies</h5>
+                <h5 class="modal-title fw-bold">Demand Anomalies</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body small">
@@ -929,7 +939,7 @@
                     <li><strong>Severity</strong> — High / Medium / Low triage label.</li>
                     <li><strong>Status</strong> — New / Reviewed / Dismissed (controlled by the filter and action buttons).</li>
                 </ul>
-                <p class="text-muted mb-0">Use the filter dropdowns to switch between Active, Dismissed, or All anomalies, and use the actions to review/dismiss/undo directly here.</p>
+                <p class="text-muted mb-0">Use the filter dropdowns to switch between Active, Dismissed, or All anomalies.{% if is_manager_or_admin %} Use the actions to review, dismiss, or undo selected rows.{% endif %}</p>
             </div>
         </div>
     </div>
@@ -1128,7 +1138,7 @@
                     <tr><td colspan="5" class="text-center py-4">
                         <i class="bi bi-check-circle text-success" style="font-size: 1.5rem;"></i>
                         <p class="text-muted mb-0 mt-2">No demand anomalies detected.</p>
-                        <p class="text-muted small mb-0">Stock levels appear stable. Run a scan to check.</p>
+                        <p class="text-muted small mb-0">{% if is_manager_or_admin %}Stock levels appear stable. Run a scan to check.{% else %}Stock levels appear stable.{% endif %}</p>
                     </td></tr>
                 {% endfor %}
                 </tbody>
@@ -1933,6 +1943,11 @@ window.addEventListener('resize', function() {
                 if (modalEl && window.bootstrap && window.bootstrap.Modal) {
                     new window.bootstrap.Modal(modalEl).show();
                 }
+                try {
+                    var u = new URL(window.location.href);
+                    u.searchParams.delete('open_anomalies');
+                    window.history.replaceState({}, '', u.pathname + (u.search ? u.search : '') + (u.hash || ''));
+                } catch (e2) {}
             }
         } catch (e) {}
     });
@@ -2021,13 +2036,13 @@ window.addEventListener('resize', function() {
         });
     }
 
-    // Bulk actions (review/dismiss/undo) and row selector.
+    // Bulk actions (review/dismiss/undo) and row selector — only rendered for Manager/Admin.
     var bulkForm = document.getElementById('anomalies-bulk-form');
     var actionsBar = document.getElementById('anomalies-actions-bar');
     var selectAll = document.getElementById('select-all-anomalies');
     var rowChecks = document.querySelectorAll('#anomaliesDetailModal .anomaly-row-check');
 
-    if (bulkForm && actionsBar && rowChecks) {
+    if (bulkForm && actionsBar && selectAll && rowChecks.length) {
         var selectedCountEl = document.getElementById('anomalies-selected-count');
         var btnReview = document.getElementById('btn-anomalies-review');
         var btnDismiss = document.getElementById('btn-anomalies-dismiss');

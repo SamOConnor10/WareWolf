@@ -230,6 +230,18 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
+# Manual "Run scan" on dashboard: run in the web process by default so results (and the
+# sticky banner) appear as soon as the request finishes. Set ANOMALY_SCAN_BUTTON_SYNC=0
+# to queue via Celery instead (requires a running worker; otherwise the task sits in Redis).
+ANOMALY_SCAN_BUTTON_SYNC = os.getenv("ANOMALY_SCAN_BUTTON_SYNC", "true").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+# History window for demand series (smaller = faster scans; must cover min_points + recent window).
+ANOMALY_SCAN_DAYS_BACK = int(os.getenv("ANOMALY_SCAN_DAYS_BACK", "60"))
+
 CELERY_BEAT_SCHEDULE = {
     "run-anomaly-scan-every-30-minutes": {
         "task": "inventory.tasks.run_anomaly_scan_task",

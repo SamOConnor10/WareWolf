@@ -2,6 +2,10 @@
 {% extends "registration/base_auth.html" %}
 {% block title %}Login · WareWolf{% endblock %}
 
+{% block extra_head %}
+<link rel="prefetch" href="{% url 'dashboard' %}">
+{% endblock %}
+
 {% block content %}
 <div class="card shadow-sm border-0">
   <div class="card-body p-4">

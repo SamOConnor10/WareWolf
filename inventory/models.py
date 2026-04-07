@@ -496,6 +496,7 @@ class Activity(models.Model):
     KIND_ITEM_HARD_DELETE = "item_hard_delete"
     KIND_ITEM_AUTO_ARCHIVE = "item_auto_archive"
     KIND_ORDER_STOCK = "order_stock"
+    KIND_ANOMALY_SCAN = "anomaly_scan"
 
     KIND_CHOICES = [
         (KIND_ITEM_CREATE, "New item"),
@@ -507,6 +508,7 @@ class Activity(models.Model):
         (KIND_ITEM_HARD_DELETE, "Permanent delete"),
         (KIND_ITEM_AUTO_ARCHIVE, "Auto-archived"),
         (KIND_ORDER_STOCK, "Order & stock"),
+        (KIND_ANOMALY_SCAN, "Anomaly scan"),
         (KIND_OTHER, "Other"),
     ]
 
@@ -520,6 +522,7 @@ class Activity(models.Model):
         KIND_ITEM_HARD_DELETE: "text-bg-danger",
         KIND_ITEM_AUTO_ARCHIVE: "text-bg-warning text-dark",
         KIND_ORDER_STOCK: "text-bg-primary",
+        KIND_ANOMALY_SCAN: "text-bg-success",
         KIND_OTHER: "text-bg-light border text-dark",
     }
 

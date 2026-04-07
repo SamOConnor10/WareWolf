@@ -1,4 +1,5 @@
 {% extends "inventory/base_stock.html" %}
+{% load querystring humanize %}
 
 {% block stock_content %}
 
@@ -17,6 +18,104 @@
             </button>
         {% endif %}
     </div>
+
+    <!-- Summary cards (click to filter tree) -->
+    <div class="row row-cols-2 row-cols-md-3 row-cols-lg-5 g-3 mb-3">
+        <div class="col">
+            <a href="?{% querystring request filter='' %}" class="text-decoration-none d-block h-100">
+                <div class="card border-0 shadow-sm h-100 location-stat-card {% if not active_filter %}border-primary border-2{% endif %}">
+                    <div class="card-body d-flex align-items-center gap-3 py-3">
+                        <div class="rounded-3 bg-primary bg-opacity-10 p-2">
+                            <i class="bi bi-folder2 text-primary fs-4"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small">Total Categories</div>
+                            <div class="fs-4 fw-bold">{{ total_categories|default:0|intcomma }}</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col">
+            <a href="?{% querystring request filter='top_level' %}" class="text-decoration-none d-block h-100">
+                <div class="card border-0 shadow-sm h-100 location-stat-card {% if active_filter == 'top_level' %}border-primary border-2{% endif %}">
+                    <div class="card-body d-flex align-items-center gap-3 py-3">
+                        <div class="rounded-3 bg-info bg-opacity-10 p-2">
+                            <i class="bi bi-layers text-info fs-4"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small">Top Level</div>
+                            <div class="fs-4 fw-bold">{{ top_level_count|default:0|intcomma }}</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col">
+            <a href="?{% querystring request filter='with_items' %}" class="text-decoration-none d-block h-100">
+                <div class="card border-0 shadow-sm h-100 location-stat-card {% if active_filter == 'with_items' %}border-primary border-2{% endif %}">
+                    <div class="card-body d-flex align-items-center gap-3 py-3">
+                        <div class="rounded-3 bg-success bg-opacity-10 p-2">
+                            <i class="bi bi-box-seam text-success fs-4"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small">With Items</div>
+                            <div class="fs-4 fw-bold">{{ categories_with_items_count|default:0|intcomma }}</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg">
+            <a href="?{% querystring request filter='empty' %}" class="text-decoration-none d-block h-100">
+                <div class="card border-0 shadow-sm h-100 location-stat-card {% if active_filter == 'empty' %}border-primary border-2{% endif %}">
+                    <div class="card-body d-flex align-items-center gap-3 py-3">
+                        <div class="rounded-3 bg-secondary bg-opacity-10 p-2">
+                            <i class="bi bi-inbox text-secondary fs-4"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small">Empty</div>
+                            <div class="fs-4 fw-bold">{{ categories_empty_count|default:0|intcomma }}</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col">
+            <a href="?{% querystring request filter='has_children' %}" class="text-decoration-none d-block h-100">
+                <div class="card border-0 shadow-sm h-100 location-stat-card {% if active_filter == 'has_children' %}border-primary border-2{% endif %}">
+                    <div class="card-body d-flex align-items-center gap-3 py-3">
+                        <div class="rounded-3 bg-warning bg-opacity-10 p-2">
+                            <i class="bi bi-diagram-3 text-warning fs-4"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small">Has Subcategories</div>
+                            <div class="fs-4 fw-bold">{{ categories_with_children_count|default:0|intcomma }}</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    {% if active_filter %}
+    <div class="alert alert-light border d-flex align-items-center justify-content-between gap-3 mb-4" role="alert">
+        <span class="d-flex align-items-center gap-2">
+            <i class="bi bi-funnel-fill text-primary"></i>
+            <span>
+                Showing filtered categories
+                {% if active_filter == 'top_level' %} (Top Level)
+                {% elif active_filter == 'with_items' %} (With Items)
+                {% elif active_filter == 'empty' %} (Empty)
+                {% elif active_filter == 'has_children' %} (Has Subcategories)
+                {% endif %}.
+            </span>
+        </span>
+        <a href="{% url 'category_list' %}" class="btn btn-outline-primary btn-sm flex-shrink-0">
+            <i class="bi bi-x-circle me-1"></i>Clear filters
+        </a>
+    </div>
+    {% endif %}
 
     <!-- SEARCH + TREE CONTROLS + TOOLBAR -->
     <div class="card shadow-sm border-0 mb-4" id="category-controls-card">
@@ -75,7 +174,7 @@
     <div class="card shadow-sm border-0">
         <div class="card-header bg-white border-0 py-3">
             <h5 class="mb-0 fw-semibold">
-                <i class="bi bi-diagram-3 me-2 text-muted"></i>Category tree
+                <i class="bi bi-diagram-3 me-2 text-muted"></i>Category Tree
             </h5>
         </div>
         <div class="card-body p-0">
@@ -361,12 +460,9 @@ body.dark-mode .category-children {
     const collapseBtn = document.getElementById('collapse-all');
     const noResults = document.getElementById('no-results');
     const tree = document.querySelector('.category-tree');
+    const cardFilterMode = new URLSearchParams(window.location.search).get('filter') || '';
 
     if (!tree) return;
-
-    function allNodes() {
-        return tree.querySelectorAll('.category-node');
-    }
 
     function allToggles() {
         return tree.querySelectorAll('.toggle-btn.has-children');
@@ -380,37 +476,85 @@ body.dark-mode .category-children {
         if (noResults) noResults.style.display = show ? 'block' : 'none';
     }
 
-    function filterTree(q) {
-        const query = (q || '').trim().toLowerCase();
-        const nodes = allNodes();
-        let anyVisible = false;
-
-        nodes.forEach(function(node) {
-            const row = node.querySelector('.category-row');
-            const name = (row.querySelector('.category-name') || {}).textContent || '';
-            const matches = !query || name.toLowerCase().includes(query);
-            const children = node.querySelector('.category-children');
-            const childNodes = children ? children.querySelectorAll('.category-node') : [];
-            let childMatches = false;
-            childNodes.forEach(function(cn) {
-                const cr = cn.querySelector('.category-row');
-                const cnName = (cr.querySelector('.category-name') || {}).textContent || '';
-                if (cnName.toLowerCase().includes(query)) childMatches = true;
+    function expandVisiblePaths() {
+        tree.querySelectorAll('.category-node').forEach(function(node) {
+            if (node.style.display === 'none') return;
+            const children = node.querySelector(':scope > .category-children');
+            if (!children) return;
+            const hasVisibleChild = Array.from(children.querySelectorAll(':scope > li.category-node')).some(function(ch) {
+                return ch.style.display !== 'none';
             });
-            const show = matches || childMatches;
-            node.style.display = show ? '' : 'none';
-            if (show) anyVisible = true;
-            if (row) {
-                row.classList.toggle('match-highlight', !!query && matches);
-            }
-            if (children && (matches || childMatches)) {
+            if (hasVisibleChild) {
                 children.classList.remove('collapsed');
-                const parentRow = node.querySelector('.category-row');
-                const toggle = parentRow && parentRow.querySelector('.toggle-btn.has-children');
+                const toggle = node.querySelector('.toggle-btn.has-children');
                 if (toggle) toggle.classList.add('expanded');
             }
         });
+    }
 
+    function updateCategoryTree() {
+        const q = (searchEl && searchEl.value || '').trim().toLowerCase();
+        const mode = cardFilterMode;
+
+        if (mode === 'top_level') {
+            tree.querySelectorAll('.category-children').forEach(function(el) {
+                el.style.display = 'none';
+            });
+            tree.querySelectorAll('.toggle-btn.has-children').forEach(function(t) {
+                t.classList.remove('expanded');
+            });
+            const roots = tree.querySelectorAll(':scope > li.category-node');
+            let anyVisible = false;
+            roots.forEach(function(li) {
+                const row = li.querySelector('.category-row');
+                const name = (row && row.querySelector('.category-name') || {}).textContent || '';
+                const matches = !q || name.toLowerCase().includes(q);
+                li.style.display = matches ? '' : 'none';
+                if (row) row.classList.toggle('match-highlight', !!q && matches);
+                if (matches) anyVisible = true;
+            });
+            updateNoResults(!anyVisible);
+            return;
+        }
+
+        tree.querySelectorAll('.category-children').forEach(function(el) {
+            el.style.display = '';
+        });
+
+        function walk(li) {
+            const ic = parseInt(li.getAttribute('data-items-count') || '0', 10);
+            const cc = parseInt(li.getAttribute('data-children-count') || '0', 10);
+            const row = li.querySelector('.category-row');
+            const name = (row && row.querySelector('.category-name') || {}).textContent || '';
+            const nameMatches = !q || name.toLowerCase().includes(q);
+            const childrenUl = li.querySelector(':scope > .category-children');
+            let childNameMatch = false;
+            let childVisible = false;
+            if (childrenUl) {
+                childrenUl.querySelectorAll(':scope > li.category-node').forEach(function(ch) {
+                    walk(ch);
+                    if (ch.style.display !== 'none') childVisible = true;
+                    const cr = ch.querySelector('.category-row');
+                    const cn = (cr && cr.querySelector('.category-name') || {}).textContent || '';
+                    if (q && cn.toLowerCase().includes(q)) childNameMatch = true;
+                });
+            }
+            const searchOk = !q || nameMatches || childNameMatch;
+            var cardOk = true;
+            if (mode === 'with_items') cardOk = ic > 0 || childVisible;
+            else if (mode === 'empty') cardOk = ic === 0 || childVisible;
+            else if (mode === 'has_children') cardOk = cc > 0 || childVisible;
+            const show = cardOk && searchOk;
+            li.style.display = show ? '' : 'none';
+            if (row) row.classList.toggle('match-highlight', !!q && nameMatches);
+        }
+
+        tree.querySelectorAll(':scope > li.category-node').forEach(walk);
+        expandVisiblePaths();
+        var anyVisible = false;
+        tree.querySelectorAll('.category-node').forEach(function(n) {
+            if (n.style.display !== 'none') anyVisible = true;
+        });
         updateNoResults(!anyVisible);
     }
 
@@ -418,11 +562,11 @@ body.dark-mode .category-children {
         let debounce;
         searchEl.addEventListener('input', function() {
             clearTimeout(debounce);
-            debounce = setTimeout(function() {
-                filterTree(searchEl.value);
-            }, 200);
+            debounce = setTimeout(updateCategoryTree, 200);
         });
     }
+
+    updateCategoryTree();
 
     if (expandBtn) {
         expandBtn.addEventListener('click', function() {

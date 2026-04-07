@@ -8,6 +8,11 @@ urlpatterns = [
     path("", views.dashboard, name="dashboard"),
     path("items/<int:pk>/forecast/", views.item_forecast, name="item_forecast"),
     path("anomalies/run/", views.run_anomaly_scan_view, name="run_anomaly_scan"),
+    path(
+        "anomalies/banner/dismiss/",
+        views.dismiss_anomaly_scan_banner,
+        name="dismiss_anomaly_scan_banner",
+    ),
     path("anomalies/", views.anomaly_list, name="anomaly_list"),
     path("anomalies/<int:pk>/dismiss/", views.anomaly_dismiss, name="anomaly_dismiss"),
     path("anomalies/<int:pk>/review/", views.anomaly_review, name="anomaly_review"),
@@ -28,6 +33,7 @@ urlpatterns = [
 
     # Stock CRUD
     path("items/", views.item_list, name="item_list"),
+    path("items/decode-barcode/", views.decode_barcode_upload, name="decode_barcode_upload"),
     path("items/create/", views.item_create, name="item_create"),
     path("items/<int:pk>/", views.item_detail, name="item_detail"),
     path("items/<int:pk>/edit/", views.item_edit, name="item_edit"),

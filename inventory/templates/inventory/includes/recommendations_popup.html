@@ -1,4 +1,4 @@
-{% if recommendations %}
+{% if recommendations and perms.inventory.add_order %}
 <style>
 .po-popup {
     position: fixed;
@@ -33,9 +33,9 @@
 <div id="poPopup" class="po-popup shadow-lg">
     <div class="po-header">
         <strong>
-            {% if context_type == "purchase" %}Purchase & stock recommendations
-            {% elif context_type == "sale" %}Sales & stock recommendations
-            {% else %}Smart stock recommendations{% endif %}
+            {% if context_type == "purchase" %}Purchase & Stock Recommendations
+            {% elif context_type == "sale" %}Sales & Stock Recommendations
+            {% else %}Smart Stock Recommendations{% endif %}
         </strong>
         <button id="poClose" class="btn-close btn-close-white" type="button"></button>
     </div>

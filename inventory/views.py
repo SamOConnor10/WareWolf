@@ -125,7 +125,7 @@ def signup(request):
                     )
 
                 login(request, user)
-                messages.success(request, f"Welcome back, {request.user.username}!")
+                messages.success(request, f"Welcome, {request.user.username}!")
                 return redirect(get_post_login_redirect_url(request.user))
 
             # ---------------------------------------
@@ -732,21 +732,80 @@ def item_forecast(request, pk):
     })
 
 from .alerts_jobs import run_anomaly_scan_and_notify
+from .anomaly_scan_notifications import record_anomaly_scan_completion_for_user
 from .tasks import run_anomaly_scan_task
+
+
 @login_required
 @user_passes_test(is_manager_or_admin)
 def run_anomaly_scan_view(request):
-    try:
-        run_anomaly_scan_task.delay()
-        messages.success(request, "Anomaly scan queued in background. Results will appear shortly.")
-    except Exception:
-        # Fallback to sync execution when broker/worker is unavailable.
+    # Default: run synchronously so the sticky results banner appears on redirect (no Celery wait).
+    # Set ANOMALY_SCAN_BUTTON_SYNC=0 to queue on Celery instead (requires a running worker).
+    if getattr(settings, "ANOMALY_SCAN_BUTTON_SYNC", True):
         summary = run_anomaly_scan_and_notify()
+        record_anomaly_scan_completion_for_user(request.user, summary)
+        Activity.objects.create(
+            user=request.user,
+            kind=Activity.KIND_ANOMALY_SCAN,
+            message=(
+                f"Anomaly scan completed: {summary['detected']} match rules "
+                f"({summary['created']} new, {summary['pruned']} obsolete rows removed)"
+            ),
+        )
         messages.success(
             request,
-            f"Anomaly scan complete. Detected {summary['detected']} anomalies ({summary['created']} new).",
+            f"Anomaly scan finished — see the banner below. "
+            f"{summary['detected']} anomalies match the rules.",
+        )
+        return redirect("dashboard")
+    try:
+        run_anomaly_scan_task.delay(user_id=request.user.id)
+        Activity.objects.create(
+            user=request.user,
+            kind=Activity.KIND_ANOMALY_SCAN,
+            message="Anomaly scan queued (background job)",
+        )
+        messages.info(
+            request,
+            "Anomaly scan queued in the background. Results will appear in the bottom banner when the worker finishes.",
+        )
+    except Exception:
+        summary = run_anomaly_scan_and_notify()
+        record_anomaly_scan_completion_for_user(request.user, summary)
+        Activity.objects.create(
+            user=request.user,
+            kind=Activity.KIND_ANOMALY_SCAN,
+            message=(
+                f"Anomaly scan completed: {summary['detected']} match rules "
+                f"({summary['created']} new, {summary['pruned']} obsolete rows removed)"
+            ),
+        )
+        messages.warning(
+            request,
+            "Could not reach the task queue — scan ran immediately. Results are in the banner below.",
         )
     return redirect("dashboard")
+
+
+@require_POST
+@login_required
+def dismiss_anomaly_scan_banner(request):
+    from .anomaly_scan_notifications import ANOMALY_SCAN_RESULT_PREFIX
+
+    nid = request.POST.get("notification_id")
+    n = get_object_or_404(
+        Notification,
+        pk=nid,
+        user=request.user,
+        message__startswith=ANOMALY_SCAN_RESULT_PREFIX,
+    )
+    now = timezone.now()
+    n.is_read = True
+    n.dismissed = True
+    n.dismissed_at = now
+    n.save(update_fields=["is_read", "dismissed", "dismissed_at"])
+    cache.delete(f"ctx_notifications:{request.user.pk}")
+    return redirect(request.META.get("HTTP_REFERER", "dashboard"))
 
 
 
@@ -1028,6 +1087,27 @@ def item_list(request):
     page = request.GET.get("page")
     items = paginator.get_page(page)
 
+    # Summary card stats (global, active items — matches default list scope)
+    base_stats = Item.objects.filter(is_active=True)
+    item_stats_total = base_stats.count()
+    item_stats_in_stock = base_stats.filter(quantity__gt=F("reorder_level")).count()
+    item_stats_low_stock = base_stats.filter(
+        quantity__gt=0, quantity__lte=F("reorder_level")
+    ).count()
+    item_stats_out_of_stock = base_stats.filter(quantity__lte=0).count()
+    item_stats_expired = base_stats.filter(expiry_date__lt=today).count()
+    item_stats_total_units = base_stats.aggregate(total=Sum("quantity"))["total"] or 0
+
+    item_filters_active = bool(
+        filter_option
+        or q
+        or category_id
+        or location_id
+        or supplier_id
+        or stock_status_filter
+        or status != "active"
+    )
+
     return render(request, "inventory/item_list.html", {
         "items": items,
         "per_page": per_page,
@@ -1041,6 +1121,13 @@ def item_list(request):
         "stock_status_filter": stock_status_filter,
         "expiry_filter": expiry_filter,
         "view": "items",
+        "item_stats_total": item_stats_total,
+        "item_stats_in_stock": item_stats_in_stock,
+        "item_stats_low_stock": item_stats_low_stock,
+        "item_stats_out_of_stock": item_stats_out_of_stock,
+        "item_stats_expired": item_stats_expired,
+        "item_stats_total_units": item_stats_total_units,
+        "item_filters_active": item_filters_active,
     })
 
 
@@ -1185,6 +1272,53 @@ def item_adjust_quantity(request, pk):
 # ======================================================
 # ITEM CRUD
 # ======================================================
+@login_required
+@require_POST
+def decode_barcode_upload(request):
+    """
+    Server-side barcode decode (ZXing-C++) for uploaded images.
+    Stronger than in-browser decoders for many 1D symbologies; used from item form upload flow.
+    """
+    if not (
+        request.user.has_perm("inventory.add_item")
+        or request.user.has_perm("inventory.change_item")
+    ):
+        return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+    f = request.FILES.get("image")
+    if not f:
+        return JsonResponse({"ok": False, "error": "no_image"}, status=400)
+    if f.size > 5 * 1024 * 1024:
+        return JsonResponse({"ok": False, "error": "too_large"}, status=400)
+    ct = (getattr(f, "content_type", None) or "").lower()
+    if ct and not ct.startswith("image/"):
+        return JsonResponse({"ok": False, "error": "invalid_type"}, status=400)
+    try:
+        import zxingcpp
+        from io import BytesIO
+
+        from PIL import Image, UnidentifiedImageError
+    except ImportError:
+        return JsonResponse({"ok": False, "error": "library_unavailable"}, status=503)
+    try:
+        data = f.read()
+        img = Image.open(BytesIO(data))
+        img.load()
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        barcodes = zxingcpp.read_barcodes(img)
+        if barcodes:
+            b = barcodes[0]
+            return JsonResponse(
+                {"ok": True, "text": b.text, "format": str(b.format)}
+            )
+        return JsonResponse({"ok": False, "error": "not_found"})
+    except UnidentifiedImageError:
+        return JsonResponse({"ok": False, "error": "invalid_image"}, status=400)
+    except Exception:
+        logger.exception("decode_barcode_upload")
+        return JsonResponse({"ok": False, "error": "decode_failed"}, status=500)
+
+
 @login_required
 @permission_required("inventory.add_item", raise_exception=True)
 def item_create(request):
@@ -1356,12 +1490,31 @@ def category_list(request):
 
     add_form = CategoryForm()
     all_categories = Category.objects.order_by("name")
+
+    total_categories = Category.objects.count()
+    top_level_count = Category.objects.filter(parent__isnull=True).count()
+    cat_annotated = Category.objects.annotate(
+        _item_count=Count("items", distinct=True),
+        _child_count=Count("children", distinct=True),
+    )
+    categories_with_items_count = cat_annotated.filter(_item_count__gt=0).count()
+    categories_empty_count = cat_annotated.filter(_item_count=0).count()
+    categories_with_children_count = cat_annotated.filter(_child_count__gt=0).count()
+
+    active_filter = request.GET.get("filter", "") or ""
+
     return render(request, "inventory/category_list.html", {
         "categories": roots,
         "show_categories": True,
         "view": "categories",
         "add_form": add_form,
         "all_categories": all_categories,
+        "total_categories": total_categories,
+        "top_level_count": top_level_count,
+        "categories_with_items_count": categories_with_items_count,
+        "categories_empty_count": categories_empty_count,
+        "categories_with_children_count": categories_with_children_count,
+        "active_filter": active_filter,
     })
 
 @login_required
@@ -2012,10 +2165,9 @@ def order_list(request):
         ]
     )
 
-    # Recommendations popup should only appear for manager/admin accounts.
-    is_manager_or_admin = request.user.groups.filter(name__in=["Manager", "Admin"]).exists()
+    # Recommendations popup: only for users who can create orders (Staff is view-only).
     recommendations = []
-    if is_manager_or_admin:
+    if request.user.has_perm("inventory.add_order"):
         ensure_recommendations_fresh()
         recommendations = get_recommendations_for_context(
             "purchase" if type_filter == "purchase" else "sale", limit=6
@@ -3448,10 +3600,26 @@ def alerts_list(request):
         filtered_alerts = sorted(filtered_alerts, key=lambda a: ((a.get("type_label") or "").lower(), (a.get("message") or "").lower()), reverse=True)
     elif sort == "-severity":
         severity_order = {"critical": 2, "warning": 1, "info": 0}
-        filtered_alerts = sorted(filtered_alerts, key=lambda a: (severity_order.get(a.get("severity"), -1), a.get("time", "")), reverse=False)
+        filtered_alerts = sorted(
+            filtered_alerts,
+            key=lambda a: (
+                0 if a.get("type") == "manager_request" else 1,
+                severity_order.get(a.get("severity"), -1),
+                a.get("time", ""),
+            ),
+            reverse=False,
+        )
     else:
         severity_order = {"critical": 0, "warning": 1, "info": 2}
-        filtered_alerts = sorted(filtered_alerts, key=lambda a: (severity_order.get(a.get("severity"), 9), a.get("time", "")), reverse=False)
+        filtered_alerts = sorted(
+            filtered_alerts,
+            key=lambda a: (
+                0 if a.get("type") == "manager_request" else 1,
+                severity_order.get(a.get("severity"), 9),
+                a.get("time", ""),
+            ),
+            reverse=False,
+        )
 
     for a in filtered_alerts:
         if a.get("is_db_notification"):

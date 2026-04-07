@@ -837,6 +837,40 @@
 
         body.compact .card { padding: 1rem !important; }
         body.compact .row.g-4 { --bs-gutter-y: 1rem; --bs-gutter-x: 1rem; }
+
+        /* Full-page navigation progress (perceived speed) */
+        .ww-nav-progress {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 3px;
+            width: 0%;
+            z-index: 2000;
+            pointer-events: none;
+            background: linear-gradient(90deg, var(--bs-primary), var(--bs-info));
+            box-shadow: 0 0 10px rgba(var(--bs-primary-rgb), 0.45);
+            opacity: 0;
+            transition: width 0.35s ease, opacity 0.2s ease;
+        }
+        .ww-nav-progress.ww-nav-progress--on {
+            opacity: 1;
+        }
+        /* Sticky anomaly scan result (does not auto-dismiss; fixed bottom) */
+        body.ww-has-anomaly-banner {
+            padding-bottom: 6.5rem;
+        }
+        @media (min-width: 768px) {
+            body.ww-has-anomaly-banner {
+                padding-bottom: 5rem;
+            }
+        }
+        .ww-anomaly-scan-sticky {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 1080;
+        }
     </style>
 
 </head>
@@ -848,8 +882,10 @@
   data-currency-symbol="{% if user_pref %}{{ user_pref.default_currency|ww_currency_symbol }}{% else %}€{% endif %}"
   data-confirm-destructive="{% if user_pref %}{{ user_pref.confirm_destructive_actions|yesno:'1,0' }}{% else %}1{% endif %}"
   data-keyboard-shortcuts="{% if user_pref %}{{ user_pref.keyboard_shortcuts_enabled|yesno:'1,0' }}{% else %}1{% endif %}"
-  class="{% if user_pref and user_pref.compact_mode %}compact{% endif %}"
+  class="{% if user_pref and user_pref.compact_mode %}compact{% endif %}{% if anomaly_scan_banner %} ww-has-anomaly-banner{% endif %}"
 >
+
+<div id="ww-nav-progress" class="ww-nav-progress" aria-hidden="true"></div>
 
 <a href="#ww-main-content" class="ww-skip-link">{% trans "Skip to main content" %}</a>
 
@@ -988,6 +1024,49 @@
             </li>
 
             {% if global_alerts %}
+                {% if alerts_manager_requests %}
+                    <li class="notif-group-title">{% trans "Access requests" %}</li>
+                    {% for alert in alerts_manager_requests %}
+                    <li class="notif-item">
+                        <div class="d-flex justify-content-between align-items-start gap-2">
+                            <div class="notif-content flex-grow-1">
+                                <span class="notif-badge notif-badge-warning">{% trans "Warning" %}</span><br>
+                                <span class="badge text-bg-warning-subtle text-warning-emphasis border border-warning-subtle mb-1">{{ alert.source|title }}</span><br>
+                                <a href="{{ alert.url }}" class="notif-link">{{ alert.message }}</a>
+                                {% if alert.time or alert.source %}
+                                <div class="notif-time mt-1">
+                                    {% if alert.source %}{{ alert.source|title }}{% endif %}
+                                    {% if alert.time and alert.source %} · {% endif %}
+                                    {% if alert.time %}{{ alert.time }}{% endif %}
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% if alert.is_db_notification %}
+                            <form method="post" action="{% url 'dismiss_notification' alert.id %}" class="ms-2">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-light border-0" title="{% trans 'Dismiss' %}" aria-label="{% trans 'Dismiss' %}">
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i>
+                                </button>
+                            </form>
+                            {% else %}
+                            <form method="post" action="{% url 'dismiss_alert' %}" class="ms-2">
+                                {% csrf_token %}
+                                <input type="hidden" name="key" value="{{ alert.key }}">
+                                <button type="submit" class="btn btn-sm btn-light border-0" title="{% trans 'Dismiss' %}" aria-label="{% trans 'Dismiss' %}">
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                        {% if alert.approve_url and alert.decline_url %}
+                        <div class="mt-2 d-flex gap-2">
+                            <a href="{{ alert.approve_url }}" class="btn btn-sm btn-success">{% trans "Approve" %}</a>
+                            <a href="{{ alert.decline_url }}" class="btn btn-sm btn-outline-danger">{% trans "Decline" %}</a>
+                        </div>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                {% endif %}
                 {% if alerts_critical %}
                     <li class="notif-group-title">{% trans "Critical" %}</li>
                     {% for alert in alerts_critical %}
@@ -1062,13 +1141,6 @@
                             </form>
                             {% endif %}
                         </div>
-
-                        {% if alert.approve_url and alert.decline_url %}
-                        <div class="mt-2 d-flex gap-2">
-                            <a href="{{ alert.approve_url }}" class="btn btn-sm btn-success">{% trans "Approve" %}</a>
-                            <a href="{{ alert.decline_url }}" class="btn btn-sm btn-outline-danger">{% trans "Decline" %}</a>
-                        </div>
-                        {% endif %}
                     </li>
                     {% endfor %}
                 {% endif %}
@@ -1166,46 +1238,214 @@
 
 <!-- Help Modal -->
 <div class="modal fade" id="helpModal" tabindex="-1" aria-labelledby="helpModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title fw-bold" id="helpModalLabel"><i class="bi bi-question-circle me-2" aria-hidden="true"></i>{% trans "WareWolf Help Centre" %}</h5>
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header border-0 pb-0 align-items-start">
+                <div>
+                    <h5 class="modal-title fw-bold mb-1" id="helpModalLabel"><i class="bi bi-question-circle text-primary me-2" aria-hidden="true"></i>{% trans "WareWolf Help Centre" %}</h5>
+                    <p class="text-muted small mb-0">{% trans "Browse areas below for features, workflows, and tips." %}</p>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}"></button>
             </div>
-            <div class="modal-body">
-                <h6 class="fw-semibold text-secondary mb-2">{% trans "Getting Started" %}</h6>
-                <ul class="small mb-4">
-                    <li>{% trans "How to add a stock item" %}</li>
-                    <li>{% trans "How to create a purchase order" %}</li>
-                    <li>{% trans "How to update stock quantities" %}</li>
-                </ul>
-
-                <h6 class="fw-semibold text-secondary mb-2">{% trans "Quick Tips" %}</h6>
-                <ul class="small mb-4">
-                    <li>{% trans "Use the search bar to find items instantly" %}</li>
-                    <li>{% trans "Low stock alerts appear in notifications" %}</li>
-                    <li>{% trans "Managers can approve reorder requests" %}</li>
-                </ul>
-
-                <h6 class="fw-semibold text-secondary mb-2">{% trans "Shortcuts" %}</h6>
-                <ul class="small mb-2">
-                    <li>{% blocktrans trimmed %}Press <kbd>/</kbd> to focus search (when shortcuts are on){% endblocktrans %}</li>
-                    <li>{% blocktrans trimmed %}Press <kbd>?</kbd> for the full shortcut list, or use <kbd>g</kbd> then a letter to jump (e.g. <kbd>g</kbd> <kbd>i</kbd> for Stock){% endblocktrans %}</li>
-                    <li><i class="bi bi-bell me-1"></i> {% trans "Use the bell icon to view alerts" %}</li>
-                </ul>
-                <div class="small mb-0">
-                    <p class="mb-1"><i class="bi bi-box me-2"></i>{% trans "Adding Stock → Stock → Add Item" %}</p>
-                    <p class="mb-1"><i class="bi bi-geo-alt me-2"></i>{% trans "Managing Locations → Locations → Create Location" %}</p>
-                    <p class="mb-1"><i class="bi bi-cart-check me-2"></i>{% trans "Creating Orders → Orders → Create Order" %}</p>
-                    <p class="mb-0"><i class="bi bi-bell me-2"></i>{% trans "Notifications → Low stock alerts appear here" %}</p>
+            <div class="modal-body pt-2">
+                <div class="row g-0 help-centre-layout rounded-3 border overflow-hidden bg-body-secondary bg-opacity-25">
+                    <div class="col-12 col-lg-3 border-bottom help-centre-sidebar-col bg-body">
+                        <nav class="nav nav-pills flex-column help-centre-nav p-2 p-lg-3" id="helpCentreTabs" role="tablist" aria-label="{% trans 'Help topics' %}">
+                            <button class="nav-link active py-2 px-3 text-start" id="help-tab-overview" data-bs-toggle="tab" data-bs-target="#help-pane-overview" type="button" role="tab" aria-controls="help-pane-overview" aria-selected="true">
+                                <i class="bi bi-house-door me-2 text-primary"></i>{% trans "Overview" %}
+                            </button>
+                            <button class="nav-link py-2 px-3 text-start" id="help-tab-dashboard" data-bs-toggle="tab" data-bs-target="#help-pane-dashboard" type="button" role="tab" aria-controls="help-pane-dashboard" aria-selected="false">
+                                <i class="bi bi-speedometer2 me-2 text-primary"></i>{% trans "Dashboard" %}
+                            </button>
+                            <button class="nav-link py-2 px-3 text-start" id="help-tab-stock" data-bs-toggle="tab" data-bs-target="#help-pane-stock" type="button" role="tab" aria-controls="help-pane-stock" aria-selected="false">
+                                <i class="bi bi-box-seam me-2 text-primary"></i>{% trans "Stock & Categories" %}
+                            </button>
+                            <button class="nav-link py-2 px-3 text-start" id="help-tab-locations" data-bs-toggle="tab" data-bs-target="#help-pane-locations" type="button" role="tab" aria-controls="help-pane-locations" aria-selected="false">
+                                <i class="bi bi-geo-alt me-2 text-primary"></i>{% trans "Locations" %}
+                            </button>
+                            <button class="nav-link py-2 px-3 text-start" id="help-tab-orders" data-bs-toggle="tab" data-bs-target="#help-pane-orders" type="button" role="tab" aria-controls="help-pane-orders" aria-selected="false">
+                                <i class="bi bi-cart-check me-2 text-primary"></i>{% trans "Orders" %}
+                            </button>
+                            <button class="nav-link py-2 px-3 text-start" id="help-tab-contacts" data-bs-toggle="tab" data-bs-target="#help-pane-contacts" type="button" role="tab" aria-controls="help-pane-contacts" aria-selected="false">
+                                <i class="bi bi-people me-2 text-primary"></i>{% trans "Contacts" %}
+                            </button>
+                            <button class="nav-link py-2 px-3 text-start" id="help-tab-alerts" data-bs-toggle="tab" data-bs-target="#help-pane-alerts" type="button" role="tab" aria-controls="help-pane-alerts" aria-selected="false">
+                                <i class="bi bi-bell me-2 text-primary"></i>{% trans "Alerts & Anomalies" %}
+                            </button>
+                            <button class="nav-link py-2 px-3 text-start" id="help-tab-account" data-bs-toggle="tab" data-bs-target="#help-pane-account" type="button" role="tab" aria-controls="help-pane-account" aria-selected="false">
+                                <i class="bi bi-keyboard me-2 text-primary"></i>{% trans "Account & Shortcuts" %}
+                            </button>
+                        </nav>
+                    </div>
+                    <div class="col-12 col-lg-9">
+                        <div class="tab-content help-centre-panes p-3 p-lg-4" id="helpCentreTabContent">
+                            <div class="tab-pane fade show active" id="help-pane-overview" role="tabpanel" aria-labelledby="help-tab-overview" tabindex="0">
+                                <h6 class="text-muted small fw-bold letter-spacing mb-3">{% trans "Getting Started" %}</h6>
+                                <p class="small text-muted mb-3">{% trans "WareWolf helps you track stock, locations, purchase and sale orders, suppliers, and customers. Use the top navigation to move between areas; your role may limit some actions." %}</p>
+                                <ul class="small mb-4 ps-3">
+                                    <li class="mb-2"><strong>{% trans "Add stock:" %}</strong> {% trans "go to" %} <a href="{% url 'item_list' %}">{% trans "Stock Items" %}</a> → <strong>{% trans "Add Item" %}</strong> ({% trans "or scan a barcode where available" %}).</li>
+                                    <li class="mb-2"><strong>{% trans "Receive or ship:" %}</strong> {% trans "open" %} <a href="{% url 'order_list' %}">{% trans "Orders" %}</a> {% trans "to create purchase or sale orders and mark deliveries when stock should move." %}</li>
+                                    <li class="mb-2"><strong>{% trans "Organise:" %}</strong> {% trans "use" %} <a href="{% url 'category_list' %}">{% trans "Categories" %}</a> {% trans "for hierarchy and" %} <a href="{% url 'location_list' %}">{% trans "Locations" %}</a> {% trans "for warehouse structure." %}</li>
+                                </ul>
+                                <h6 class="text-muted small fw-bold letter-spacing mb-2">{% trans "Quick Tips" %}</h6>
+                                <ul class="small mb-0 ps-3">
+                                    <li class="mb-2">{% trans "Use the global search (top bar) to jump to items, orders, or contacts quickly." %}</li>
+                                    <li class="mb-2">{% trans "Low stock and other issues often surface in the notification bell and on the dashboard." %}</li>
+                                    <li class="mb-0">{% trans "Summary cards on list pages filter the table or tree; use Clear filters when you want the full list again." %}</li>
+                                </ul>
+                            </div>
+                            <div class="tab-pane fade" id="help-pane-dashboard" role="tabpanel" aria-labelledby="help-tab-dashboard" tabindex="0">
+                                <h6 class="text-muted small fw-bold letter-spacing mb-3">{% trans "Dashboard" %}</h6>
+                                <p class="small text-muted mb-3">{% trans "The home dashboard summarises inventory health, demand, and recent activity." %}</p>
+                                <ul class="small mb-4 ps-3">
+                                    <li class="mb-2">{% trans "Review KPI cards and charts for stock levels, trends, and category or location breakdowns." %}</li>
+                                    <li class="mb-2">{% trans "Expanded views and modals (e.g. inventory by category or location) often include CSV export and Help on that chart." %}</li>
+                                    <li class="mb-2">{% trans "Demand anomalies highlight unusual patterns; you can scan, review, or dismiss from the anomalies workflow." %}</li>
+                                    <li class="mb-2">{% trans "Open the full list from" %} <a href="{% url 'anomaly_list' %}">{% trans "Demand anomalies" %}</a> {% trans "if you need filters and bulk actions." %}</li>
+                                    <li class="mb-0">{% trans "Recent activity shows what changed; follow links to items or orders for detail." %}</li>
+                                </ul>
+                                <p class="small mb-0"><a href="{% url 'dashboard' %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-speedometer2 me-1"></i>{% trans "Go to Dashboard" %}</a></p>
+                            </div>
+                            <div class="tab-pane fade" id="help-pane-stock" role="tabpanel" aria-labelledby="help-tab-stock" tabindex="0">
+                                <h6 class="text-muted small fw-bold letter-spacing mb-3">{% trans "Stock Items" %}</h6>
+                                <ul class="small mb-4 ps-3">
+                                    <li class="mb-2">{% trans "Summary cards (totals, in stock, low, out of stock, expired, units) apply list filters; combine with search, category, location, supplier, and condition." %}</li>
+                                    <li class="mb-2">{% trans "Select rows for bulk actions: forecast, adjust quantity, edit, archive, or delete (where permitted)." %}</li>
+                                    <li class="mb-2">{% trans "Export the current filter to CSV from the toolbar when you need a spreadsheet." %}</li>
+                                    <li class="mb-2">{% blocktrans trimmed %}Open an item for full detail: history, related orders, demand anomalies, and optional demand forecast.{% endblocktrans %}</li>
+                                </ul>
+                                <h6 class="text-muted small fw-bold letter-spacing mb-2">{% trans "Categories" %}</h6>
+                                <ul class="small mb-4 ps-3">
+                                    <li class="mb-2">{% trans "Manage a tree of categories; summary cards filter the tree (e.g. empty categories, categories with items)." %}</li>
+                                    <li class="mb-0">{% trans "Add, edit, or delete categories from the tree toolbar; creating categories while adding items is also supported." %}</li>
+                                </ul>
+                                <p class="small mb-0 d-flex flex-wrap gap-2">
+                                    <a href="{% url 'item_list' %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-box-seam me-1"></i>{% trans "Stock Items" %}</a>
+                                    <a href="{% url 'category_list' %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-folder2 me-1"></i>{% trans "Categories" %}</a>
+                                </p>
+                            </div>
+                            <div class="tab-pane fade" id="help-pane-locations" role="tabpanel" aria-labelledby="help-tab-locations" tabindex="0">
+                                <h6 class="text-muted small fw-bold letter-spacing mb-3">{% trans "Locations" %}</h6>
+                                <ul class="small mb-4 ps-3">
+                                    <li class="mb-2">{% trans "Summary cards filter the list: all locations, warehouses, with stock, empty, needing reorder; total stock is informational." %}</li>
+                                    <li class="mb-2">{% trans "Switch between list and tree views; use the map where coordinates exist." %}</li>
+                                    <li class="mb-2">{% trans "Insight cards show busiest location and top shipping or receiving hubs." %}</li>
+                                    <li class="mb-0">{% trans "Create or edit locations to reflect aisles, zones, warehouses, and parent/child hierarchy." %}</li>
+                                </ul>
+                                <p class="small mb-0"><a href="{% url 'location_list' %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-geo-alt me-1"></i>{% trans "Locations" %}</a></p>
+                            </div>
+                            <div class="tab-pane fade" id="help-pane-orders" role="tabpanel" aria-labelledby="help-tab-orders" tabindex="0">
+                                <h6 class="text-muted small fw-bold letter-spacing mb-3">{% trans "Purchase & Sale Orders" %}</h6>
+                                <ul class="small mb-4 ps-3">
+                                    <li class="mb-2">{% trans "Use the orders list to create purchase orders (incoming) or sale orders (outgoing), with filters, date ranges, and CSV export." %}</li>
+                                    <li class="mb-2">{% trans "Summary cards show totals and status splits; quick filters highlight overdue or high-value orders where configured." %}</li>
+                                    <li class="mb-2">{% trans "Mark purchase orders as delivered to update stock; sale deliveries reduce stock according to your workflow." %}</li>
+                                    <li class="mb-2">{% trans "Smart recommendations may appear for restocking (purchase) or moving dormant stock (sale), with links to create orders or open items." %}</li>
+                                    <li class="mb-0">{% trans "Open an order for lines, parties, references, and history." %}</li>
+                                </ul>
+                                <p class="small mb-0"><a href="{% url 'order_list' %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-cart-check me-1"></i>{% trans "Orders" %}</a></p>
+                            </div>
+                            <div class="tab-pane fade" id="help-pane-contacts" role="tabpanel" aria-labelledby="help-tab-contacts" tabindex="0">
+                                <h6 class="text-muted small fw-bold letter-spacing mb-3">{% trans "Suppliers & Customers" %}</h6>
+                                <ul class="small mb-4 ps-3">
+                                    <li class="mb-2">{% trans "The contacts area combines suppliers and customers with search, filters, and summary cards." %}</li>
+                                    <li class="mb-2">{% trans "Open a supplier or customer to see profile details and related orders." %}</li>
+                                    <li class="mb-0">{% trans "Export contacts to CSV when you need a backup or report." %}</li>
+                                </ul>
+                                <p class="small mb-0"><a href="{% url 'contacts_list' %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-people me-1"></i>{% trans "Contacts" %}</a></p>
+                            </div>
+                            <div class="tab-pane fade" id="help-pane-alerts" role="tabpanel" aria-labelledby="help-tab-alerts" tabindex="0">
+                                <h6 class="text-muted small fw-bold letter-spacing mb-3">{% trans "Notifications & Alerts" %}</h6>
+                                <ul class="small mb-4 ps-3">
+                                    <li class="mb-2">{% trans "The bell menu shows critical, warning, and info alerts; dismiss items or open View all for the full alerts page." %}</li>
+                                    <li class="mb-2">{% trans "Some alerts support approve or decline actions (e.g. manager requests)." %}</li>
+                                </ul>
+                                <h6 class="text-muted small fw-bold letter-spacing mb-2">{% trans "Demand Anomalies" %}</h6>
+                                <ul class="small mb-4 ps-3">
+                                    <li class="mb-2">{% trans "Anomalies flag unusual demand signals; review, dismiss, or run scans from the anomalies list or dashboard." %}</li>
+                                    <li class="mb-0">{% trans "Use bulk actions where available to process many rows at once." %}</li>
+                                </ul>
+                                <p class="small mb-0 d-flex flex-wrap gap-2">
+                                    <a href="{% url 'alerts_list' %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-bell me-1"></i>{% trans "Alerts" %}</a>
+                                    <a href="{% url 'anomaly_list' %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-graph-down-arrow me-1"></i>{% trans "Anomalies" %}</a>
+                                </p>
+                            </div>
+                            <div class="tab-pane fade" id="help-pane-account" role="tabpanel" aria-labelledby="help-tab-account" tabindex="0">
+                                <h6 class="text-muted small fw-bold letter-spacing mb-3">{% trans "Profile & Settings" %}</h6>
+                                <ul class="small mb-4 ps-3">
+                                    <li class="mb-2">{% blocktrans trimmed %}<strong>Profile:</strong> avatar, details, activity, and account options (e.g. manager upgrade requests where applicable).{% endblocktrans %}</li>
+                                    <li class="mb-2">{% blocktrans trimmed %}<strong>Settings:</strong> preferences such as theme, accessibility, date format, and keyboard shortcuts.{% endblocktrans %}</li>
+                                    <li class="mb-0">{% trans "Destructive actions may require confirmation; follow on-screen prompts." %}</li>
+                                </ul>
+                                <h6 class="text-muted small fw-bold letter-spacing mb-2">{% trans "Keyboard Shortcuts" %}</h6>
+                                <ul class="small mb-4 ps-3">
+                                    <li class="mb-2">{% blocktrans trimmed %}Press <kbd>/</kbd> to focus search when shortcuts are enabled in Settings.{% endblocktrans %}</li>
+                                    <li class="mb-2">{% blocktrans trimmed %}Press <kbd>?</kbd> for the full shortcut list; use <kbd>g</kbd> then a letter to jump (e.g. <kbd>g</kbd> <kbd>i</kbd> for Stock).{% endblocktrans %}</li>
+                                    <li class="mb-0">{% trans "Voice or read-aloud options may appear when enabled in your preferences." %}</li>
+                                </ul>
+                                <p class="small mb-0 d-flex flex-wrap gap-2">
+                                    <a href="{% url 'profile' %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-person me-1"></i>{% trans "Profile" %}</a>
+                                    <a href="{% url 'settings' %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-gear me-1"></i>{% trans "Settings" %}</a>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Close" %}</button>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-primary px-4" data-bs-dismiss="modal">{% trans "Close" %}</button>
             </div>
         </div>
     </div>
 </div>
+<style>
+    #helpModal .modal-dialog {
+        max-width: min(960px, calc(100vw - 1.5rem));
+    }
+    #helpModal .help-centre-layout {
+        min-height: min(420px, 55vh);
+    }
+    #helpModal .help-centre-panes {
+        max-height: min(60vh, 520px);
+        overflow-y: auto;
+    }
+    @media (min-width: 992px) {
+        #helpModal .help-centre-nav {
+            position: sticky;
+            top: 0;
+            max-height: min(60vh, 520px);
+            overflow-y: auto;
+        }
+    }
+    #helpModal .help-centre-nav .nav-link {
+        color: var(--bs-body-color);
+        border-radius: 0.5rem;
+        font-weight: 500;
+    }
+    #helpModal .help-centre-nav .nav-link:hover {
+        background: rgba(var(--bs-primary-rgb), 0.08);
+    }
+    #helpModal .help-centre-nav .nav-link.active {
+        background: rgba(var(--bs-primary-rgb), 0.15);
+        color: var(--bs-primary);
+    }
+    #helpModal .help-centre-panes kbd {
+        font-size: 0.85em;
+        padding: 0.15em 0.45em;
+        border-radius: 0.25rem;
+        background: var(--bs-secondary-bg);
+        border: 1px solid var(--bs-border-color);
+    }
+    #helpModal .letter-spacing {
+        letter-spacing: 0.04em;
+    }
+    @media (min-width: 992px) {
+        #helpModal .help-centre-sidebar-col {
+            border-bottom: none !important;
+            border-right: 1px solid var(--bs-border-color);
+        }
+    }
+</style>
 
 <main id="ww-main-content" tabindex="-1">
 <!-- Flash messages (success/error/info) -->
@@ -1238,6 +1478,25 @@
     {% block content %}{% endblock %}
 </div>
 </main>
+
+{% if anomaly_scan_banner %}
+<div class="ww-anomaly-scan-sticky border-top shadow-lg bg-body" style="--bs-bg-opacity: .97;" role="region" aria-label="{% trans 'Anomaly scan results' %}">
+    <div class="container py-3 d-flex flex-column flex-md-row align-items-start align-items-md-center gap-3">
+        <div class="flex-grow-1 pe-md-2">
+            <div class="fw-semibold text-success mb-1"><i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>{% trans "Anomaly scan finished" %}</div>
+            <div class="small text-body-secondary mb-0">{{ anomaly_scan_banner.body }}</div>
+        </div>
+        <div class="d-flex align-items-center gap-2 ms-md-auto flex-shrink-0">
+            <a href="{{ anomaly_scan_banner.url }}" class="btn btn-sm btn-primary">{% trans "View anomalies (expanded)" %}</a>
+            <form method="post" action="{% url 'dismiss_anomaly_scan_banner' %}" class="d-inline m-0">
+                {% csrf_token %}
+                <input type="hidden" name="notification_id" value="{{ anomaly_scan_banner.id }}">
+                <button type="submit" class="btn-close" title="{% trans 'Dismiss' %}" aria-label="{% trans 'Dismiss' %}"></button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 {% if request.user.is_authenticated %}
 <div class="modal fade" id="logoutConfirmModal" tabindex="-1" aria-labelledby="logoutConfirmModalLabel" aria-hidden="true">
@@ -1687,6 +1946,67 @@ document.addEventListener("DOMContentLoaded", () => {
             el.addEventListener('hidden.bs.collapse', function() { try { localStorage.setItem(key, 'false'); } catch (e) {} });
         });
     });
+})();
+</script>
+
+<script>
+(function () {
+    var bar = document.getElementById("ww-nav-progress");
+    if (!bar) return;
+    var t = null;
+    function start() {
+        bar.classList.add("ww-nav-progress--on");
+        bar.style.width = "0%";
+        requestAnimationFrame(function () {
+            bar.style.width = "38%";
+        });
+        clearTimeout(t);
+        t = setTimeout(function () {
+            bar.style.width = "88%";
+        }, 420);
+    }
+    function done() {
+        clearTimeout(t);
+        bar.style.width = "100%";
+        setTimeout(function () {
+            bar.classList.remove("ww-nav-progress--on");
+            bar.style.width = "0%";
+        }, 160);
+    }
+    window.addEventListener("load", done);
+    window.addEventListener("pageshow", function (e) {
+        if (e.persisted) done();
+    });
+    document.addEventListener(
+        "click",
+        function (e) {
+            var a = e.target.closest("a[href]");
+            if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
+            if (a.getAttribute("data-ww-no-nav-progress") === "1") return;
+            var href = a.getAttribute("href");
+            if (!href || href.charAt(0) === "#" || href.indexOf("javascript:") === 0) return;
+            try {
+                var u = new URL(a.href, window.location.href);
+                if (u.origin !== window.location.origin) return;
+            } catch (err) {
+                return;
+            }
+            if (e.metaKey || e.ctrlKey || e.shiftKey) return;
+            start();
+        },
+        true
+    );
+    document.addEventListener(
+        "submit",
+        function (e) {
+            var f = e.target;
+            if (!f || f.tagName !== "FORM") return;
+            if ((f.method || "").toLowerCase() !== "post") return;
+            if (f.getAttribute("data-ww-no-nav-progress") === "1") return;
+            start();
+        },
+        true
+    );
 })();
 </script>
 

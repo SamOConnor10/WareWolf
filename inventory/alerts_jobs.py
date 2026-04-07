@@ -1,17 +1,63 @@
 import datetime
 import logging
+import re
 
 from django.apps import apps
-from django.conf import settings
+from django.conf import settings as django_settings
 from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
 from django.urls import reverse
 from django.utils import timezone
 
-from inventory.ml.anomaly import detect_sales_anomalies, save_anomalies
+from inventory.ml.anomaly import (
+    anomaly_keep_set,
+    detect_sales_anomalies,
+    prune_stale_anomalies_not_in_results,
+    save_anomalies,
+)
 from inventory.models import Recommendation, UserPreference
 
 logger = logging.getLogger(__name__)
+
+_ANOMALY_DATE_IN_MSG = re.compile(r"\s+on\s+(\d{2}/\d{2}/\d{4})\s+", re.I)
+_FORECAST_ITEM_URL = re.compile(r"/items/(\d+)/forecast/")
+
+
+def _forecast_item_id_from_url(url: str | None) -> int | None:
+    if not url:
+        return None
+    m = _FORECAST_ITEM_URL.search(url)
+    return int(m.group(1)) if m else None
+
+
+def delete_obsolete_anomaly_notifications(keep: set[tuple[int, datetime.date]]) -> int:
+    """
+    Remove bell notifications for demand anomalies that no longer exist after a scan.
+    Matches (item_id, date) from message text + item forecast URL.
+    """
+    Notification = apps.get_model("inventory", "Notification")
+    qs = Notification.objects.filter(message__startswith="Demand anomaly (")
+    to_delete: list[int] = []
+    for n in qs.iterator(chunk_size=2000):
+        item_id = _forecast_item_id_from_url(n.url)
+        if item_id is None:
+            to_delete.append(n.id)
+            continue
+        dm = _ANOMALY_DATE_IN_MSG.search(n.message or "")
+        if not dm:
+            to_delete.append(n.id)
+            continue
+        d = datetime.datetime.strptime(dm.group(1), "%d/%m/%Y").date()
+        if (item_id, d) not in keep:
+            to_delete.append(n.id)
+    if not to_delete:
+        return 0
+    total = 0
+    chunk = 3000
+    for i in range(0, len(to_delete), chunk):
+        part = to_delete[i : i + chunk]
+        total += Notification.objects.filter(id__in=part).delete()[0]
+    return total
 
 
 def _send_grouped_alert_email(*, user, subject, intro, lines):
@@ -27,7 +73,7 @@ def _send_grouped_alert_email(*, user, subject, intro, lines):
         sent = send_mail(
             subject=subject,
             message="\n".join(body),
-            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+            from_email=getattr(django_settings, "DEFAULT_FROM_EMAIL", None),
             recipient_list=[user.email],
             fail_silently=False,
         )
@@ -50,12 +96,13 @@ def _send_grouped_alert_email(*, user, subject, intro, lines):
 
 def run_anomaly_scan_and_notify(
     *,
-    days_back=120,
-    min_points=10,
-    last_n_days_only=180,
-    z_thresh_low=2.5,
-    z_thresh_med=3.5,
-    z_thresh_high=4.5,
+    days_back=None,
+    min_points=28,
+    last_n_days_only=14,
+    z_thresh_low=3.5,
+    z_thresh_med=5.0,
+    z_thresh_high=6.5,
+    **detect_kwargs,
 ):
     """
     Run anomaly detection and create in-app notifications for new MEDIUM/HIGH anomalies.
@@ -64,8 +111,13 @@ def run_anomaly_scan_and_notify(
       {
         "detected": int,
         "created": int,
+        "pruned": int,
+        "notifications_pruned": int,
+        "critical_emails_sent": int,
       }
     """
+    if days_back is None:
+        days_back = getattr(django_settings, "ANOMALY_SCAN_DAYS_BACK", 60)
     results = detect_sales_anomalies(
         days_back=days_back,
         min_points=min_points,
@@ -73,8 +125,12 @@ def run_anomaly_scan_and_notify(
         z_thresh_low=z_thresh_low,
         z_thresh_med=z_thresh_med,
         z_thresh_high=z_thresh_high,
+        **detect_kwargs,
     )
+    keep = anomaly_keep_set(results)
     created, created_objs = save_anomalies(results)
+    pruned = prune_stale_anomalies_not_in_results(keep)
+    notifications_pruned = delete_obsolete_anomaly_notifications(keep)
 
     Notification = apps.get_model("inventory", "Notification")
     User = get_user_model()
@@ -93,7 +149,18 @@ def run_anomaly_scan_and_notify(
             ):
                 best_by_item[a.item_id] = a
 
-        recipients = User.objects.filter(groups__name__in=["Manager", "Admin"]).distinct()
+        recipients = list(
+            User.objects.filter(groups__name__in=["Manager", "Admin"]).distinct()
+        )
+        recipient_ids = [u.id for u in recipients]
+        pref_map = {
+            p.user_id: p
+            for p in UserPreference.objects.filter(user_id__in=recipient_ids)
+        }
+        for u in recipients:
+            if u.id not in pref_map:
+                pref_map[u.id], _ = UserPreference.objects.get_or_create(user=u)
+
         email_lines_by_user = {}
 
         for a in list(best_by_item.values())[:25]:
@@ -102,16 +169,24 @@ def run_anomaly_scan_and_notify(
                 f"(Qty {a.quantity}, Score {a.score:.2f})"
             )
             link = reverse("item_forecast", args=[a.item_id])
+            already = set(
+                Notification.objects.filter(
+                    message=msg, url=link, user_id__in=recipient_ids
+                ).values_list("user_id", flat=True)
+            )
+            to_create = []
             for u in recipients:
-                pref, _ = UserPreference.objects.get_or_create(user=u)
-                if not pref.notify_anomalies:
+                if u.id in already:
                     continue
-                if Notification.objects.filter(user=u, message=msg, url=link).exists():
+                pref = pref_map.get(u.id)
+                if not pref or not pref.notify_anomalies:
                     continue
-                Notification.objects.create(user=u, message=msg, url=link)
+                to_create.append(Notification(user=u, message=msg, url=link))
                 if pref.email_notifications and a.severity == "HIGH":
                     email_lines_by_user.setdefault(u.id, {"user": u, "lines": []})
                     email_lines_by_user[u.id]["lines"].append(msg)
+            if to_create:
+                Notification.objects.bulk_create(to_create)
 
         for row in email_lines_by_user.values():
             ok = _send_grouped_alert_email(
@@ -123,7 +198,13 @@ def run_anomaly_scan_and_notify(
             if ok:
                 emails_sent += 1
 
-    return {"detected": len(results), "created": created, "critical_emails_sent": emails_sent}
+    return {
+        "detected": len(results),
+        "created": created,
+        "pruned": pruned,
+        "notifications_pruned": notifications_pruned,
+        "critical_emails_sent": emails_sent,
+    }
 
 
 def sync_recommendation_notifications(*, limit=50):
@@ -146,7 +227,7 @@ def sync_recommendation_notifications(*, limit=50):
     created_count = 0
     critical_emails_sent = 0
     now = timezone.now()
-    cooldown_hours = max(int(getattr(settings, "FORECAST_NOTIFICATION_COOLDOWN_HOURS", 12)), 0)
+    cooldown_hours = max(int(getattr(django_settings, "FORECAST_NOTIFICATION_COOLDOWN_HOURS", 12)), 0)
     cooldown_since = now - datetime.timedelta(hours=cooldown_hours)
 
     active_urls = set()

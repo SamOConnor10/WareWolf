@@ -2,6 +2,7 @@ Django>=5.2
 psycopg2-binary
 django-bootstrap5
 Pillow>=10.0.0
+zxing-cpp>=2.2.0
 numpy
 pandas
 prophet

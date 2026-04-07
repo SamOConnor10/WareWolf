@@ -1,5 +1,5 @@
 {% extends "inventory/base_stock.html" %}
-{% load querystring user_pref_format %}
+{% load querystring user_pref_format humanize %}
 
 {% block extra_head %}
 <script>
@@ -66,13 +66,124 @@
         </div>
     </div>
 
-    <!-- Quick filter chips -->
-    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-        <span class="text-muted small me-1">Quick:</span>
-        <a href="?{% querystring request filter='low_stock' %}" class="btn btn-sm {% if filter_option == 'low_stock' %}btn-warning text-dark{% else %}btn-outline-warning{% endif %} py-0">Low stock</a>
-        <a href="?{% querystring request filter='out_of_stock' %}" class="btn btn-sm {% if filter_option == 'out_of_stock' %}btn-danger{% else %}btn-outline-danger{% endif %} py-0">Out of stock</a>
-        <a href="?{% querystring request filter='expired' %}" class="btn btn-sm {% if filter_option == 'expired' %}btn-secondary{% else %}btn-outline-secondary{% endif %} py-0">Expired</a>
+    <!-- Summary cards (click to filter; matches locations / orders pattern) -->
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-4 col-lg-2">
+            <a href="?{% querystring request filter='' %}" class="text-decoration-none d-block h-100">
+                <div class="card border-0 shadow-sm h-100 location-stat-card {% if not filter_option %}border-primary border-2{% endif %}">
+                    <div class="card-body d-flex align-items-center gap-3 py-3">
+                        <div class="rounded-3 bg-primary bg-opacity-10 p-2">
+                            <i class="bi bi-box-seam text-primary fs-4"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small">Total Items</div>
+                            <div class="fs-4 fw-bold">{{ item_stats_total|default:0|intcomma }}</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+            <a href="?{% querystring request filter='in_stock' %}" class="text-decoration-none d-block h-100">
+                <div class="card border-0 shadow-sm h-100 location-stat-card {% if filter_option == 'in_stock' %}border-primary border-2{% endif %}">
+                    <div class="card-body d-flex align-items-center gap-3 py-3">
+                        <div class="rounded-3 bg-success bg-opacity-10 p-2">
+                            <i class="bi bi-check-circle text-success fs-4"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small">In Stock</div>
+                            <div class="fs-4 fw-bold">{{ item_stats_in_stock|default:0|intcomma }}</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+            <a href="?{% querystring request filter='low_stock' %}" class="text-decoration-none d-block h-100">
+                <div class="card border-0 shadow-sm h-100 location-stat-card {% if filter_option == 'low_stock' %}border-primary border-2{% endif %}">
+                    <div class="card-body d-flex align-items-center gap-3 py-3">
+                        <div class="rounded-3 bg-warning bg-opacity-10 p-2">
+                            <i class="bi bi-exclamation-triangle text-warning fs-4"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small">Low Stock</div>
+                            <div class="fs-4 fw-bold">{{ item_stats_low_stock|default:0|intcomma }}</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+            <a href="?{% querystring request filter='out_of_stock' %}" class="text-decoration-none d-block h-100">
+                <div class="card border-0 shadow-sm h-100 location-stat-card {% if filter_option == 'out_of_stock' %}border-primary border-2{% endif %}">
+                    <div class="card-body d-flex align-items-center gap-3 py-3">
+                        <div class="rounded-3 bg-danger bg-opacity-10 p-2">
+                            <i class="bi bi-x-octagon text-danger fs-4"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small">Out of Stock</div>
+                            <div class="fs-4 fw-bold">{{ item_stats_out_of_stock|default:0|intcomma }}</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+            <a href="?{% querystring request filter='expired' %}" class="text-decoration-none d-block h-100">
+                <div class="card border-0 shadow-sm h-100 location-stat-card {% if filter_option == 'expired' %}border-primary border-2{% endif %}">
+                    <div class="card-body d-flex align-items-center gap-3 py-3">
+                        <div class="rounded-3 bg-secondary bg-opacity-10 p-2">
+                            <i class="bi bi-calendar-x text-secondary fs-4"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small">Expired</div>
+                            <div class="fs-4 fw-bold">{{ item_stats_expired|default:0|intcomma }}</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+            <div class="card border-0 shadow-sm h-100 location-stat-card" title="Total units across active items">
+                <div class="card-body d-flex align-items-center gap-3 py-3">
+                    <div class="rounded-3 bg-info bg-opacity-10 p-2">
+                        <i class="bi bi-boxes text-info fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Total Units</div>
+                        <div class="fs-4 fw-bold">{{ item_stats_total_units|default:0|intcomma }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
+
+    {% if item_filters_active %}
+    <div class="alert alert-light border d-flex align-items-center justify-content-between gap-3 mb-4" role="alert">
+        <span class="d-flex align-items-center gap-2 flex-wrap">
+            <i class="bi bi-funnel-fill text-primary"></i>
+            <span>
+                Showing filtered stock items
+                {% if filter_option == 'in_stock' %} (In Stock)
+                {% elif filter_option == 'low_stock' %} (Low Stock)
+                {% elif filter_option == 'out_of_stock' %} (Out of Stock)
+                {% elif filter_option == 'expired' %} (Expired)
+                {% elif filter_option == 'expiring_soon' %} (Expiring Soon)
+                {% endif %}
+                {% if request.GET.q %} · Search{% endif %}
+                {% if request.GET.category %} · Category{% endif %}
+                {% if request.GET.location %} · Location{% endif %}
+                {% if request.GET.supplier %} · Supplier{% endif %}
+                {% if stock_status_filter %} · Condition{% endif %}
+                {% if request.GET.status == 'archived' %} · Archived{% elif request.GET.status == 'all' %} · All statuses{% endif %}
+                .
+            </span>
+        </span>
+        <a href="{% url 'item_list' %}?{% querystring request q='' filter='' category='' location='' supplier='' stock_status='' status='active' %}" class="btn btn-outline-primary btn-sm flex-shrink-0">
+            <i class="bi bi-x-circle me-1"></i>Clear filters
+        </a>
+    </div>
+    {% endif %}
 
     <!-- SEARCH + FILTER -->
     <div class="card shadow-sm border-0 mb-4">
