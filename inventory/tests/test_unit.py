@@ -8,7 +8,7 @@ from inventory import alerts_jobs
 from inventory.ml import anomaly as anomaly_ml
 from inventory.ml.anomaly import AnomalyResult, anomaly_keep_set, build_daily_sales_df, detect_sales_anomalies
 
-from .models import (
+from inventory.models import (
     Category,
     Client,
     Item,
@@ -143,7 +143,7 @@ class SupplierClientMapUrlTest(TestCase):
 class OrderModelTest(TestCase):
     def setUp(self):
         self.supplier = Supplier.objects.create(name="Sup")
-        self.client = Client.objects.create(name="Cust")
+        self.customer = Client.objects.create(name="Cust")
         self.loc = Location.objects.create(name="L")
         self.item = Item.objects.create(
             name="Bolt",
@@ -157,7 +157,7 @@ class OrderModelTest(TestCase):
     def test_order_total_and_party_name_sale(self):
         order = Order.objects.create(
             order_type=Order.TYPE_SALE,
-            client=self.client,
+            client=self.customer,
             order_date=date(2026, 1, 10),
             status=Order.STATUS_PENDING,
         )
@@ -175,7 +175,7 @@ class OrderModelTest(TestCase):
         self.assertEqual(order.party_name, "Sup")
 
     def test_order_str_includes_line_summary(self):
-        order = Order.objects.create(order_type=Order.TYPE_SALE, client=self.client)
+        order = Order.objects.create(order_type=Order.TYPE_SALE, client=self.customer)
         OrderLine.objects.create(order=order, item=self.item, quantity=1, unit_price=Decimal("1"))
         s = str(order)
         self.assertIn("Order #", s)
